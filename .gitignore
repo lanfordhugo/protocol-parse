@@ -1,0 +1,3 @@
+v8com.log
+parsed_log/parsed_net_log_*
+*.pyc

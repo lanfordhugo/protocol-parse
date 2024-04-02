@@ -1,5 +1,6 @@
 import logging as log
 import os
+import pprint
 # 停止原因编码
 alarm_dict = {}
 stop_dict = {}
@@ -16,6 +17,10 @@ def get_format(cmd):
     format_list = [[], []]
     cmd_start = 0
     cmd_end = 0
+    
+    is_for_n = False # 当前命令是否为for循环插入格式
+    for_count = 0 # for循环计数
+    for_data_format = [[],[]] # 需要循环添加的格式
     with open('./resources/format.txt', 'r', encoding='utf-8') as file:
         format_lines = file.readlines()
 
@@ -27,16 +32,54 @@ def get_format(cmd):
     cmd_lines = format_lines[cmd_start:cmd_end]
 
     for one_line in cmd_lines:
-        if one_line.split()[0][-1:] == 'b':
-            format_list[0].append(one_line.split()[0])
+        one_format = one_line.strip().split()
+        # print(one_format)
+        # 按bit处理的情况
+        if one_format[0][-1:] == 'b':
+            format_list[0].append(one_format[0])
+            format_list[1].append(one_format[1].strip())
+         # for 4n
+        # 2        枪1输出电压
+        # 2        枪1输出电流
+        # 1        枪1当前实际占用模块个数
+        # 1        枪1满足负载率最少模块个数
+        # 1        枪1满足最大功率最少模块个数
+        # endfor
+        # 处理多个字段都需要重复添加的情况
+        elif 'startfor' in one_format[0]:
+            for_count = int(one_format[0].split(':')[1])
+            is_for_n = True
+            # print("开始for循环添加 for_count:",for_count)
+        elif "endfor" in one_format[0]:
+            pass
         # 4:4N:
-        elif one_line.split()[0][-1:] == 'N':
-            format_list[0].append(eval(one_line.strip().split()[0].strip()))    
-        else:
-            format_list[0].append(eval(one_line.strip().split()[0].strip()))
-        format_list[1].append(one_line.strip().split()[1].strip())
+        elif ('n' in one_format[0] or 'N' in one_format[0]) and ':' in one_format[0]:
+            count = int(one_format[0].split(':')[0].split(':')[0]) # 当前字段需要重复几次
+            for i in range(count):
+                format_list[0].append(eval(one_format[0].split(":")[0]))
+                format_list[1].append(one_format[1].strip()+str(i+1))
+        else: # 按字节处理的情况
+            if is_for_n:
+                for_data_format[0].append(eval(one_format[0].strip()))
+                for_data_format[1].append(one_format[1].strip())
+                # print(f"for循环添加{for_data_format[0]}{for_data_format[1]}")
+            else:
+                format_list[0].append(eval(one_format[0].strip()))
+                format_list[1].append(one_format[1].strip())
+        
+        # for循环添加到format_list中
+        if 'endfor' in one_format[0] and is_for_n:
+            # print("结束for循环添加 for_count:",for_count)
+            for i in range(for_count):
+               format_list[0].extend(for_data_format[0])
+               for j in range(len(for_data_format[1])):
+                   format_list[1].append(str(i+1) + for_data_format[1][j])
+            
+            # 结束for添加
+            for_count = 0
+            is_for_n = False
 
-
+    # pprint.pprint(format_list)
     return format_list
 
 

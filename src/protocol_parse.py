@@ -40,7 +40,7 @@ def get_multi_bit_val(byte, start, bit_number):
     """
     return (byte >> start) & (0xff >> (8 - bit_number))
 
-
+# 针对一个字节的报文，按bit处理的报文
 def parsed_one_byte_data(byte, bit_data_format, bit_key_format):
     bit_parsed_dict = {}
 
@@ -52,6 +52,24 @@ def parsed_one_byte_data(byte, bit_data_format, bit_key_format):
         cur_bit_index = cur_bit_index + one_field_len
     return bit_parsed_dict
 
+
+# 解析按字节处理的报文
+def parse_byte_data(data_list, start_index, length, key, parsed_dict):
+    # Process byte data
+    data = data_list[start_index:start_index + length]
+
+    if key in ('桩编号', '交易流水号', '账号或者物理卡号', '逻辑卡号', '物理卡号', '并充序号'):
+        parsed_dict[key] = get_bcd_data(data)
+    elif key in ('交易日期', '开始时间', '结束时间'):
+        parsed_dict[key] = get_time_from_cp56time2a(data)
+    elif key == '电动汽车唯一标识' or key == 'VIN':
+        parsed_dict[key] = get_ascii_data(data)
+    elif key in ('终端系统状态'):
+        parsed_dict[key] = get_two_binary_str(data_byte_merge(data))
+    elif '模块状态码' in key:
+        parsed_dict[key] = get_binary_str(data_byte_merge(data))
+    else:
+        parsed_dict[key] = data_byte_merge(data)
 
 def parse_multi_bit_date(message, cmd):
     """
@@ -73,7 +91,7 @@ def parse_multi_bit_date(message, cmd):
 
 
     # 循环解析，根据是否是bit分别处理
-    bit_count = 0  # 用于bitt计数，满一个字节就去解析
+    bit_count = 0  # 用于bit计数，满一个字节就去解析
     cur_parse_index = 0  # 记录当前处理数据列表的第几个字节
     bit_data_format = []  # 用于解析一个字节多bit数据时用
     bit_key_format = []  # 用于解析一个字节多bit数据时用
@@ -95,37 +113,9 @@ def parse_multi_bit_date(message, cmd):
                 one_byte_dict = parsed_one_byte_data(data_list[cur_parse_index], bit_data_format, bit_key_format)
                 parsed_dict.update(one_byte_dict)
         else:  # 处理按byte分的数据
-            one_field_data = data_list[cur_parse_index:cur_parse_index + data]
-            # print(one_field_data)
+            parse_byte_data(data_list, cur_parse_index, data, key_format[index], parsed_dict)
+            cur_parse_index += data
 
-            if key_format[index] == '桩编号':
-                parsed_dict.update({key_format[index]: get_bcd_data(one_field_data)})
-            elif key_format[index] == '交易流水号':
-                parsed_dict.update({key_format[index]: get_bcd_data(one_field_data)})
-            elif key_format[index] == '交易日期':
-                parsed_dict.update({key_format[index]: get_time_from_cp56time2a(one_field_data)})
-            elif key_format[index] == '开始时间':
-                parsed_dict.update({key_format[index]: get_time_from_cp56time2a(one_field_data)})
-            elif key_format[index] == '结束时间':
-                parsed_dict.update({key_format[index]: get_time_from_cp56time2a(one_field_data)})
-            elif key_format[index] == '电动汽车唯一标识':
-                parsed_dict.update({key_format[index]: get_ascii_data(one_field_data)})
-            elif key_format[index] == '账号或者物理卡号':
-                parsed_dict.update({key_format[index]: get_bcd_data(one_field_data)})
-            elif key_format[index] == '逻辑卡号':
-                parsed_dict.update({key_format[index]: get_bcd_data(one_field_data)})
-            elif key_format[index] == '物理卡号':
-                parsed_dict.update({key_format[index]: get_bcd_data(one_field_data)})
-            elif key_format[index] == 'VIN':
-                parsed_dict.update({key_format[index]: get_ascii_data(one_field_data)})
-            elif key_format[index] == '并充序号':
-                parsed_dict.update({key_format[index]: get_bcd_data(one_field_data)})
-            elif key_format[index] == '终端系统状态':
-                parsed_dict.update({key_format[index]: get_two_binary_str(data_byte_merge(one_field_data))})
-            else:
-                parsed_dict.update({key_format[index]: data_byte_merge(one_field_data)})
-
-            cur_parse_index = cur_parse_index + data
     return parsed_dict
 
 
@@ -235,6 +225,12 @@ def screen_parse_data(net_info_list):
         byte_data_str = net_info['data']
         cmd = net_info['cmd']
         net_info_time = net_info['time']
+        
+       # 调试使用
+        # can_read_data = message_parser(cmd, byte_data_str)
+        # net_info['data'] = can_read_data
+        
+        # 尝试执行，失败了可能不好排查，调试使用上面的代码
         try:
             can_read_data = message_parser(cmd, byte_data_str)
             net_info['data'] = can_read_data
@@ -242,6 +238,7 @@ def screen_parse_data(net_info_list):
             can_read_data = None
             log.e_print('-------------数据解析错误{}-------------'.format(err))
             net_info['data'] = '-------------数据解析错误{}-------------'.format(err)
+            
         if can_read_data:
             print('[{}] cmd={} port:{}-{}'.format(net_info['time'], cmd, net_info['addr'], net_info['gunNum']))
 

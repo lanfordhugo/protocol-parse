@@ -29,6 +29,10 @@ def get_two_binary_str(num):
     char_str = ':'.join([str(int(binary_str[i:i+8], 2)) for i in range(0, 16, 8)])
     return f"{formatted_str} : {char_str}"
 
+#  打印一个字节的二进制字符串
+def get_binary_str(num):
+    binary_str = bin(num)[2:].zfill(8)  # 8位，即1字节
+    return f"{binary_str}:0x{num:02x}"
 
 def data_byte_merge(data):
     """

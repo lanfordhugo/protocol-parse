@@ -1,12 +1,36 @@
 import logging as log
 import os
 import pprint
+
+#文件路径
+mcu_cuu_format_path = './resources/format_mcu_ccu.txt'
+sinexcel_format_path = './resources/format_sinexcel.txt'
+
+# 帧头长度
+MCU_CCU_DATA_START_ADDR = 11 # 数据域起始地址机柜内通信协议
+SINEXCEL_DATA_START_ADDR = 8 #盛弘协议
+
 # 停止原因编码
 alarm_dict = {}
 stop_dict = {}
 
+def get_head_len(type):
+    if type == 'mcu_ccu':
+        return MCU_CCU_DATA_START_ADDR
+    elif type == 'sinexcel':
+        return SINEXCEL_DATA_START_ADDR
 
-def get_format(cmd):
+def get_file_path(type):
+    """
+    获取文件路径
+    :return: 文件路径
+    """
+    if(type == 'mcu_ccu'):
+        return mcu_cuu_format_path
+    if(type == 'sinexcel'):
+        return sinexcel_format_path
+
+def get_format(tpye, cmd):
     """
     通用获取报文格式的函数
     :param cmd: 报文代号
@@ -21,7 +45,7 @@ def get_format(cmd):
     is_for_n = False # 当前命令是否为for循环插入格式
     for_count = 0 # for循环计数
     for_data_format = [[],[]] # 需要循环添加的格式
-    with open('./resources/format.txt', 'r', encoding='utf-8') as file:
+    with open(get_file_path(tpye), 'r', encoding='utf-8') as file:
         format_lines = file.readlines()
 
     for index, format in enumerate(format_lines):

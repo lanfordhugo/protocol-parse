@@ -20,8 +20,10 @@ log = MyLogger(1)
 stand_stdout = sys.stdout
 custom_stdout = ConsoleLog(stream=sys.stdout)
 
-# 数据域起始地址
-DATA_START_ADDR = 11
+
+
+# 解析器类型，"mcu_ccu"  "sinexcel"
+PROTOCOL_TYPE = 'mcu_ccu'
 
 def str_seq_to_hexlist(message):
     """
@@ -58,13 +60,13 @@ def parse_byte_data(data_list, start_index, length, key, parsed_dict):
     # Process byte data
     data = data_list[start_index:start_index + length]
 
-    if key in ('桩编号', '交易流水号', '账号或者物理卡号', '逻辑卡号', '物理卡号', '并充序号'):
+    if key in ('桩编号',  '账号或者物理卡号', '逻辑卡号', '物理卡号', '并充序号'):
         parsed_dict[key] = get_bcd_data(data)
     elif key in ('交易日期', '开始时间', '结束时间'):
         parsed_dict[key] = get_time_from_cp56time2a(data)
-    elif key == '电动汽车唯一标识' or key == 'VIN':
+    elif key in ('电动汽车唯一标识', 'VIN' ,"交易流水号") :
         parsed_dict[key] = get_ascii_data(data)
-    elif key in ('终端系统状态'):
+    elif key in ('终端系统状态', "终端充电状态(发给主机)"):
         parsed_dict[key] = get_two_binary_str(data_byte_merge(data))
     elif '模块状态码' in key:
         parsed_dict[key] = get_binary_str(data_byte_merge(data))
@@ -80,11 +82,12 @@ def parse_multi_bit_date(message, cmd):
     """
     # 将字符报文转化为数字格式
     data_list = cmdformat.strlist_to_hexlist(message)
-    data_list = data_list[DATA_START_ADDR:-2]
+    data_start_index = cmdformat.get_head_len(PROTOCOL_TYPE)
+    data_list = data_list[data_start_index:-2]
     parsed_dict = {}
 
     # 获取格式解析所需格式信息
-    format_ = cmdformat.get_format(cmd)
+    format_ = cmdformat.get_format(PROTOCOL_TYPE, cmd)
     data_format = format_[0]
     key_format = format_[1]
 
@@ -173,13 +176,14 @@ def extract_data_from_file(file_path):
             data_groups.append(current_group)
         
     return data_groups
+
 def parse_data_content(data_groups):
     for group in data_groups:
         # 将数据字符串分割成列表，每个元素代表一字节的数据
         data_bytes = group["data"].strip().split()
 
         # 确保数据长度足够
-        if len(data_bytes) >= 11:
+        if len(data_bytes) >= cmdformat.get_head_len(PROTOCOL_TYPE):
             # 提取cmd码，第5,6字节，小端格式
             cmd = int(data_bytes[4], 16) + (int(data_bytes[5], 16) << 8)
             group["cmd"] = cmd
@@ -252,42 +256,6 @@ def screen_parse_data(net_info_list):
             log.d_print('cmd={} time={}报文数据未解析\n'.format(cmd, net_info_time))
 
     return net_info_list
-
-
-
-
-def load_config(file_path):
-    """
-    从日志文件中加载
-    :return:
-    """
-    top_three_lines = []
-    cmd_list = []
-    with open(file_path, 'r', encoding='utf-8') as file:
-        for i in range(3):
-            top_three_lines.append(file.readline().strip())
-
-    try:
-        start_time = top_three_lines[0][6:25]
-        end_time = top_three_lines[1][4:23]
-        start_time_stamp = time.mktime(time.strptime(start_time, "%Y-%m-%d %H:%M:%S"))
-        end_time_stamp = time.mktime(time.strptime(end_time, "%Y-%m-%d %H:%M:%S"))
-    except Exception as err:
-        print('没有开始或结束时间，默认不限制时间{}'.format(err))
-        start_time = '2020-01-01 00:00:00'
-        end_time = '2030-01-01 00:00:00'
-        start_time_stamp = time.mktime(time.strptime(start_time, "%Y-%m-%d %H:%M:%S"))
-        end_time_stamp = time.mktime(time.strptime(end_time, "%Y-%m-%d %H:%M:%S"))
-
-    # 默认配置
-    for line in top_three_lines:
-        if line[:3] == 'cmd':
-            cmd_list = eval(line[4:])
-
-    if len(cmd_list) == 0:
-        print('沒有cmd列表，不过滤cmd')
-    print('开始时间：{}，结束时间：{}，cmd列表：{}\n'.format(start_time, end_time, cmd_list))
-    return start_time_stamp, end_time_stamp, cmd_list
 
 
 def main():

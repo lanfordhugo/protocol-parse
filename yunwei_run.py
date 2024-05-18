@@ -1,7 +1,7 @@
-# v1.5
-from src import yunwei_portocol
+from src import sincexcel_portocol
+from src.sincexcel_portocol import RunType
 
-yunwei_portocol.run()
+sincexcel_portocol.run(RunType.MAINTAIN)
     
 
 

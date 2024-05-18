@@ -533,19 +533,22 @@ class RunType:
     MAINTAIN = 2
     
 def main(run_type=RunType.OPERATE):
+    global PROTOCOL_TYPE
     # 加载网络日志文件
     if run_type == RunType.OPERATE:
         net_file_path = "client_tcu_net.log"
+        PROTOCOL_TYPE = "sinexcel"
     elif run_type == RunType.MAINTAIN:
         net_file_path = "yunwei_tcu_net.log"
+        PROTOCOL_TYPE = "yunwei"
     g_net_info_list = load_file_format(net_file_path)
 
     # 筛选解析报文并打印
     screen_parse_data(g_net_info_list)
 
 
-def run():
+def run(run_type=RunType.OPERATE):
     sys.stdout = custom_stdout
-    main()
+    main(run_type)
     sys.stdout = stand_stdout
     input("回车结束程序")

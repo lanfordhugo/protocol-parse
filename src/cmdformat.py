@@ -5,10 +5,12 @@ import pprint
 #文件路径
 mcu_cuu_format_path = './resources/format_mcu_ccu.txt'
 sinexcel_format_path = './resources/format_sinexcel.txt'
+yunwei_format_path = './resources/format_yunwei.txt'
 
 # 帧头长度
 MCU_CCU_DATA_START_ADDR = 11 # 数据域起始地址机柜内通信协议
 SINEXCEL_DATA_START_ADDR = 8 #盛弘协议
+YUNWEI_DATA_START_ADDR = 8 #运维协议
 
 # 停止原因编码
 alarm_dict = {}
@@ -19,6 +21,8 @@ def get_head_len(type):
         return MCU_CCU_DATA_START_ADDR
     elif type == 'sinexcel':
         return SINEXCEL_DATA_START_ADDR
+    elif type == 'yunwei':
+        return YUNWEI_DATA_START_ADDR
 
 def get_file_path(type):
     """
@@ -29,6 +33,8 @@ def get_file_path(type):
         return mcu_cuu_format_path
     if(type == 'sinexcel'):
         return sinexcel_format_path
+    if(type == 'yunwei'):
+        return yunwei_format_path
 
 def get_format(tpye, cmd):
     """

@@ -304,93 +304,39 @@ def parser_common(message, format_):
             one_field_data.append(byte)
         # --------------------------------数据区解析规则-------------------------------
         # 根据数据定义格式解析每个字段的报文数据,并填充解析后的字典
+        # 创建一个字典，将每个条件映射到相应的函数
+        key_format_func_mapping = {
+            "充电桩编码": get_ascii_data,
+            "充电桩资产码": get_ascii_data,
+            "ICCID": get_ascii_data,
+            "主机资产码": get_ascii_data,
+            "AES秘钥": get_ascii_data,
+            "设备名称": get_ascii_data,
+            "映射远程服务器IP或域名": get_ascii_data,
+            "当前充电桩系统时间": get_date_time,
+            "平台标准BCD时间": get_date_time,
+            "充电开始时间": get_date_time,
+            "充电结束时间": get_date_time,
+            "充电流水号": get_ascii_data,
+            "预约/开始充电开始时间": get_date_time,
+            "预约/定时启动时间": get_date_time,
+            "充电卡号": get_ascii_data,
+            "用户充电卡密码": get_ascii_data,
+            "车辆VIN码": get_ascii_data,
+            "BRM-车辆识别码vin": get_ascii_data,
+            "告警位信息": get_alarm_list,
+            "充电结束原因": get_stop_reason,
+            "车辆VIN绑定账号": get_ascii_data,
+        }
+
         for i, field_index in enumerate(field_index_list):
             if cur_index == field_index:
                 # 对特殊格式进行解析
-                if key_format[field_num] == "充电桩编码":
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_ascii_data(one_field_data)}
-                    )
-                    break
-                elif key_format[field_num] == "当前充电桩系统时间":
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_date_time(one_field_data)}
-                    )
-                    break
-                elif key_format[field_num] == "平台标准BCD时间":
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_date_time(one_field_data)}
-                    )
-                    break
-                elif key_format[field_num] == "充电开始时间":
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_date_time(one_field_data)}
-                    )
-                    break
-                elif key_format[field_num] == "充电结束时间":
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_date_time(one_field_data)}
-                    )
-                    break
-                elif key_format[field_num] == "充电流水号":
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_ascii_data(one_field_data)}
-                    )
-                    break
-                elif key_format[field_num] == "预约/开始充电开始时间":
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_date_time(one_field_data)}
-                    )
-                    break
-                elif key_format[field_num] == "预约/定时启动时间":
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_date_time(one_field_data)}
-                    )
-                    break
-                elif key_format[field_num] == "充电卡号":
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_ascii_data(one_field_data)}
-                    )
-                    break
-                elif key_format[field_num] == "用户充电卡密码":
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_ascii_data(one_field_data)}
-                    )
-                    break
-                elif key_format[field_num] == "车辆VIN码":
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_ascii_data(one_field_data)}
-                    )
-                    break
-                elif key_format[field_num] == "BRM-车辆识别码vin":
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_ascii_data(one_field_data)}
-                    )
-                    break
-                elif key_format[field_num] == "预约/定时启动时间":
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_date_time(one_field_data)}
-                    )
-                    break
-                elif key_format[field_num] == "告警位信息":
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_alarm_list(one_field_data)}
-                    )
-                    break
-                elif key_format[field_num] == "充电结束原因":
-                    stop_reason_code = data_byte_merge(one_field_data)
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_stop_reason(stop_reason_code)}
-                    )
-                    break
-                elif key_format[field_num] == "车辆VIN绑定账号":
-                    parsed_dict["data"].update(
-                        {key_format[field_num]: get_ascii_data(one_field_data)}
-                    )
-                    break
-
+                func = key_format_func_mapping.get(key_format[field_num], data_byte_merge)
+                if func == get_stop_reason:
+                    one_field_data = data_byte_merge(one_field_data)
                 parsed_dict["data"].update(
-                    {key_format[field_num]: data_byte_merge(one_field_data)}
+                    {key_format[field_num]: func(one_field_data)}
                 )
                 break
 
@@ -531,7 +477,8 @@ def screen_parse_data(net_info_list):
 class RunType:
     OPERATE = 1
     MAINTAIN = 2
-    
+
+
 def main(run_type=RunType.OPERATE):
     global PROTOCOL_TYPE
     # 加载网络日志文件

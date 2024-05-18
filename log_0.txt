@@ -1,3 +1,6 @@
 [31m[2024-04-03 16:34:38.817] -------------数据解析错误invalid hexadecimal literal (<string>, line 1)------------- [src.sincexcel_portocol.screen_parse_data():441]
 [31m[2024-04-03 16:34:38.829] cmd=106 time=2023-07-26 10:08:30.29报文数据未解析
  [src.sincexcel_portocol.screen_parse_data():453]
+[31m[2024-05-11 10:01:24.052] -------------数据解析错误'88'------------- [src.sincexcel_portocol.screen_parse_data():441]
+[31m[2024-05-11 10:01:24.075] cmd=222 time=2024-05-10 17:50:47.11报文数据未解析
+ [src.sincexcel_portocol.screen_parse_data():453]

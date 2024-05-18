@@ -21,18 +21,21 @@ def set_bit_val(byte, index, val):
         return byte | (1 << index)
     else:
         return byte & ~(1 << index)
-    
+
+
 # 按二进制打印 0x0301 打印为大端顺序 0 0 0 0 0 0 1 1 : 0 0 0 0 0 0 1 1
 def get_two_binary_str(num):
     binary_str = bin(num)[2:].zfill(16)  # 16位，即2字节
-    formatted_str = ' : '.join([binary_str[:8], binary_str[8:]])
-    char_str = ':'.join([str(int(binary_str[i:i+8], 2)) for i in range(0, 16, 8)])
+    formatted_str = " : ".join([binary_str[:8], binary_str[8:]])
+    char_str = ":".join([str(int(binary_str[i : i + 8], 2)) for i in range(0, 16, 8)])
     return f"{formatted_str} : {char_str}"
+
 
 #  打印一个字节的二进制字符串
 def get_binary_str(num):
     binary_str = bin(num)[2:].zfill(8)  # 8位，即1字节
     return f"{binary_str}:0x{num:02x}"
+
 
 def data_byte_merge(data):
     """
@@ -51,10 +54,10 @@ def data_byte_merge(data):
 def get_ascii_data(data_list):
     # 可能需要反转列表，则用下面语句
     # gun_number.reverse()
-    code_str = ''
+    code_str = ""
     for data in data_list:
         if not data:
-            code_str = code_str + '*'
+            code_str = code_str + "*"
         else:
             code_str = code_str + chr(data)
     return code_str
@@ -63,11 +66,11 @@ def get_ascii_data(data_list):
 def get_bcd_data(data_list):
     # 可能需要反转列表，则用下面语句
     # gun_number.reverse()
-    code_str = ''
+    code_str = ""
     for data in data_list:
         data = str(hex(data)).replace("0x", "")
         if len(data) == 1:
-            data = '0' + data
+            data = "0" + data
         code_str = code_str + data
     return code_str
 
@@ -78,14 +81,14 @@ def get_date_time(bytes_list):
     :param bytes_list:
     :return:
     """
-    datetime = ''
-    date_format = ['', '', '-', '-', ' ', ':', ':']
+    datetime = ""
+    date_format = ["", "", "-", "-", " ", ":", ":"]
     for index, date in enumerate(bytes_list[:-1]):
         if date < 10:
-            date = '0{:x}'.format(date)
-            datetime = datetime + ('{}{}'.format(date_format[index], date))
+            date = "0{:x}".format(date)
+            datetime = datetime + ("{}{}".format(date_format[index], date))
         else:
-            datetime = datetime + ('{}{:x}'.format(date_format[index], date))
+            datetime = datetime + ("{}{:x}".format(date_format[index], date))
 
     return datetime  # 2018-5-23 13:32:9
 
@@ -95,7 +98,7 @@ def get_time_from_cp56time2a(timebuff):
     获取cp56time2a时间
     :param timebuff: 7字节cp65时间
     :return: time_t
-    """""
+    """ ""
 
     tm_year = (timebuff[6] & 0x7F) + 2000
     tm_mon = (timebuff[5] & 0x0F) - 1
@@ -106,10 +109,11 @@ def get_time_from_cp56time2a(timebuff):
 
     tm_sec = (msec + 500) // 1000
 
-    time_str = "{}-{}-{} {}:{}:{}".format(tm_year, tm_mon, tm_mday, tm_hour, tm_min, tm_sec)
+    time_str = "{}-{}-{} {}:{}:{}".format(
+        tm_year, tm_mon, tm_mday, tm_hour, tm_min, tm_sec
+    )
 
     return time_str
-
 
 
 def get_alarm_list(bytes_list):

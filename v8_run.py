@@ -1,5 +1,4 @@
 # v1.5
-from src import protocol_parse
+from src import v8_protocol
 
-protocol_parse.run()
-    
+v8_protocol.run()

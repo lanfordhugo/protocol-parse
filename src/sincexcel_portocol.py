@@ -2,6 +2,7 @@
 每个报文解析函数的框架类似，只需修改数据区格式，添加解析规则
 普通报文参考106，变长度报文参考3和4
 """
+
 import sys
 import time
 import re
@@ -24,6 +25,7 @@ other_info_len = 9
 PROTOCOL_TYPE = "sinexcel"
 
 log = MyLogger(0)
+
 
 def common_fun(data_format, message):
     """
@@ -49,11 +51,19 @@ def common_fun(data_format, message):
     data_list.extend([0 for _ in range(diff)])
     if diff:
         if diff > 0:
-            print('报文有效数据长度{},需要格式化的长度{},报文少{}字节'.format(data_count, sum(data_format), diff))
+            print(
+                "报文有效数据长度{},需要格式化的长度{},报文少{}字节".format(
+                    data_count, sum(data_format), diff
+                )
+            )
             print("报文协议版本比解析器老")
         else:
-            print('报文有效数据长度{},需要格式化的长度{},报文多{}字节'.format(data_count, sum(data_format), abs(diff)))
-            print('报文协议版本比解析器新')
+            print(
+                "报文有效数据长度{},需要格式化的长度{},报文多{}字节".format(
+                    data_count, sum(data_format), abs(diff)
+                )
+            )
+            print("报文协议版本比解析器新")
 
     return field_index_list, data_list, parsed_dict
 
@@ -65,7 +75,7 @@ def str_seq_to_hexlist(message):
     message_list_str = message.split()
     message_list_hex = []
     for i in message_list_str:
-        message_list_hex.append(eval('0x' + i))
+        message_list_hex.append(eval("0x" + i))
     return message_list_hex
 
 
@@ -83,39 +93,45 @@ def split_message(message_list_hex, data_area_len):
     count = 0
     for number in message_format:
         bytes_list = []
-        for byte in message_list_hex[count:count + number]:
+        for byte in message_list_hex[count : count + number]:
             count += 1
             bytes_list.append(byte)
         if count == 2:
-            split_message_dict.update({'start_area': bytes_list})
+            split_message_dict.update({"start_area": bytes_list})
         elif count == 4:
             if bytes_list[1] == 0:
-                split_message_dict.update({'len': bytes_list[0]})
+                split_message_dict.update({"len": bytes_list[0]})
             else:
-                split_message_dict.update({'len': data_byte_merge(bytes_list)})
+                split_message_dict.update({"len": data_byte_merge(bytes_list)})
         elif count == 5:
-            split_message_dict.update({'info': bytes_list[0]})
+            split_message_dict.update({"info": bytes_list[0]})
         elif count == 6:
-            split_message_dict.update({'serial': bytes_list[0]})
+            split_message_dict.update({"serial": bytes_list[0]})
         elif count == 8:
             if bytes_list[1] == 0:
-                split_message_dict.update({'cmd': bytes_list[0]})
+                split_message_dict.update({"cmd": bytes_list[0]})
             else:
-                split_message_dict.update({'cmd': data_byte_merge(bytes_list)})
+                split_message_dict.update({"cmd": data_byte_merge(bytes_list)})
         elif count == 8 + number:
             data_list = bytes_list
         else:
-            split_message_dict.update({'check': bytes_list[0]})
+            split_message_dict.update({"check": bytes_list[0]})
 
     if print_more_info:
-        print('起始域：{:x}{:x}'.format(split_message_dict['start_area'][0], split_message_dict['start_area'][1]))
-        print('长度域：{}'.format(split_message_dict['len']))
-        print('信息域：{}'.format(split_message_dict['info']))
-        print('序列号：{}'.format(split_message_dict['serial']))
-        print('命令代号：{}'.format(split_message_dict['cmd']))
-        print('校验和：{}'.format(split_message_dict['check']))
+        print(
+            "起始域：{:x}{:x}".format(
+                split_message_dict["start_area"][0], split_message_dict["start_area"][1]
+            )
+        )
+        print("长度域：{}".format(split_message_dict["len"]))
+        print("信息域：{}".format(split_message_dict["info"]))
+        print("序列号：{}".format(split_message_dict["serial"]))
+        print("命令代号：{}".format(split_message_dict["cmd"]))
+        print("校验和：{}".format(split_message_dict["check"]))
 
-    split_message_dict.update(({'data': {}}))  # 最后添加数据区域的空字段，数据域由外部填充
+    split_message_dict.update(
+        ({"data": {}})
+    )  # 最后添加数据区域的空字段，数据域由外部填充
 
     return split_message_dict, data_list
 
@@ -124,7 +140,7 @@ def parser_1(message, format_):
     # --------数据区分配格式，与协议定义格式相关------
     data_format = format_[0]
     key_format = format_[1]
-    str_parameter_format = cmdformat.get_format(PROTOCOL_TYPE, '整形参数设置表')
+    str_parameter_format = cmdformat.get_format(PROTOCOL_TYPE, "整形参数设置表")
     # ---------------------------
     # 根据设置参数数量不同，重新设置报文格式，便于使用通用方式解析
     field_index_list, data_list, parsed_dict = common_fun(data_format, message)
@@ -138,7 +154,9 @@ def parser_1(message, format_):
 
     # 根据设置参数的开始字节地址和设置字节数量重新设置数据格式
     for i in range(set_para_count):
-        data_format.append(4)  # 所有参数长度都是4，设置几个参数就添加几个4字节宽度的解析域
+        data_format.append(
+            4
+        )  # 所有参数长度都是4，设置几个参数就添加几个4字节宽度的解析域
         key_format.append(str_parameter_format[1][set_para_start_address - 1 + i])
     field_index_list, data_list, parsed_dict = common_fun(data_format, message)
 
@@ -148,19 +166,21 @@ def parser_1(message, format_):
         field_index_list.append(sum(data_format[:i]))
     for index, number in enumerate(data_format):
         bytes_list = []
-        for byte in data_list[count:count + number]:
+        for byte in data_list[count : count + number]:
             count += 1
             bytes_list.append(byte)
         # --------------------------------数据区解析规则-------------------------------
         for sum_index, sum_ in enumerate(field_index_list):
             if count == sum_:
-                parsed_dict['data'].update({key_format[index]: data_byte_merge(bytes_list)})
+                parsed_dict["data"].update(
+                    {key_format[index]: data_byte_merge(bytes_list)}
+                )
                 break
     return parsed_dict
 
 
 def parser_2(message, format_):
-    print('未解析cmd=2')
+    print("未解析cmd=2")
     return None
 
 
@@ -169,7 +189,7 @@ def parser_3(message, format_):
     # --------数据区分配格式，与协议定义格式相关------
     data_format = format_[0]
     key_format = format_[1]
-    str_parameter_format = cmdformat.get_format(PROTOCOL_TYPE, '字符参数设置表')
+    str_parameter_format = cmdformat.get_format(PROTOCOL_TYPE, "字符参数设置表")
     # ---------------------------
     # 根据设置参数数量不同，重新设置报文格式，便于使用通用方式解析
     field_index_list, data_list, parsed_dict = common_fun(data_format, message)
@@ -188,20 +208,26 @@ def parser_3(message, format_):
         field_index_list.append(sum(data_format[:i]))
     for index, number in enumerate(data_format):
         bytes_list = []
-        for byte in data_list[count:count + number]:
+        for byte in data_list[count : count + number]:
             count += 1
             bytes_list.append(byte)
         # --------------------------------数据区解析规则-------------------------------
         for sum_index, sum_ in enumerate(field_index_list):
             if count == sum_:
                 # 对特殊格式进行解析
-                if key_format[index] == '标准时钟时间':
-                    parsed_dict['data'].update({key_format[index]: get_date_time(bytes_list)})
+                if key_format[index] == "标准时钟时间":
+                    parsed_dict["data"].update(
+                        {key_format[index]: get_date_time(bytes_list)}
+                    )
                     break
                 if index > 4:  # 对于字符串设置参数使用ascii解析
-                    parsed_dict['data'].update({key_format[index]: get_ascii_data(bytes_list)})
+                    parsed_dict["data"].update(
+                        {key_format[index]: get_ascii_data(bytes_list)}
+                    )
                     break
-                parsed_dict['data'].update({key_format[index]: data_byte_merge(bytes_list)})
+                parsed_dict["data"].update(
+                    {key_format[index]: data_byte_merge(bytes_list)}
+                )
                 break
     return parsed_dict
 
@@ -210,7 +236,7 @@ def parser_4(message, format_):
     # --------数据区分配格式，与协议定义格式相关------
     data_format = format_[0]
     key_format = format_[1]
-    str_parameter_format = cmdformat.get_format(PROTOCOL_TYPE, '字符参数设置表')
+    str_parameter_format = cmdformat.get_format(PROTOCOL_TYPE, "字符参数设置表")
     # ---------------------------
     # 根据设置参数数量不同，重新设置报文格式，便于使用通用方式解析
     field_index_list, data_list, parsed_dict = common_fun(data_format, message)
@@ -226,33 +252,41 @@ def parser_4(message, format_):
         field_index_list.append(sum(data_format[:i]))
     for index, number in enumerate(data_format):
         bytes_list = []
-        for byte in data_list[count:count + number]:
+        for byte in data_list[count : count + number]:
             count += 1
             bytes_list.append(byte)
         # --------------------------------数据区解析规则-------------------------------
         for sum_index, sum_ in enumerate(field_index_list):
             if count == sum_:
                 # 对特殊格式进行解析
-                if key_format[index] == '标准时钟时间':
-                    parsed_message['data'].update({key_format[index]: get_date_time(bytes_list)})
+                if key_format[index] == "标准时钟时间":
+                    parsed_message["data"].update(
+                        {key_format[index]: get_date_time(bytes_list)}
+                    )
                     break
-                if key_format[index] == '充电桩编码':
-                    parsed_message['data'].update({key_format[index]: get_ascii_data(bytes_list)})
+                if key_format[index] == "充电桩编码":
+                    parsed_message["data"].update(
+                        {key_format[index]: get_ascii_data(bytes_list)}
+                    )
                     break
                 if index > 5:  # 对于字符串设置参数使用ascii解析
-                    parsed_message['data'].update({key_format[index]: get_ascii_data(bytes_list)})
+                    parsed_message["data"].update(
+                        {key_format[index]: get_ascii_data(bytes_list)}
+                    )
                     break
-                parsed_message['data'].update({key_format[index]: data_byte_merge(bytes_list)})
+                parsed_message["data"].update(
+                    {key_format[index]: data_byte_merge(bytes_list)}
+                )
                 break
     return parsed_message
 
 
 def parser_common(message, format_):
     """
-        定长报文公共解析函数
-        :param message: 报文字符串数据
-        :return: 解析后的报文字典
-        """
+    定长报文公共解析函数
+    :param message: 报文字符串数据
+    :return: 解析后的报文字典
+    """
     # --------数据区分配格式------
     data_format = format_[0]
     key_format = format_[1]
@@ -265,7 +299,7 @@ def parser_common(message, format_):
     for field_num, number in enumerate(data_format):
         one_field_data = []
         # 按字节数从数据列表中取出一个字段的数据到one_field_data
-        for byte in data_list[cur_index:cur_index + number]:
+        for byte in data_list[cur_index : cur_index + number]:
             cur_index += 1
             one_field_data.append(byte)
         # --------------------------------数据区解析规则-------------------------------
@@ -273,57 +307,91 @@ def parser_common(message, format_):
         for i, field_index in enumerate(field_index_list):
             if cur_index == field_index:
                 # 对特殊格式进行解析
-                if key_format[field_num] == '充电桩编码':
-                    parsed_dict['data'].update({key_format[field_num]: get_ascii_data(one_field_data)})
+                if key_format[field_num] == "充电桩编码":
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_ascii_data(one_field_data)}
+                    )
                     break
-                elif key_format[field_num] == '当前充电桩系统时间':
-                    parsed_dict['data'].update({key_format[field_num]: get_date_time(one_field_data)})
+                elif key_format[field_num] == "当前充电桩系统时间":
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_date_time(one_field_data)}
+                    )
                     break
-                elif key_format[field_num] == '平台标准BCD时间':
-                    parsed_dict['data'].update({key_format[field_num]: get_date_time(one_field_data)})
+                elif key_format[field_num] == "平台标准BCD时间":
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_date_time(one_field_data)}
+                    )
                     break
-                elif key_format[field_num] == '充电开始时间':
-                    parsed_dict['data'].update({key_format[field_num]: get_date_time(one_field_data)})
+                elif key_format[field_num] == "充电开始时间":
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_date_time(one_field_data)}
+                    )
                     break
-                elif key_format[field_num] == '充电结束时间':
-                    parsed_dict['data'].update({key_format[field_num]: get_date_time(one_field_data)})
+                elif key_format[field_num] == "充电结束时间":
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_date_time(one_field_data)}
+                    )
                     break
-                elif key_format[field_num] == '充电流水号':
-                    parsed_dict['data'].update({key_format[field_num]: get_ascii_data(one_field_data)})
+                elif key_format[field_num] == "充电流水号":
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_ascii_data(one_field_data)}
+                    )
                     break
-                elif key_format[field_num] == '预约/开始充电开始时间':
-                    parsed_dict['data'].update({key_format[field_num]: get_date_time(one_field_data)})
+                elif key_format[field_num] == "预约/开始充电开始时间":
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_date_time(one_field_data)}
+                    )
                     break
-                elif key_format[field_num] == '预约/定时启动时间':
-                    parsed_dict['data'].update({key_format[field_num]: get_date_time(one_field_data)})
+                elif key_format[field_num] == "预约/定时启动时间":
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_date_time(one_field_data)}
+                    )
                     break
-                elif key_format[field_num] == '充电卡号':
-                    parsed_dict['data'].update({key_format[field_num]: get_ascii_data(one_field_data)})
+                elif key_format[field_num] == "充电卡号":
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_ascii_data(one_field_data)}
+                    )
                     break
-                elif key_format[field_num] == '用户充电卡密码':
-                    parsed_dict['data'].update({key_format[field_num]: get_ascii_data(one_field_data)})
+                elif key_format[field_num] == "用户充电卡密码":
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_ascii_data(one_field_data)}
+                    )
                     break
-                elif key_format[field_num] == '车辆VIN码':
-                    parsed_dict['data'].update({key_format[field_num]: get_ascii_data(one_field_data)})
+                elif key_format[field_num] == "车辆VIN码":
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_ascii_data(one_field_data)}
+                    )
                     break
-                elif key_format[field_num] == 'BRM-车辆识别码vin':
-                    parsed_dict['data'].update({key_format[field_num]: get_ascii_data(one_field_data)})
+                elif key_format[field_num] == "BRM-车辆识别码vin":
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_ascii_data(one_field_data)}
+                    )
                     break
-                elif key_format[field_num] == '预约/定时启动时间':
-                    parsed_dict['data'].update({key_format[field_num]: get_date_time(one_field_data)})
+                elif key_format[field_num] == "预约/定时启动时间":
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_date_time(one_field_data)}
+                    )
                     break
-                elif key_format[field_num] == '告警位信息':
-                    parsed_dict['data'].update({key_format[field_num]: get_alarm_list(one_field_data)})
+                elif key_format[field_num] == "告警位信息":
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_alarm_list(one_field_data)}
+                    )
                     break
-                elif key_format[field_num] == '充电结束原因':
+                elif key_format[field_num] == "充电结束原因":
                     stop_reason_code = data_byte_merge(one_field_data)
-                    parsed_dict['data'].update({key_format[field_num]: get_stop_reason(stop_reason_code)})
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_stop_reason(stop_reason_code)}
+                    )
                     break
-                elif key_format[field_num] == '车辆VIN绑定账号':
-                    parsed_dict['data'].update({key_format[field_num]: get_ascii_data(one_field_data)})
+                elif key_format[field_num] == "车辆VIN绑定账号":
+                    parsed_dict["data"].update(
+                        {key_format[field_num]: get_ascii_data(one_field_data)}
+                    )
                     break
 
-                parsed_dict['data'].update({key_format[field_num]: data_byte_merge(one_field_data)})
+                parsed_dict["data"].update(
+                    {key_format[field_num]: data_byte_merge(one_field_data)}
+                )
                 break
 
     return parsed_dict
@@ -356,23 +424,24 @@ def message_parser(cmd, message):
 
     return parsed_dict
 
+
 def extract_data_from_file(file_path):
     # 正则表达式以匹配两种时间格式2024-03-26 18:54:05:200 或者 2024-03-28 19:27:38.079
     # ms 时间同时匹配 . 和 : 两种分隔符
-    info_line_re = re.compile( r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:|\.]\d{2,3}')
+    info_line_re = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:|\.]\d{2,3}")
     # 这里不再需要特别匹配AA F5开始的数据行，因为我们会连续读取数据直到下一个信息行
-    data_line_start_re = re.compile(r'AA F5')
-    
+    data_line_start_re = re.compile(r"AA F5")
+
     data_groups = []
     current_group = None
     is_collecting_data = False  # 标记是否正在收集多行数据
-    
-    with open(file_path, 'r', encoding='utf-8') as file:
+
+    with open(file_path, "r", encoding="utf-8") as file:
         for line in file:
             line = line.strip()
-            if line == ""  or '//' in line:
+            if line == "" or "//" in line:
                 continue
-            
+
             info_line_match = info_line_re.search(line)
             if info_line_match:
                 # 遇到新的信息行，如果之前有在收集数据，则先结束当前数据的收集
@@ -380,7 +449,7 @@ def extract_data_from_file(file_path):
                     data_groups.append(current_group)
                     is_collecting_data = False
                 current_group = {"time": info_line_match.group(), "data": ""}
- 
+
                 continue
 
             # 如果行以AA F5开始，标记为开始收集数据
@@ -389,12 +458,13 @@ def extract_data_from_file(file_path):
             # 如果正在收集数据，则将行添加到数据中
             if is_collecting_data and current_group is not None:
                 current_group["data"] += line + " "
-        
+
         # 不要忘记将最后一个数据组添加到列表中
         if current_group and current_group["data"]:
             data_groups.append(current_group)
-        
+
     return data_groups
+
 
 def parse_data_content(data_groups):
     for group in data_groups:
@@ -406,8 +476,9 @@ def parse_data_content(data_groups):
             # 提取cmd码，第5,6字节，小端格式
             cmd = int(data_bytes[6], 16) + (int(data_bytes[7], 16) << 8)
             group["cmd"] = cmd
-            
+
     return data_groups
+
 
 def load_file_format(file_path):
     """
@@ -418,8 +489,9 @@ def load_file_format(file_path):
 
     data_groups = extract_data_from_file(file_path)
     data_groups = parse_data_content(data_groups)
-    
+
     return data_groups
+
 
 def screen_parse_data(net_info_list):
     """
@@ -427,38 +499,47 @@ def screen_parse_data(net_info_list):
     :param net_info_list:原始网络数据列表
     :return:None
     """
-    
+
     # 解析并打印过滤后的报文
     for net_info in net_info_list:
-        byte_data_str = net_info['data']
-        cmd = net_info['cmd']
-        net_info_time = net_info['time']
+        byte_data_str = net_info["data"]
+        cmd = net_info["cmd"]
+        net_info_time = net_info["time"]
         try:
             can_read_data = message_parser(cmd, byte_data_str)
-            net_info['data'] = can_read_data
+            net_info["data"] = can_read_data
         except Exception as err:
             can_read_data = None
-            log.e_print('-------------数据解析错误{}-------------'.format(err))
-            net_info['data'] = '-------------数据解析错误{}-------------'.format(err)
+            log.e_print("-------------数据解析错误{}-------------".format(err))
+            net_info["data"] = "-------------数据解析错误{}-------------".format(err)
         if can_read_data:
-            print('[{}] cmd={}'.format(net_info['time'], can_read_data['cmd']))
+            print("[{}] cmd={}".format(net_info["time"], can_read_data["cmd"]))
 
-            for key, value in can_read_data['data'].items():
+            for key, value in can_read_data["data"].items():
                 try:
                     print("'{}': {}".format(key, value))
                 except Exception as err:
-                    log.e_print('-----数据打印错误-----', err)
+                    log.e_print("-----数据打印错误-----", err)
             print()
         else:
-            log.e_print('cmd={} time={}报文数据未解析\n'.format(cmd, net_info_time))
+            log.e_print("cmd={} time={}报文数据未解析\n".format(cmd, net_info_time))
 
     return net_info_list
 
-def main():
-    # 加载网络日志文件
-    net_file_path = 'my_tcu_net.log'
-    g_net_info_list = load_file_format(net_file_path)
+
+# 定义枚举类型 运营， 运维
+class RunType:
+    OPERATE = 1
+    MAINTAIN = 2
     
+def main(run_type=RunType.OPERATE):
+    # 加载网络日志文件
+    if run_type == RunType.OPERATE:
+        net_file_path = "client_tcu_net.log"
+    elif run_type == RunType.MAINTAIN:
+        net_file_path = "yunwei_tcu_net.log"
+    g_net_info_list = load_file_format(net_file_path)
+
     # 筛选解析报文并打印
     screen_parse_data(g_net_info_list)
 
@@ -467,4 +548,4 @@ def run():
     sys.stdout = custom_stdout
     main()
     sys.stdout = stand_stdout
-    input('回车结束程序')
+    input("回车结束程序")

@@ -22,19 +22,46 @@ def set_bit_val(byte, index, val):
     else:
         return byte & ~(1 << index)
 
+# 按二进制打印，0x1122334455667788 打印为大端顺序 
+def get_eight_binary_str(num):
+    binary_str = bin(num)[2:].zfill(64)  # 64位，即8字节
+    formatted_str = " : ".join(
+        [
+            binary_str[:8],
+            binary_str[8:16],
+            binary_str[16:24],
+            binary_str[24:32],
+            binary_str[32:40],
+            binary_str[40:48],
+            binary_str[48:56],
+            binary_str[56:],
+        ]
+    )
+    char_str = " ".join([f"0x{int(binary_str[i : i + 8], 2):02X}" for i in range(0, 32, 8)])
+    return f"{formatted_str} | {char_str}"
+
+# 按二进制打印，0x11223344 打印为大端顺序 10101011 : 01000001 : 00110000
+def get_four_binary_str(num):
+    binary_str = bin(num)[2:].zfill(32)  # 32位，即4字节
+    formatted_str = " : ".join(
+        [binary_str[:8], binary_str[8:16], binary_str[16:24], binary_str[24:]]
+    )
+    char_str = ":".join([f"0x{int(binary_str[i : i + 8], 2):02X}" for i in range(0, 32, 8)])
+    return f"{formatted_str} | {char_str}"
+
 
 # 按二进制打印 0x0301 打印为大端顺序 0 0 0 0 0 0 1 1 : 0 0 0 0 0 0 1 1
 def get_two_binary_str(num):
     binary_str = bin(num)[2:].zfill(16)  # 16位，即2字节
     formatted_str = " : ".join([binary_str[:8], binary_str[8:]])
-    char_str = ":".join([str(int(binary_str[i : i + 8], 2)) for i in range(0, 16, 8)])
-    return f"{formatted_str} : {char_str}"
+    char_str = ":".join([f"0x{int(binary_str[i : i + 8], 2):02X}" for i in range(0, 16, 8)])
+    return f"{formatted_str} | {char_str}"
 
 
 #  打印一个字节的二进制字符串
 def get_binary_str(num):
     binary_str = bin(num)[2:].zfill(8)  # 8位，即1字节
-    return f"{binary_str}:0x{num:02x}"
+    return f"{binary_str} | 0x{num:02x}"
 
 
 def data_byte_merge(data):

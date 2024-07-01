@@ -84,7 +84,10 @@ def get_format(tpye, cmd):
             pass
         # 4:4N:
         elif ('n' in one_format[0] or 'N' in one_format[0]) and ':' in one_format[0]:
-            count = int(one_format[0].split(':')[0].split(':')[0]) # 当前字段需要重复几次
+            count_str = one_format[0].split(':')[1] # 当前字段需要重复几次
+            s = ''.join([i for i in count_str if i.isdigit()])
+            count = int(s)
+            print("count:",count)
             for i in range(count):
                 format_list[0].append(eval(one_format[0].split(":")[0]))
                 format_list[1].append(one_format[1].strip()+str(i+1))

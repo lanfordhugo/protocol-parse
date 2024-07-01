@@ -73,8 +73,34 @@ def parse_byte_data(data_list, start_index, length, key, parsed_dict):
         "日志上传文件路径",
         "终端桩编码",
     ]
-    two_binary_keys = ["终端系统状态", "终端充电状态(发给主机)"]
-    binary_keys = ["模块状态码"]
+    eight_binary_keys = [
+        'A接触器驱动反馈测试结果正',
+        'A接触器驱动反馈测试结果负',
+        'B接触器驱动反馈测试结果正',
+        'B接触器驱动反馈测试结果负',
+        '模块地址测试结果',
+        'A面接触器驱动位置测试结果',
+        'B面接触器驱动位置测试结果',
+    ]
+    four_binary_keys = [
+        "枪故障状态",
+        "主机状态1",
+        "主机状态2",
+        "主机状态3",
+        "主机状态4",
+        "A模块通讯状态",
+        "B模块通讯状态",
+        '线缆测试结果',
+        'M2全自动工装结果',
+    ]
+    two_binary_keys = [
+        "终端系统状态",
+        "终端充电状态(发给主机)",
+        "工装使能",
+        "终端通讯状态",
+        
+    ]
+    binary_keys = ["模块状态码", "驱动板通讯状态"]
 
     # Use the lists to call the corresponding function
     if key in bcd_keys:
@@ -83,6 +109,10 @@ def parse_byte_data(data_list, start_index, length, key, parsed_dict):
         parsed_dict[key] = get_time_from_cp56time2a(data)
     elif key in ascii_keys:
         parsed_dict[key] = get_ascii_data(data)
+    elif key in eight_binary_keys:
+        parsed_dict[key] = get_eight_binary_str(data_byte_merge(data))
+    elif key in four_binary_keys:
+        parsed_dict[key] = get_four_binary_str(data_byte_merge(data))
     elif key in two_binary_keys:
         parsed_dict[key] = get_two_binary_str(data_byte_merge(data))
     elif key in binary_keys:
@@ -300,4 +330,3 @@ def run():
     sys.stdout = custom_stdout
     main()
     sys.stdout = stand_stdout
-    input("回车结束程序")

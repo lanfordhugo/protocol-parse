@@ -310,8 +310,14 @@ def parser_common(message, format_):
             "充电桩资产码": get_ascii_data,
             "ICCID": get_ascii_data,
             "主机资产码": get_ascii_data,
+            "卡号/用户id":get_ascii_data,
+            "BRM-车辆识别码VIN": get_ascii_data,
             "AES秘钥": get_ascii_data,
             "设备名称": get_ascii_data,
+            "FTP服务器IP地址或者域名": get_ascii_data,
+            "FTP用户名": get_ascii_data,
+            "FTP密码": get_ascii_data,
+            "FTP存放日志路径": get_ascii_data,
             "映射远程服务器IP或域名": get_ascii_data,
             "当前充电桩系统时间": get_date_time,
             "平台标准BCD时间": get_date_time,
@@ -352,8 +358,8 @@ def message_parser(cmd, message):
     """
     if cmd == 1103:  # 两个报文解析模板用一样的
         cmd = 1102
-    if cmd == 201:
-        cmd = 221
+    # if cmd == 201:
+    #     cmd = 221
     if cmd == 1108:
         cmd = 1105
 

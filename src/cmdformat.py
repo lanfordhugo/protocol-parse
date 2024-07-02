@@ -1,6 +1,8 @@
 import logging as log
-import os
-import pprint
+import ast
+
+from src.m_print import MyLogger
+log = MyLogger(1)
 
 #文件路径
 mcu_cuu_format_path = './resources/format_mcu_ccu.txt'
@@ -190,3 +192,19 @@ def get_alarm_stop_dict():
         stop_code = one_line.split()[0]
         stop_dict.update({stop_code: one_line.split()[1]})
     return alarm_dict, stop_dict
+
+def load_filter():
+    """
+    加载过滤参数
+    """
+    # 从文件./resources/filter.txt中读取过滤参数,cmd=[609,610,611,612]
+    with open('./resources/filter.txt', 'r', encoding='utf-8') as file:
+        filter_lines = file.readlines()
+        for one_line in filter_lines:
+            if 'cmd' in one_line:
+                cmd = one_line.split('=')[1].strip()
+                # 使用 ast.literal_eval 安全地评估字符串，避免代码注入风险
+                cmd_list = ast.literal_eval(cmd)
+                return cmd_list 
+
+

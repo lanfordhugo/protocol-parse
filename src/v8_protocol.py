@@ -9,6 +9,7 @@ import re
 from src.console_log import ConsoleLog
 from src.field_parser import *
 from src.m_print import MyLogger
+from typing import Any, Dict, List
 
 
 log = MyLogger(1)
@@ -60,62 +61,22 @@ def parsed_one_byte_data(byte, bit_data_format, bit_key_format):
 def parse_byte_data(data_list, start_index, length, key, parsed_dict):
     # Process byte data
     data = data_list[start_index : start_index + length]
-
-    # Define lists for different types of keys
-    bcd_keys = ["桩编号", "账号或者物理卡号", "逻辑卡号", "物理卡号", "并充序号"]
-    time_keys = ["交易日期", "开始时间", "结束时间"]
-    ascii_keys = [
-        "电动汽车唯一标识",
-        "VIN",
-        "交易流水号",
-        "升级文件路径",
-        "升级文件名",
-        "日志上传文件路径",
-        "终端桩编码",
-    ]
-    eight_binary_keys = [
-        'A接触器驱动反馈测试结果正',
-        'A接触器驱动反馈测试结果负',
-        'B接触器驱动反馈测试结果正',
-        'B接触器驱动反馈测试结果负',
-        '模块地址测试结果',
-        'A面接触器驱动位置测试结果',
-        'B面接触器驱动位置测试结果',
-    ]
-    four_binary_keys = [
-        "枪故障状态",
-        "主机状态1",
-        "主机状态2",
-        "主机状态3",
-        "主机状态4",
-        "A模块通讯状态",
-        "B模块通讯状态",
-        '线缆测试结果',
-        'M2全自动工装结果',
-    ]
-    two_binary_keys = [
-        "终端系统状态",
-        "终端充电状态(发给主机)",
-        "工装使能",
-        "终端通讯状态",
-        
-    ]
-    binary_keys = ["模块状态码", "驱动板通讯状态"]
-
+    # 不关注kew的数字前缀和后缀
+    format_key = key.strip("1234567890")
     # Use the lists to call the corresponding function
-    if key in bcd_keys:
+    if format_key in bcd_keys:
         parsed_dict[key] = get_bcd_data(data)
-    elif key in time_keys:
+    elif format_key in time_keys:
         parsed_dict[key] = get_time_from_cp56time2a(data)
-    elif key in ascii_keys:
+    elif format_key in ascii_keys:
         parsed_dict[key] = get_ascii_data(data)
-    elif key in eight_binary_keys:
+    elif format_key in eight_binary_keys:
         parsed_dict[key] = get_eight_binary_str(data_byte_merge(data))
-    elif key in four_binary_keys:
+    elif format_key in four_binary_keys:
         parsed_dict[key] = get_four_binary_str(data_byte_merge(data))
-    elif key in two_binary_keys:
+    elif format_key in two_binary_keys:
         parsed_dict[key] = get_two_binary_str(data_byte_merge(data))
-    elif key in binary_keys:
+    elif format_key in binary_keys:
         parsed_dict[key] = get_binary_str(data_byte_merge(data))
     else:
         parsed_dict[key] = data_byte_merge(data)
@@ -188,6 +149,9 @@ def message_parser(cmd, message):
 
 
 def extract_data_from_file(file_path):
+    """
+    从数据行中匹配到数据，返回结构化数据，主要获取的是数据产生时间和数据内容本身
+    """
     # 正则表达式以匹配两种时间格式2024-03-26 18:54:05:200 或者 2024-03-28 19:27:38.079
     # ms 时间同时匹配 . 和 : 两种分隔符
     info_line_re = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:|\.]\d{3}")
@@ -229,7 +193,12 @@ def extract_data_from_file(file_path):
     return data_groups
 
 
-def parse_data_content(data_groups):
+def parse_data_content(data_groups: List[Dict[str, str]], valid_cmds: List[int]):
+    """
+    从结构化的数据中，提取出cmd码，报文序号，设备类型，设备地址，设备枪号等信息
+    并且把数据字符串转化为列表。只处理valid_cmds中包含的cmd码。
+    """
+    filtered_data_groups = []
     for group in data_groups:
         # 将数据字符串分割成列表，每个元素代表一字节的数据
         data_bytes = group["data"].strip().split()
@@ -238,6 +207,11 @@ def parse_data_content(data_groups):
         if len(data_bytes) >= cmdformat.get_head_len(PROTOCOL_TYPE):
             # 提取cmd码，第5,6字节，小端格式
             cmd = int(data_bytes[4], 16) + (int(data_bytes[5], 16) << 8)
+
+            # 如果cmd不在valid_cmds列表中，跳过当前循环
+            if cmd not in valid_cmds:
+                continue
+
             group["cmd"] = cmd
 
             # 提取报文序号，第7,8字节，小端格式
@@ -256,7 +230,10 @@ def parse_data_content(data_groups):
             gunNum = int(data_bytes[10], 16)
             group["gunNum"] = gunNum
 
-    return data_groups
+            # 将处理过的group添加到filtered_data_groups列表中
+            filtered_data_groups.append(group)
+
+    return filtered_data_groups
 
 
 def load_file_format(file_path):
@@ -265,9 +242,9 @@ def load_file_format(file_path):
     :param file_path:日志文件的路径
     :return:加载文件的列表
     """
-
+    vaild_cmd = cmdformat.load_filter()
     data_groups = extract_data_from_file(file_path)
-    data_groups = parse_data_content(data_groups)
+    data_groups = parse_data_content(data_groups, vaild_cmd)
 
     return data_groups
 

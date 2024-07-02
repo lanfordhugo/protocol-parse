@@ -7,6 +7,9 @@ file_opend = False
 
 
 class MyLogger:
+    """
+    构造参数为log后缀
+    """
     def __init__(self, log_file=None):
         if log_file != None:
             self.file_path = f"log_{log_file}.txt"

@@ -1,5 +1,48 @@
 from src import cmdformat
 
+# Define lists for different types of keys
+bcd_keys = ["桩编号", "账号或者物理卡号", "逻辑卡号", "物理卡号", "并充序号"]
+time_keys = ["交易日期", "开始时间", "结束时间"]
+ascii_keys = [
+    "电动汽车唯一标识",
+    "VIN",
+    "交易流水号",
+    "升级文件路径",
+    "升级文件名",
+    "日志上传文件路径",
+    "终端桩编码",
+]
+eight_binary_keys = [
+    "A接触器驱动反馈测试结果正",
+    "A接触器驱动反馈测试结果负",
+    "B接触器驱动反馈测试结果正",
+    "B接触器驱动反馈测试结果负",
+    "模块地址测试结果",
+    "A面接触器驱动位置测试结果",
+    "B面接触器驱动位置测试结果",
+    "A面控制信号",
+    "A面反馈信号+",
+    "A面反馈信号-",
+    "B面控制信号",
+    "B面反馈信号+",
+    "B面反馈信号-",
+]
+four_binary_keys = [
+    "枪故障状态",
+    "A模块通讯状态",
+    "B模块通讯状态",
+    "线缆测试结果",
+    "M2全自动工装结果",
+    '主机系统告警',
+]
+two_binary_keys = [
+    "终端系统状态",
+    "终端充电状态(发给主机)",
+    "工装使能",
+    "终端通讯状态",
+]
+binary_keys = ["模块状态码", "驱动板通讯状态", "枪状态",]
+
 
 def get_bit_val(byte, index):
     """
@@ -23,18 +66,53 @@ def set_bit_val(byte, index, val):
         return byte & ~(1 << index)
 
 
+# 按二进制打印，0x1122334455667788 打印为大端顺序
+def get_eight_binary_str(num):
+    binary_str = bin(num)[2:].zfill(64)  # 64位，即8字节
+    formatted_str = " : ".join(
+        [
+            binary_str[:8],
+            binary_str[8:16],
+            binary_str[16:24],
+            binary_str[24:32],
+            binary_str[32:40],
+            binary_str[40:48],
+            binary_str[48:56],
+            binary_str[56:],
+        ]
+    )
+    char_str = " ".join(
+        [f"0x{int(binary_str[i : i + 8], 2):02X}" for i in range(0, 32, 8)]
+    )
+    return f"{formatted_str} | {char_str}"
+
+
+# 按二进制打印，0x11223344 打印为大端顺序 10101011 : 01000001 : 00110000
+def get_four_binary_str(num):
+    binary_str = bin(num)[2:].zfill(32)  # 32位，即4字节
+    formatted_str = " : ".join(
+        [binary_str[:8], binary_str[8:16], binary_str[16:24], binary_str[24:]]
+    )
+    char_str = ":".join(
+        [f"0x{int(binary_str[i : i + 8], 2):02X}" for i in range(0, 32, 8)]
+    )
+    return f"{formatted_str} | {char_str}"
+
+
 # 按二进制打印 0x0301 打印为大端顺序 0 0 0 0 0 0 1 1 : 0 0 0 0 0 0 1 1
 def get_two_binary_str(num):
     binary_str = bin(num)[2:].zfill(16)  # 16位，即2字节
     formatted_str = " : ".join([binary_str[:8], binary_str[8:]])
-    char_str = ":".join([str(int(binary_str[i : i + 8], 2)) for i in range(0, 16, 8)])
-    return f"{formatted_str} : {char_str}"
+    char_str = ":".join(
+        [f"0x{int(binary_str[i : i + 8], 2):02X}" for i in range(0, 16, 8)]
+    )
+    return f"{formatted_str} | {char_str}"
 
 
 #  打印一个字节的二进制字符串
 def get_binary_str(num):
     binary_str = bin(num)[2:].zfill(8)  # 8位，即1字节
-    return f"{binary_str}:0x{num:02x}"
+    return f"{binary_str} | 0x{num:02x}"
 
 
 def data_byte_merge(data):

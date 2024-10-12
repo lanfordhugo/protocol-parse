@@ -308,13 +308,18 @@ def parser_common(message, format_):
         key_format_func_mapping = {
             "充电桩编码": get_ascii_data,
             "充电桩资产码": get_ascii_data,
+            "查询参数信息": get_ascii_data,
             "ICCID": get_ascii_data,
+            "IMEI": get_ascii_data,
+            "4G模块版本": get_ascii_data,
+            "注册运营商": get_ascii_data,
             "主机资产码": get_ascii_data,
             "卡号/用户id":get_ascii_data,
             "BRM-车辆识别码VIN": get_ascii_data,
             "AES秘钥": get_ascii_data,
             "设备名称": get_ascii_data,
             "FTP服务器IP地址或者域名": get_ascii_data,
+            "FTP下载路径": get_ascii_data,
             "FTP用户名": get_ascii_data,
             "FTP密码": get_ascii_data,
             "FTP存放日志路径": get_ascii_data,
@@ -365,8 +370,8 @@ def message_parser(cmd, message):
 
     if cmd == 3:
         parsed_dict = parser_3(message, cmdformat.get_format(PROTOCOL_TYPE, cmd))
-    elif cmd == 4:
-        parsed_dict = parser_4(message, cmdformat.get_format(PROTOCOL_TYPE, cmd))
+    # elif cmd == 4:
+    #     parsed_dict = parser_4(message, cmdformat.get_format(PROTOCOL_TYPE, cmd))
     elif cmd == 1:
         parsed_dict = parser_1(message, cmdformat.get_format(PROTOCOL_TYPE, cmd))
     # elif cmd == 2:

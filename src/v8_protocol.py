@@ -90,13 +90,21 @@ def parse_multi_bit_date(message, cmd):
     :return:解析后的字典
     """
     # 将字符报文转化为数字格式
-    data_list = cmdformat.strlist_to_hexlist(message)
-    data_start_index = cmdformat.get_head_len(PROTOCOL_TYPE)
-    data_list = data_list[data_start_index:-2]
-    parsed_dict = {}
+    try:
+        data_list = cmdformat.strlist_to_hexlist(message)
+        data_start_index = cmdformat.get_head_len(PROTOCOL_TYPE)
+        data_list = data_list[data_start_index:-2]
+        parsed_dict = {}
+    except Exception as err:
+        log.e_print("-------------数据提取错误{}-------------".format(err))
+        return {}
 
     # 获取格式解析所需格式信息
-    format_ = cmdformat.get_format(PROTOCOL_TYPE, cmd)
+    try:
+        format_ = cmdformat.get_format(PROTOCOL_TYPE, cmd)
+    except Exception as err:
+        log.e_print("-------------数据格式错误{}-------------".format(err))
+        return {}
     data_format = format_[0]
     key_format = format_[1]
 
@@ -193,7 +201,7 @@ def extract_data_from_file(file_path):
     return data_groups
 
 
-def parse_data_content(data_groups: List[Dict[str, str]], valid_cmds: List[int]):
+def parse_data_content(data_groups, valid_cmds: List[int]):
     """
     从结构化的数据中，提取出cmd码，报文序号，设备类型，设备地址，设备枪号等信息
     并且把数据字符串转化为列表。只处理valid_cmds中包含的cmd码。
@@ -204,12 +212,13 @@ def parse_data_content(data_groups: List[Dict[str, str]], valid_cmds: List[int])
         data_bytes = group["data"].strip().split()
 
         # 确保数据长度足够
-        if len(data_bytes) >= cmdformat.get_head_len(PROTOCOL_TYPE):
+        head_len = cmdformat.get_head_len(PROTOCOL_TYPE)
+        if head_len is not None and len(data_bytes) >= head_len:
             # 提取cmd码，第5,6字节，小端格式
             cmd = int(data_bytes[4], 16) + (int(data_bytes[5], 16) << 8)
 
             # 如果cmd不在valid_cmds列表中，跳过当前循环
-            if cmd not in valid_cmds:
+            if len(valid_cmds) > 0 and cmd not in valid_cmds:
                 continue
 
             group["cmd"] = cmd
@@ -244,7 +253,7 @@ def load_file_format(file_path):
     """
     vaild_cmd = cmdformat.load_filter()
     data_groups = extract_data_from_file(file_path)
-    data_groups = parse_data_content(data_groups, vaild_cmd)
+    data_groups = parse_data_content(data_groups, vaild_cmd)  # type: ignore
 
     return data_groups
 
@@ -263,17 +272,17 @@ def screen_parse_data(net_info_list):
         net_info_time = net_info["time"]
 
         # 调试使用
-        # can_read_data = message_parser(cmd, byte_data_str)
-        # net_info['data'] = can_read_data
+        can_read_data = message_parser(cmd, byte_data_str)
+        net_info['data'] = can_read_data
 
         # 尝试执行，失败了可能不好排查，调试使用上面的代码
-        try:
-            can_read_data = message_parser(cmd, byte_data_str)
-            net_info["data"] = can_read_data
-        except Exception as err:
-            can_read_data = None
-            log.e_print("-------------数据解析错误{}-------------".format(err))
-            net_info["data"] = "-------------数据解析错误{}-------------".format(err)
+        # try:
+        #     can_read_data = message_parser(cmd, byte_data_str)
+        #     net_info["data"] = can_read_data
+        # except Exception as err:
+        #     can_read_data = None
+        #     log.e_print("-------------数据解析错误{}-------------".format(err))
+        #     net_info["data"] = "-------------数据解析错误{}-------------".format(err)
 
         if can_read_data:
             print(

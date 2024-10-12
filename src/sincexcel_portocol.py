@@ -9,10 +9,10 @@ import re
 from src.console_log import ConsoleLog
 from src.field_parser import *
 from src.m_print import MyLogger
+from typing import Any, Dict, List
+
 
 # 日志模块配置，使用print print 等打印信息
-# LOG_FORMAT = "[%(levelname)s %(asctime)s] %(message)s [%(funcName)s() %(module)s:%(lineno)d] "
-# log.basicConfig(level=print, format=LOG_FORMAT, filename='log.txt')
 # # 使控制台输出同时保存到文件
 stand_stdout = sys.stdout
 custom_stdout = ConsoleLog(stream=sys.stdout)
@@ -378,6 +378,9 @@ def message_parser(cmd, message):
 
 
 def extract_data_from_file(file_path):
+    """
+    从数据行中匹配到数据，返回结构化数据，主要获取的是数据产生时间和数据内容本身
+    """
     # 正则表达式以匹配两种时间格式2024-03-26 18:54:05:200 或者 2024-03-28 19:27:38.079
     # ms 时间同时匹配 . 和 : 两种分隔符
     info_line_re = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:|\.]\d{2,3}")
@@ -418,7 +421,12 @@ def extract_data_from_file(file_path):
     return data_groups
 
 
-def parse_data_content(data_groups):
+def parse_data_content(data_groups:List[Dict[str, str]], valid_cmds: List[int]):
+    """
+    从结构化的数据中，提取出cmd码，报文序号，设备类型，设备地址，设备枪号等信息
+    并且把数据字符串转化为列表。只处理valid_cmds中包含的cmd码。
+    """
+    filtered_data_groups = []
     for group in data_groups:
         # 将数据字符串分割成列表，每个元素代表一字节的数据
         data_bytes = group["data"].strip().split()
@@ -427,9 +435,15 @@ def parse_data_content(data_groups):
         if len(data_bytes) >= cmdformat.get_head_len(PROTOCOL_TYPE):
             # 提取cmd码，第5,6字节，小端格式
             cmd = int(data_bytes[6], 16) + (int(data_bytes[7], 16) << 8)
+             # 如果cmd不在valid_cmds列表中，跳过当前循环，如果valid_cmds为空，则不跳过
+            if cmd not in valid_cmds:
+                continue
             group["cmd"] = cmd
+            
+             # 将处理过的group添加到filtered_data_groups列表中
+            filtered_data_groups.append(group)
 
-    return data_groups
+    return filtered_data_groups
 
 
 def load_file_format(file_path):
@@ -439,8 +453,9 @@ def load_file_format(file_path):
     :return:加载文件的列表
     """
 
+    vaild_cmd = cmdformat.load_filter()
     data_groups = extract_data_from_file(file_path)
-    data_groups = parse_data_content(data_groups)
+    data_groups = parse_data_content(data_groups, vaild_cmd)
 
     return data_groups
 

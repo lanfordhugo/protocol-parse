@@ -7,6 +7,7 @@ ascii_keys = [
     "电动汽车唯一标识",
     "VIN",
     "交易流水号",
+    '充电流水号',
     "升级文件路径",
     "升级文件名",
     "日志上传文件路径",
@@ -26,6 +27,9 @@ eight_binary_keys = [
     "B面控制信号",
     "B面反馈信号+",
     "B面反馈信号-",
+    "BST报文",
+    "BSD报文",
+    "BEM报文",
 ]
 four_binary_keys = [
     "枪故障状态",
@@ -68,6 +72,8 @@ def set_bit_val(byte, index, val):
 
 # 按二进制打印，0x1122334455667788 打印为大端顺序
 def get_eight_binary_str(num):
+    if num is None:
+        return "None"
     binary_str = bin(num)[2:].zfill(64)  # 64位，即8字节
     formatted_str = " : ".join(
         [
@@ -89,6 +95,8 @@ def get_eight_binary_str(num):
 
 # 按二进制打印，0x11223344 打印为大端顺序 10101011 : 01000001 : 00110000
 def get_four_binary_str(num):
+    if num is None:
+        return "None"
     binary_str = bin(num)[2:].zfill(32)  # 32位，即4字节
     formatted_str = " : ".join(
         [binary_str[:8], binary_str[8:16], binary_str[16:24], binary_str[24:]]
@@ -101,6 +109,8 @@ def get_four_binary_str(num):
 
 # 按二进制打印 0x0301 打印为大端顺序 0 0 0 0 0 0 1 1 : 0 0 0 0 0 0 1 1
 def get_two_binary_str(num):
+    if num is None:
+        return "None"
     binary_str = bin(num)[2:].zfill(16)  # 16位，即2字节
     formatted_str = " : ".join([binary_str[:8], binary_str[8:]])
     char_str = ":".join(
@@ -111,6 +121,8 @@ def get_two_binary_str(num):
 
 #  打印一个字节的二进制字符串
 def get_binary_str(num):
+    if num is None:
+        return "None"
     binary_str = bin(num)[2:].zfill(8)  # 8位，即1字节
     return f"{binary_str} | 0x{num:02x}"
 
@@ -132,6 +144,8 @@ def data_byte_merge(data):
 def get_ascii_data(data_list):
     # 可能需要反转列表，则用下面语句
     # gun_number.reverse()
+    if not data_list:
+        return ""
     code_str = ""
     for data in data_list:
         if not data:
@@ -143,7 +157,8 @@ def get_ascii_data(data_list):
 
 def get_bcd_data(data_list):
     # 可能需要反转列表，则用下面语句
-    # gun_number.reverse()
+    if not data_list:
+        return ""
     code_str = ""
     for data in data_list:
         data = str(hex(data)).replace("0x", "")

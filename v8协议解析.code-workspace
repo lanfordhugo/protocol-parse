@@ -12,7 +12,7 @@
 			"**/out": true
 		},
 		"editor.codeActionsOnSave": null,
-		"editor.fontSize": 16,
+		"editor.fontSize": 14,
 		"makefile.extensionOutputFolder": "./.vscode",
 		"files.autoGuessEncoding": true,
 		"files.associations": {

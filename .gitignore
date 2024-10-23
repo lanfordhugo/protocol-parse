@@ -1,4 +1,6 @@
 v8com.log
+client_tcu_net.log
 parsed_log/parsed_net_log_*
 *.pyc
 log_1.txt
+

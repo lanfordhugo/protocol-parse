@@ -1,4 +1,6 @@
 from src import cmdformat
+from typing import List, Dict, Any, Tuple
+
 
 # Define lists for different types of keys
 bcd_keys = ["桩编号", "账号或者物理卡号", "逻辑卡号", "物理卡号", "并充序号"]
@@ -7,11 +9,17 @@ ascii_keys = [
     "电动汽车唯一标识",
     "VIN",
     "交易流水号",
-    '充电流水号',
+    "充电流水号",
+    "订单号",
+    "订单编号",
     "升级文件路径",
     "升级文件名",
     "日志上传文件路径",
     "终端桩编码",
+    "充电桩编码",
+    "充电桩Mac地址或者IMEI码",
+    "事件参数",
+    "BRM-车辆识别码vin"
 ]
 eight_binary_keys = [
     "A接触器驱动反馈测试结果正",
@@ -37,23 +45,36 @@ four_binary_keys = [
     "B模块通讯状态",
     "线缆测试结果",
     "M2全自动工装结果",
-    '主机系统告警',
+    "主机系统告警",
+    "充电桩软件版本"
+    
+]
+three_binary_keys = [
+    "BRM-BMS通讯协议版本号",
 ]
 two_binary_keys = [
     "终端系统状态",
     "终端充电状态(发给主机)",
     "工装使能",
     "终端通讯状态",
+    "BST中止充电故障原因"
+    
 ]
-binary_keys = ["模块状态码", "驱动板通讯状态", "枪状态",]
+binary_keys = [
+    "模块状态码",
+    "驱动板通讯状态",
+    "枪状态",
+    "BST充电机中止原因",
+    "BST中止充电错误原因",
+]
 
 
 def get_bit_val(byte, index):
     """
-    获取索引bit是否是1
-    :param byte: 字节
-    :param index: 索引位置0-7
-    :return: 是否是1
+    获取字节中指定位的值
+    :param byte: 要检查的字节
+    :param index: 要检查的位索引（0-7）
+    :return: 如果指定位为1则返回1，否则返回0
     """
     if index > 7:
         return None
@@ -64,6 +85,13 @@ def get_bit_val(byte, index):
 
 
 def set_bit_val(byte, index, val):
+    """
+    设置字节中指定位的值
+    :param byte: 要修改的字节
+    :param index: 要设置的位索引
+    :param val: 要设置的值（True或False）
+    :return: 修改后的字节
+    """
     if val:
         return byte | (1 << index)
     else:
@@ -72,6 +100,11 @@ def set_bit_val(byte, index, val):
 
 # 按二进制打印，0x1122334455667788 打印为大端顺序
 def get_eight_binary_str(num):
+    """
+    将8字节整数转换为格式化的二进制字符串
+    :param num: 8字节整数
+    :return: 格式化的二进制字符串，包括二进制表示和十六进制表示
+    """
     if num is None:
         return "None"
     binary_str = bin(num)[2:].zfill(64)  # 64位，即8字节
@@ -95,6 +128,11 @@ def get_eight_binary_str(num):
 
 # 按二进制打印，0x11223344 打印为大端顺序 10101011 : 01000001 : 00110000
 def get_four_binary_str(num):
+    """
+    将4字节整数转换为格式化的二进制字符串
+    :param num: 4字节整数
+    :return: 格式化的二进制字符串，包括二进制表示和十六进制表示
+    """
     if num is None:
         return "None"
     binary_str = bin(num)[2:].zfill(32)  # 32位，即4字节
@@ -106,9 +144,30 @@ def get_four_binary_str(num):
     )
     return f"{formatted_str} | {char_str}"
 
+def get_three_binary_str(num):
+    """
+    将3字节整数转换为格式化的二进制字符串
+    :param num: 3字节整数
+    :return: 格式化的二进制字符串，包括二进制表示和十六进制表示
+    """
+    if num is None:
+        return "None"
+    binary_str = bin(num)[2:].zfill(24)  # 24位，即3字节
+    formatted_str = " : ".join(
+        [binary_str[:8], binary_str[8:16], binary_str[16:]]
+    )
+    char_str = ":".join(
+        [f"0x{int(binary_str[i : i + 8], 2):02X}" for i in range(0, 24, 8)]
+    )
+    return f"{formatted_str} | {char_str}"
 
 # 按二进制打印 0x0301 打印为大端顺序 0 0 0 0 0 0 1 1 : 0 0 0 0 0 0 1 1
 def get_two_binary_str(num):
+    """
+    将2字节整数转换为格式化的二进制字符串
+    :param num: 2字节整数
+    :return: 格式化的二进制字符串，包括二进制表示和十六进制表示
+    """
     if num is None:
         return "None"
     binary_str = bin(num)[2:].zfill(16)  # 16位，即2字节
@@ -121,6 +180,11 @@ def get_two_binary_str(num):
 
 #  打印一个字节的二进制字符串
 def get_binary_str(num):
+    """
+    将1字节整数转换为格式化的二进制字符串
+    :param num: 1字节整数
+    :return: 格式化的二进制字符串，包括二进制表示和十六进制表示
+    """
     if num is None:
         return "None"
     binary_str = bin(num)[2:].zfill(8)  # 8位，即1字节
@@ -129,9 +193,9 @@ def get_binary_str(num):
 
 def data_byte_merge(data):
     """
-    传入一个字段的数据列表，按小端格式合并数据，返回整数值
-    :param data: 一个字段的数据列表
-    :return: 整数实际值
+    将字节列表按小端格式合并为整数
+    :param data: 字节列表
+    :return: 合并后的整数值
     """
     if not data:
         return None
@@ -142,8 +206,11 @@ def data_byte_merge(data):
 
 
 def get_ascii_data(data_list):
-    # 可能需要反转列表，则用下面语句
-    # gun_number.reverse()
+    """
+    将字节列表转换为ASCII字符串
+    :param data_list: 字节列表
+    :return: ASCII字符串
+    """
     if not data_list:
         return ""
     code_str = ""
@@ -156,7 +223,11 @@ def get_ascii_data(data_list):
 
 
 def get_bcd_data(data_list):
-    # 可能需要反转列表，则用下面语句
+    """
+    将字节列表转换为BCD编码的字符串
+    :param data_list: 字节列表
+    :return: BCD编码的字符串
+    """
     if not data_list:
         return ""
     code_str = ""
@@ -170,9 +241,9 @@ def get_bcd_data(data_list):
 
 def get_date_time(bytes_list):
     """
-    格式化日期信息
-    :param bytes_list:
-    :return:
+    将字节列表转换为格式化的日期时间字符串
+    :param bytes_list: 包含日期时间信息的字节列表
+    :return: 格式化的日期时间字符串
     """
     datetime = ""
     date_format = ["", "", "-", "-", " ", ":", ":"]
@@ -188,11 +259,10 @@ def get_date_time(bytes_list):
 
 def get_time_from_cp56time2a(timebuff):
     """
-    获取cp56time2a时间
-    :param timebuff: 7字节cp65时间
-    :return: time_t
-    """ ""
-
+    从CP56Time2a格式的时间缓冲区获取时间
+    :param timebuff: 7字节CP56Time2a时间缓冲区
+    :return: 格式化的时间字符串
+    """
     tm_year = (timebuff[6] & 0x7F) + 2000
     tm_mon = (timebuff[5] & 0x0F) - 1
     tm_mday = timebuff[4] & 0x1F
@@ -211,9 +281,9 @@ def get_time_from_cp56time2a(timebuff):
 
 def get_alarm_list(bytes_list):
     """
-    从告警字段（32字节）中提取告警位信息
-    :param bytes_list: 32字节列表
-    :return: 告警列表
+    从告警字段中提取告警位信息
+    :param bytes_list: 32字节的告警字段列表
+    :return: 告警列表，包含激活的告警描述
     """
     alarm_bit_list = []
     for index, byte in enumerate(bytes_list):
@@ -230,9 +300,140 @@ def get_alarm_list(bytes_list):
 
 def get_stop_reason(stop_code):
     """
-    根据停止原因代码(整数)，返回停止原因名称
-    :param stop_code: 停止原因代码(整数)
+    根据停止原因代码获取停止原因名称
+    :param stop_code: 停止原因代码（整数）
     :return: 停止原因名称
     """
     alarm_dict, stop_dict = cmdformat.get_alarm_stop_dict()
-    return stop_dict[str(stop_code)]
+    return stop_dict.get(str(stop_code), "未知原因")
+
+
+def get_multi_bit_val(byte: int, start: int, bit_number: int) -> int:
+    """
+    获取多个bit位数据大小
+    """
+    return (byte >> start) & (0xFF >> (8 - bit_number))
+
+def parse_multi_bit_date(data_list: List[int], format_: List[Any]) -> Dict[str, Any]:
+    """
+    解析报文中的数据，支持按位划分和按字节划分的混合格式，也兼容普通报文
+
+    参数:
+    data_list: 有效的数据列表
+    format_: 数据格式和键名格式
+
+    返回:
+    Dict[str, Any]: 解析后的数据字典
+
+    功能:
+    1. 根据协议类型和命令码获取数据格式
+    2. 逐字段解析数据，支持按位和按字节两种方式
+    3. 处理异常情况并返回解析结果
+    """
+    try:
+        data_format, key_format = format_
+    except Exception as err:
+        print(f"-------------数据格式错误: {err}-------------")
+        return {}
+
+    parsed_dict = {}
+    bit_count = 0
+    cur_parse_index = 0
+    bit_data_format = []
+    bit_key_format = []
+
+    for index, data in enumerate(data_format):
+        if isinstance(data, str):
+            # 按位解析
+            bit_length = int(data[:1])
+            bit_count += bit_length
+            bit_data_format.append(bit_length)
+            bit_key_format.append(key_format[index])
+
+            if bit_count == 8 or (index == len(data_format) - 1 and 0 < bit_count < 8):
+                # 处理完整字节或最后一个不完整字节
+                one_byte_dict = parsed_one_byte_data(
+                    data_list[cur_parse_index], bit_data_format, bit_key_format
+                )
+                parsed_dict.update(one_byte_dict)
+                cur_parse_index += 1
+                bit_count = 0
+                bit_data_format.clear()
+                bit_key_format.clear()
+        else:
+            # 按字节解析
+            parse_byte_data(
+                data_list, cur_parse_index, data, key_format[index], parsed_dict
+            )
+            cur_parse_index += data
+
+    return parsed_dict
+
+def parsed_one_byte_data(byte: int, bit_data_format: List[int], bit_key_format: List[str]) -> Dict[str, int]:
+    """
+    针对一个字节的报文，按bit处理的报文
+    
+    参数:
+    byte: 待解析的字节数据
+    bit_data_format: 每个字段的位长度列表
+    bit_key_format: 每个字段的键名列表
+    
+    返回:
+    Dict[str, int]: 解析后的字典，键为字段名，值为对应的数据
+    
+    功能:
+    1. 遍历bit_data_format列表，逐个解析字节中的位字段
+    2. 使用get_multi_bit_val函数提取指定位的值
+    3. 将解析结果存入字典，键名来自bit_key_format
+    """
+    bit_parsed_dict = {}
+    cur_bit_index = 0
+    for index, one_field_len in enumerate(bit_data_format):
+        # 从当前位置开始，提取指定长度的位值
+        data_ = get_multi_bit_val(byte, cur_bit_index, one_field_len)
+        # 将提取的值存入字典，使用对应的键名
+        bit_parsed_dict[bit_key_format[index]] = data_
+        # 更新当前位索引
+        cur_bit_index += one_field_len
+    return bit_parsed_dict
+
+def parse_byte_data(data_list: List[int], start_index: int, length: int, key: str, parsed_dict: Dict[str, Any]):
+    """
+    解析按字节处理的报文
+    
+    参数:
+    data_list: 包含所有数据的列表
+    start_index: 当前字段在data_list中的起始索引
+    length: 当前字段的长度（字节数）
+    key: 当前字段的键名
+    parsed_dict: 用于存储解析结果的字典
+    
+    功能:
+    根据字段类型选择适当的解析方法，并将解析结果存入parsed_dict
+    """
+    # 提取当前字段的数据
+    data = data_list[start_index : start_index + length]
+    
+    # 移除键名中的数字，以便于匹配预定义的键类型
+    format_key = key.strip("1234567890")
+    
+    # 根据字段类型选择相应的解析方法
+    if format_key in bcd_keys:
+        parsed_dict[key] = get_bcd_data(data)  # BCD编码数据解析
+    elif format_key in time_keys:
+        parsed_dict[key] = get_time_from_cp56time2a(data)  # 时间数据解析（CP56Time2a格式）
+    elif format_key in ascii_keys:
+        parsed_dict[key] = get_ascii_data(data)  # ASCII编码数据解析
+    elif format_key in eight_binary_keys:
+        parsed_dict[key] = get_eight_binary_str(data_byte_merge(data))  # 8位二进制字符串解析
+    elif format_key in four_binary_keys:
+        parsed_dict[key] = get_four_binary_str(data_byte_merge(data))  # 4位二进制字符串解析
+    elif format_key in three_binary_keys:
+        parsed_dict[key] = get_three_binary_str(data_byte_merge(data))  # 3位二进制字符串解析
+    elif format_key in two_binary_keys:
+        parsed_dict[key] = get_two_binary_str(data_byte_merge(data))  # 2位二进制字符串解析
+    elif format_key in binary_keys:
+        parsed_dict[key] = get_binary_str(data_byte_merge(data))  # 普通二进制字符串解析
+    else:
+        # 对于未定义的类型，直接合并字节数据
+        parsed_dict[key] = data_byte_merge(data)

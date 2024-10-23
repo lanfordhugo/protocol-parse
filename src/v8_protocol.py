@@ -10,14 +10,13 @@ from src.console_log import ConsoleLog
 from src.field_parser import *
 from src.m_print import MyLogger
 from typing import Any, Dict, List
+from src.logger_instance import log
 
-
-log = MyLogger(1)
 
 # 日志模块配置，使用print print 等打印信息
 # LOG_FORMAT = "[%(levelname)s %(asctime)s] %(message)s [%(funcName)s() %(module)s:%(lineno)d] "
 # log.basicConfig(level=print, format=LOG_FORMAT, filename='log.txt')
-# # 使控制台输出同时保存到文件
+# 使控制台输出同时保存到文件
 stand_stdout = sys.stdout
 custom_stdout = ConsoleLog(stream=sys.stdout)
 
@@ -36,12 +35,6 @@ def str_seq_to_hexlist(message):
         message_list_hex.append(eval("0x" + i))
     return message_list_hex
 
-
-def get_multi_bit_val(byte, start, bit_number):
-    """
-    获取多个bit位数据大小
-    """
-    return (byte >> start) & (0xFF >> (8 - bit_number))
 
 
 # 针对一个字节的报文，按bit处理的报文
@@ -121,7 +114,7 @@ def parse_multi_bit_date(message, cmd):
             bit_key_format.append(key_format[index])
             if bit_count == 8:
                 bit_count = 0
-                one_byte_dict = parsed_one_byte_data(
+                one_byte_dict = parsed_one_byte_data(-+
                     data_list[cur_parse_index], bit_data_format, bit_key_format
                 )
                 parsed_dict.update(one_byte_dict)
@@ -217,8 +210,8 @@ def parse_data_content(data_groups, valid_cmds: List[int]):
             # 提取cmd码，第5,6字节，小端格式
             cmd = int(data_bytes[4], 16) + (int(data_bytes[5], 16) << 8)
 
-            # 如果cmd不在valid_cmds列表中，跳过当前循环
-            if len(valid_cmds) > 0 and cmd not in valid_cmds:
+            # 如果valid_cmds为空，处理所有cmd；否则只处理valid_cmds中的cmd
+            if valid_cmds and cmd not in valid_cmds:
                 continue
 
             group["cmd"] = cmd
@@ -251,9 +244,12 @@ def load_file_format(file_path):
     :param file_path:日志文件的路径
     :return:加载文件的列表
     """
-    vaild_cmd = cmdformat.load_filter()
+    valid_cmd = cmdformat.load_filter()
     data_groups = extract_data_from_file(file_path)
-    data_groups = parse_data_content(data_groups, vaild_cmd)  # type: ignore
+    if valid_cmd is not None:
+        data_groups = parse_data_content(data_groups, valid_cmd)
+    else:
+        data_groups = parse_data_content(data_groups, [])
 
     return data_groups
 
@@ -305,7 +301,7 @@ def screen_parse_data(net_info_list):
 
 def main():
     # 加载网络日志文件
-    net_file_path = "v8com.log"
+    net_file_path = "v8_com.log"
     g_net_info_list = load_file_format(net_file_path)
 
     # 筛选解析报文并打印

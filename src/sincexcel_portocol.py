@@ -441,8 +441,9 @@ def parse_data_content(data_groups:List[Dict[str, str]], valid_cmds: List[int]):
             # 提取cmd码，第5,6字节，小端格式
             cmd = int(data_bytes[6], 16) + (int(data_bytes[7], 16) << 8)
              # 如果cmd不在valid_cmds列表中，跳过当前循环，如果valid_cmds为空，则不跳过
-            if cmd not in valid_cmds:
+            if valid_cmds and cmd not in valid_cmds:
                 continue
+            
             group["cmd"] = cmd
             
              # 将处理过的group添加到filtered_data_groups列表中
@@ -458,12 +459,14 @@ def load_file_format(file_path):
     :return:加载文件的列表
     """
 
-    vaild_cmd = cmdformat.load_filter()
+    valid_cmd = cmdformat.load_filter()
     data_groups = extract_data_from_file(file_path)
-    data_groups = parse_data_content(data_groups, vaild_cmd)
+    if valid_cmd is not None:
+        data_groups = parse_data_content(data_groups, valid_cmd)
+    else:
+        data_groups = parse_data_content(data_groups, [])
 
     return data_groups
-
 
 def screen_parse_data(net_info_list):
     """

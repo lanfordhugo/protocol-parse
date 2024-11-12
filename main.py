@@ -2,7 +2,7 @@
 
 from enum import Enum
 from typing import Type
-from src.v8_protocol2 import V8Protocol
+from src.v8_protocol import V8Protocol
 from src.xiaoju_protocol import XiaojuProtocol
 from src.base_protocol import BaseProtocol, ProtocolConfig
 
@@ -107,8 +107,8 @@ def run_protocol(protocol_type: ProtocolType):
 
 if __name__ == "__main__":
     # 可以从配置文件或命令行参数中读取PROTOCOL_TYPE
-    PROTOCOL_TYPE = ProtocolType.XIAOJU
-    # PROTOCOL_TYPE = ProtocolType.V8
+    # PROTOCOL_TYPE = ProtocolType.XIAOJU
+    PROTOCOL_TYPE = ProtocolType.V8
     run_protocol(PROTOCOL_TYPE)
     
     

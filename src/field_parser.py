@@ -19,7 +19,7 @@ ascii_keys = [
     "充电桩编码",
     "充电桩Mac地址或者IMEI码",
     "事件参数",
-    "BRM-车辆识别码vin"
+    "BRM-车辆识别码vin",
 ]
 eight_binary_keys = [
     "A接触器驱动反馈测试结果正",
@@ -36,7 +36,6 @@ eight_binary_keys = [
     "B面反馈信号+",
     "B面反馈信号-",
     "BST报文",
-    "BSD报文",
     "BEM报文",
 ]
 four_binary_keys = [
@@ -46,8 +45,7 @@ four_binary_keys = [
     "线缆测试结果",
     "M2全自动工装结果",
     "主机系统告警",
-    "充电桩软件版本"
-    
+    "充电桩软件版本",
 ]
 three_binary_keys = [
     "BRM-BMS通讯协议版本号",
@@ -57,7 +55,9 @@ two_binary_keys = [
     "终端充电状态(发给主机)",
     "工装使能",
     "终端通讯状态",
-    "BST中止充电故障原因"
+    "BST中止充电故障原因",
+    "BCS-最高单体电压及其组号",
+    
     
 ]
 binary_keys = [
@@ -66,6 +66,7 @@ binary_keys = [
     "枪状态",
     "BST充电机中止原因",
     "BST中止充电错误原因",
+    "主枪地址"  
 ]
 
 
@@ -144,6 +145,7 @@ def get_four_binary_str(num):
     )
     return f"{formatted_str} | {char_str}"
 
+
 def get_three_binary_str(num):
     """
     将3字节整数转换为格式化的二进制字符串
@@ -153,13 +155,12 @@ def get_three_binary_str(num):
     if num is None:
         return "None"
     binary_str = bin(num)[2:].zfill(24)  # 24位，即3字节
-    formatted_str = " : ".join(
-        [binary_str[:8], binary_str[8:16], binary_str[16:]]
-    )
+    formatted_str = " : ".join([binary_str[:8], binary_str[8:16], binary_str[16:]])
     char_str = ":".join(
         [f"0x{int(binary_str[i : i + 8], 2):02X}" for i in range(0, 24, 8)]
     )
     return f"{formatted_str} | {char_str}"
+
 
 # 按二进制打印 0x0301 打印为大端顺序 0 0 0 0 0 0 1 1 : 0 0 0 0 0 0 1 1
 def get_two_binary_str(num):
@@ -193,9 +194,9 @@ def get_binary_str(num):
 
 def data_byte_merge(data):
     """
-    将字节列表按小端格式合并为整数
+    将字节列表按小端格式合并为有符号整数
     :param data: 字节列表
-    :return: 合并后的整数值
+    :return: 合并后的有符号整数值
     """
     if not data:
         return None
@@ -314,6 +315,7 @@ def get_multi_bit_val(byte: int, start: int, bit_number: int) -> int:
     """
     return (byte >> start) & (0xFF >> (8 - bit_number))
 
+
 def parse_multi_bit_date(data_list: List[int], format_: List[Any]) -> Dict[str, Any]:
     """
     解析报文中的数据，支持按位划分和按字节划分的混合格式，也兼容普通报文
@@ -345,42 +347,57 @@ def parse_multi_bit_date(data_list: List[int], format_: List[Any]) -> Dict[str, 
     for index, data in enumerate(data_format):
         if isinstance(data, str):
             # 按位解析
+            # 获取当前字段的位长度
             bit_length = int(data[:1])
+            # 累加当前字段的位长度到总位长度
             bit_count += bit_length
+            # 将当前字段的位长度添加到位长度列表中
             bit_data_format.append(bit_length)
+            # 将当前字段的键名添加到键名列表中
             bit_key_format.append(key_format[index])
 
+            # 检查是否已处理完一个完整字节或是最后一个不完整字节
             if bit_count == 8 or (index == len(data_format) - 1 and 0 < bit_count < 8):
                 # 处理完整字节或最后一个不完整字节
+                # 调用parsed_one_byte_data函数解析一个字节的数据
                 one_byte_dict = parsed_one_byte_data(
                     data_list[cur_parse_index], bit_data_format, bit_key_format
                 )
                 parsed_dict.update(one_byte_dict)
+                # 更新当前解析的索引，指向下一个字节
                 cur_parse_index += 1
+                # 重置位计数器
                 bit_count = 0
+                # 清空位长度列表
                 bit_data_format.clear()
+                # 清空键名列表
                 bit_key_format.clear()
         else:
             # 按字节解析
+            # 调用parse_byte_data函数解析按字节处理的数据
             parse_byte_data(
                 data_list, cur_parse_index, data, key_format[index], parsed_dict
             )
+            # 更新当前解析的索引，指向下一个字段
             cur_parse_index += data
 
     return parsed_dict
 
-def parsed_one_byte_data(byte: int, bit_data_format: List[int], bit_key_format: List[str]) -> Dict[str, int]:
+
+def parsed_one_byte_data(
+    byte: int, bit_data_format: List[int], bit_key_format: List[str]
+) -> Dict[str, int]:
     """
     针对一个字节的报文，按bit处理的报文
-    
+
     参数:
     byte: 待解析的字节数据
     bit_data_format: 每个字段的位长度列表
     bit_key_format: 每个字段的键名列表
-    
+
     返回:
     Dict[str, int]: 解析后的字典，键为字段名，值为对应的数据
-    
+
     功能:
     1. 遍历bit_data_format列表，逐个解析字节中的位字段
     2. 使用get_multi_bit_val函数提取指定位的值
@@ -397,41 +414,58 @@ def parsed_one_byte_data(byte: int, bit_data_format: List[int], bit_key_format: 
         cur_bit_index += one_field_len
     return bit_parsed_dict
 
-def parse_byte_data(data_list: List[int], start_index: int, length: int, key: str, parsed_dict: Dict[str, Any]):
+
+def parse_byte_data(
+    data_list: List[int],
+    start_index: int,
+    length: int,
+    key: str,
+    parsed_dict: Dict[str, Any],
+):
     """
     解析按字节处理的报文
-    
+
     参数:
     data_list: 包含所有数据的列表
     start_index: 当前字段在data_list中的起始索引
     length: 当前字段的长度（字节数）
     key: 当前字段的键名
     parsed_dict: 用于存储解析结果的字典
-    
+
     功能:
     根据字段类型选择适当的解析方法，并将解析结果存入parsed_dict
     """
     # 提取当前字段的数据
     data = data_list[start_index : start_index + length]
-    
+
     # 移除键名中的数字，以便于匹配预定义的键类型
     format_key = key.strip("1234567890")
-    
+
     # 根据字段类型选择相应的解析方法
     if format_key in bcd_keys:
         parsed_dict[key] = get_bcd_data(data)  # BCD编码数据解析
     elif format_key in time_keys:
-        parsed_dict[key] = get_time_from_cp56time2a(data)  # 时间数据解析（CP56Time2a格式）
+        parsed_dict[key] = get_time_from_cp56time2a(
+            data
+        )  # 时间数据解析（CP56Time2a格式）
     elif format_key in ascii_keys:
         parsed_dict[key] = get_ascii_data(data)  # ASCII编码数据解析
     elif format_key in eight_binary_keys:
-        parsed_dict[key] = get_eight_binary_str(data_byte_merge(data))  # 8位二进制字符串解析
+        parsed_dict[key] = get_eight_binary_str(
+            data_byte_merge(data)
+        )  # 8位二进制字符串解析
     elif format_key in four_binary_keys:
-        parsed_dict[key] = get_four_binary_str(data_byte_merge(data))  # 4位二进制字符串解析
+        parsed_dict[key] = get_four_binary_str(
+            data_byte_merge(data)
+        )  # 4位二进制字符串解析
     elif format_key in three_binary_keys:
-        parsed_dict[key] = get_three_binary_str(data_byte_merge(data))  # 3位二进制字符串解析
+        parsed_dict[key] = get_three_binary_str(
+            data_byte_merge(data)
+        )  # 3位二进制字符串解析
     elif format_key in two_binary_keys:
-        parsed_dict[key] = get_two_binary_str(data_byte_merge(data))  # 2位二进制字符串解析
+        parsed_dict[key] = get_two_binary_str(
+            data_byte_merge(data)
+        )  # 2位二进制字符串解析
     elif format_key in binary_keys:
         parsed_dict[key] = get_binary_str(data_byte_merge(data))  # 普通二进制字符串解析
     else:

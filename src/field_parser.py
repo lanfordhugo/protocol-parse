@@ -20,6 +20,7 @@ ascii_keys = [
     "充电桩Mac地址或者IMEI码",
     "事件参数",
     "BRM-车辆识别码vin",
+    "字符串参数值",
 ]
 eight_binary_keys = [
     "A接触器驱动反馈测试结果正",
@@ -66,7 +67,8 @@ binary_keys = [
     "枪状态",
     "BST充电机中止原因",
     "BST中止充电错误原因",
-    "主枪地址"  
+    "主枪地址"  ,
+    "副枪1地址"
 ]
 
 
@@ -333,7 +335,7 @@ def parse_multi_bit_date(data_list: List[int], format_: List[Any]) -> Dict[str, 
     3. 处理异常情况并返回解析结果
     """
     try:
-        data_format, key_format = format_
+        data_format, key_format, loop_info = format_
     except Exception as err:
         print(f"-------------数据格式错误: {err}-------------")
         return {}
@@ -396,7 +398,7 @@ def parsed_one_byte_data(
     bit_key_format: 每个字段的键名列表
 
     返回:
-    Dict[str, int]: 解析后的字典，键为字段名，值为对应的数据
+    Dict[str, int]: 解析后的字典，��为字段名，值为对应的数据
 
     功能:
     1. 遍历bit_data_format列表，逐个解析字节中的位字段
@@ -471,3 +473,48 @@ def parse_byte_data(
     else:
         # 对于未定义的类型，直接合并字节数据
         parsed_dict[key] = data_byte_merge(data)
+
+
+class LoopFieldParser:
+    """变长循环字段解析器"""
+    
+    def __init__(self, data_list: List[int], start_pos: int):
+        """
+        初始化解析器
+        :param data_list: 完整的数据字节列表
+        :param start_pos: 循环字段的起始位置
+        """
+        self.data_list = data_list
+        self.current_pos = start_pos
+        
+    def parse_loop_fields(self, count: int, field_formats: List[Dict[str, Any]]) -> tuple[Dict[str, Any], int]:
+        """
+        解析循环字段组
+        :param count: 循环次数
+        :param field_formats: 字段格式列表 [{"length": int, "name": str}, ...]
+        :return: (解析结果字典, 结束位置)
+        """
+        result = {}
+        for i in range(count):
+            field_group = {}
+            for field in field_formats:
+                length = field["length"]
+                name = field["name"]
+                value = self._parse_field(length)
+                field_group[name] = value
+            result[f"组{i+1}"] = field_group
+        
+        return result, self.current_pos
+    
+    def _parse_field(self, length: int) -> int:
+        """
+        解析单个字段
+        :param length: 字段长度
+        :return: 解析后的值
+        """
+        value = 0
+        for i in range(length):
+            if self.current_pos + i < len(self.data_list):
+                value = (value << 8) | self.data_list[self.current_pos + i]
+        self.current_pos += length
+        return value

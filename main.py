@@ -8,7 +8,7 @@ from src.base_protocol import BaseProtocol, ProtocolConfig
 
 
 class ProtocolType(Enum):
-    """·
+    """
     协议类型枚举
     # 协议类型枚举包含以下参数：
     # protocol_name: str - 协议名称

@@ -1,93 +1,207 @@
-# v8_parse
+# V8Parse - 多协议通信报文解析工具
 
+## 项目简介
 
+V8Parse是一个专业的多协议通信报文解析工具，主要用于解析和分析各种通信协议的日志数据。该工具采用模块化设计，支持多种协议格式，能够高效地从原始日志文件中提取、解析和格式化通信数据。
 
-## Getting started
+## 核心特性
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+- **多协议支持**: 支持V8、小桔、运维、Sinexcel等多种通信协议
+- **灵活的报文格式**: 支持固定长度、循环字段、变长字段等多种报文格式
+- **智能数据解析**: 自动识别和解析BCD码、ASCII码、二进制等多种数据格式
+- **时间筛选**: 支持按时间范围筛选日志数据
+- **命令过滤**: 支持按命令码过滤特定类型的报文
+- **结构化输出**: 解析结果以结构化格式输出，便于分析
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## 支持的协议类型
 
-## Add your files
+| 协议名称 | 协议头标识 | 头长度 | 尾长度 | 格式文件 |
+|---------|-----------|--------|--------|----------|
+| V8 | AA F5 | 11字节 | 2字节 | format_mcu_ccu.txt |
+| 小桔(XIAOJU) | 7D D0 | 14字节 | 1字节 | format_xiaoju.txt |
+| 运维(YUNWEI) | CC D7 | 8字节 | 1字节 | format_yunwei.txt |
+| Sinexcel | DD E8 | 8字节 | 1字节 | format_sinexcel.txt |
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+## 项目结构
 
+```text
+v8parse/
+├── main.py                 # 主程序入口，统一的协议解析框架
+├── v8_run.py              # V8协议专用运行脚本
+├── sinexcel_run.py        # Sinexcel协议专用运行脚本
+├── yunwei_run.py          # 运维协议专用运行脚本
+├── src/                   # 核心源码目录
+│   ├── base_protocol.py   # 基础协议抽象类
+│   ├── v8_protocol.py     # V8协议实现
+│   ├── xiaoju_protocol.py # 小桔协议实现
+│   ├── sincexcel_portocol.py # Sinexcel协议实现
+│   ├── yunwei_portocol.py # 运维协议实现
+│   ├── field_parser.py    # 字段解析器
+│   ├── cmdformat.py       # 命令格式解析
+│   ├── console_log.py     # 控制台日志输出
+│   ├── logger_instance.py # 日志实例
+│   └── m_print.py         # 打印工具
+├── resources/             # 资源文件目录
+│   ├── format_mcu_ccu.txt # V8协议格式定义
+│   ├── format_xiaoju.txt  # 小桔协议格式定义
+│   ├── format_yunwei.txt  # 运维协议格式定义
+│   ├── format_sinexcel.txt # Sinexcel协议格式定义
+│   ├── filter.txt         # 命令过滤配置
+│   └── alarm.conf         # 告警配置
+├── parsed_log/            # 解析结果输出目录
+├── log/                   # 日志文件目录
+└── 使用说明.txt           # 详细使用说明
 ```
-cd existing_repo
-git remote add origin http://172.16.5.21:8088/mlf/v8_parse.git
-git branch -M main
-git push -uf origin main
+
+## 快速开始
+
+### 1. 环境要求
+
+- Python 3.7+
+- 无需额外依赖包
+
+### 2. 基本使用方法
+
+#### 方法一：使用统一框架（推荐）
+
+```python
+# 修改main.py中的协议类型
+PROTOCOL_TYPE = ProtocolType.V8  # 可选: V8, XIAOJU, YUNWEI, SINCEXCEL
+
+# 运行解析
+python main.py
 ```
 
-## Integrate with your tools
+#### 方法二：使用专用脚本
 
-- [ ] [Set up project integrations](http://172.16.5.21:8088/mlf/v8_parse/-/settings/integrations)
+```bash
+# V8协议解析
+python v8_run.py
 
-## Collaborate with your team
+# Sinexcel协议解析
+python sinexcel_run.py
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+# 运维协议解析
+python yunwei_run.py
+```
 
-## Test and Deploy
+### 3. 日志文件准备
 
-Use the built-in continuous integration in GitLab.
+1. 将需要解析的日志文件复制到项目根目录
+2. 根据协议类型重命名文件：
+   - V8协议: `v8_com.log`
+   - 小桔协议: `xiaoju.log`
+   - 运维协议: `yunwei.log`
+   - Sinexcel协议: `sincexcel.csv`
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+### 4. 数据筛选配置
 
-***
+在日志文件前三行添加筛选条件（可选）：
 
-# Editing this README
+```text
+start:2021-06-04 18:13:23
+end:2021-06-04 19:13:25
+cmd:[104,106]
+```
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+- `start`: 开始时间
+- `end`: 结束时间
+- `cmd`: 需要解析的命令码列表
 
-## Suggestions for a good README
+## 报文格式定义
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+项目支持四种报文格式定义方式：
 
-## Name
-Choose a self-explaining name for your project.
+### 1. 固定长度格式
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+```text
+4           命令序号
+1           结果
+```
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### 2. 单字段循环格式
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+```text
+4:4n        参数值      # 4字节参数重复4次
+```
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+### 3. 多字段循环格式
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+```text
+startfor:2
+1           状态
+2           电压
+endfor
+```
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+### 4. 变长字段循环格式
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+```text
+1           时段数量
+startloop:时段数量
+2           开始时间
+2           结束时间
+endloop
+```
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+## 字段解析类型
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+系统支持多种字段解析类型：
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+- **BCD码字段**: 桩编号、账号、物理卡号等
+- **ASCII字段**: VIN码、交易流水号、订单号等
+- **二进制字段**: 状态位、控制信号等
+- **时间字段**: CP时间格式
+- **数值字段**: 电压、电流、功率等
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+## 输出结果
 
-## License
-For open source projects, say how it is licensed.
+解析结果保存在 `parsed_log/` 目录下，文件名格式为：
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+```text
+parsed_net_log_YYYY-MM-DD HH-MM-SS.txt
+```
+
+输出内容包括：
+
+- 时间戳
+- 命令码
+- 设备地址和枪号
+- 解析后的结构化数据
+
+## 扩展开发
+
+### 添加新协议
+
+1. 在 `ProtocolType` 枚举中添加新协议定义
+2. 创建新的协议类继承 `BaseProtocol`
+3. 实现 `parse_data_content()` 和 `run()` 方法
+4. 在 `get_protocol_class()` 中添加映射关系
+5. 创建对应的格式定义文件
+
+### 自定义字段解析
+
+在 `field_parser.py` 中添加新的解析规则：
+
+```python
+# 添加到对应的字段类型列表
+custom_keys = ["自定义字段名"]
+
+# 实现解析函数
+def parse_custom_field(data_list, start_index, length):
+    # 自定义解析逻辑
+    return parsed_value, next_index
+```
+
+## 更新日志
+
+- **v1.5**: 重构为统一的多协议框架，支持配置化协议管理
+- **v1.0**: 初始版本，支持V8协议解析
+
+## 技术支持
+
+如有问题或建议，请查看项目中的 `使用说明.txt` 文件或联系开发团队。
+
+---
+
+**最后更新时间: 2025-08-30**

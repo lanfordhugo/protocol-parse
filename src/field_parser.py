@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Tuple
 
 # Define lists for different types of keys
 bcd_keys = ["桩编号", "账号或者物理卡号", "逻辑卡号", "物理卡号", "并充序号"]
-time_keys = ["交易日期", "开始时间", "结束时间"]
+cp_time_keys = []
 ascii_keys = [
     "电动汽车唯一标识",
     "VIN",
@@ -21,6 +21,8 @@ ascii_keys = [
     "事件参数",
     "BRM-车辆识别码vin",
     "字符串参数值",
+    "M2软件编译时间",
+    "停止充电密码",
 ]
 eight_binary_keys = [
     "A接触器驱动反馈测试结果正",
@@ -68,7 +70,11 @@ binary_keys = [
     "BST充电机中止原因",
     "BST中止充电错误原因",
     "主枪地址"  ,
-    "副枪1地址"
+    "副枪1地址",
+    "并充组网1地址",
+    "并充组网2地址",
+    "并充组网3地址",
+    "并充组网4地址",
 ]
 
 
@@ -446,7 +452,7 @@ def parse_byte_data(
     # 根据字段类型选择相应的解析方法
     if format_key in bcd_keys:
         parsed_dict[key] = get_bcd_data(data)  # BCD编码数据解析
-    elif format_key in time_keys:
+    elif format_key in cp_time_keys:
         parsed_dict[key] = get_time_from_cp56time2a(
             data
         )  # 时间数据解析（CP56Time2a格式）

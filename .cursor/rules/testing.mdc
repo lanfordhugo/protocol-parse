@@ -1,19 +1,19 @@
 ---
-description: AI 测试工作极简规则 (AI自验证回归测试)
+description: AI Python测试工作极简规则 (AI自验证回归测试)
 globs:
 alwaysApply: true
 ---
 
-# AI 测试工作极简规则 (AI自验证回归测试)
+# AI Python测试工作极简规则 (AI自验证回归测试)
 
-指导 AI 在 **V8MCU C++ 项目** 中执行**AI自验证测试**任务：AI完成模块开发后，继续编写测试验证功能满足需求。
+指导 AI 在 **Python 项目** 中执行**AI自验证测试**任务：AI完成模块开发后，继续编写测试验证功能满足需求。
 
 **使用场景：** AI回归测试 - AI编写测试验证AI编写的代码功能正确性，基于issue或PRD文档进行验证。
 
 **参考文档：**
-* **`test_style_guide.md`**: 编码规范、命名约定、注释、断言用法
-* **[`fakeit_doc.md`](mdc:test/fakeit/fakeit_doc.md)**: FakeIt 框架基础语法
-* **[`ComprehensiveMockGuide.md`](mdc:.cursor/unit_test/ComprehensiveMockGuide.md)**: FakeIt 高级用法和调试技巧
+* **`python_coding_style.md`**: Python编码规范、命名约定、注释、类型提示
+* **pytest官方文档**: pytest框架基础语法和最佳实践
+* **unittest.mock文档**: Python标准库Mock使用指南
 
 ## 1. 🚫 核心约束与禁止项
 
@@ -25,16 +25,18 @@ alwaysApply: true
 * **严禁为了快速通过而创建空测试或无意义的断言**
 * **严禁跳过需求分析直接创建简单测试**
 * **严禁寻求绕过问题的简单方案而非分析根本原因**
+* **严禁忽略类型提示和文档字符串要求**
 
 **强制要求：**
 * **必须先深入分析相关issue或PRD文档**
 * **必须确保测试真正验证业务价值**
 * **必须使用工具进行深度调研分析项目结构**
 * **必须分析问题根本原因而非表面修复**
+* **必须遵循pytest最佳实践和Python编码规范**
 
 ## 2. AI自验证测试理念与诊断流程
 
-**目标：** AI通过编写充分的测试验证自己开发的模块功能正确性，确保满足需求规格。
+**目标：** AI通过编写充分的pytest测试验证自己开发的Python模块功能正确性，确保满足需求规格。
 
 **核心方法论：需求驱动验证**
 1. 已完成模块 → 分析issue/PRD需求 → 深度分析模块接口和实现
@@ -45,130 +47,150 @@ alwaysApply: true
 
 ### 2.1 需求理解诊断 - **最高优先级**
 * 深入分析issue或PRD文档中的功能要求、预期行为、输入输出规格
-* 分析已实现模块的公共接口、架构作用、关键功能路径
+* 分析已实现模块的公共接口、类型提示、文档字符串、关键功能路径
 * 识别所有需要验证的功能点和边界条件
 
 ### 2.2 基础设施诊断
-* **编译环境：** 检查`Makefile`配置、编译选项、依赖路径
-* **项目结构：** 使用`codebase_search`、`grep_search`、`file_search`分析架构
-* **依赖关系：** 分析头文件、接口定义、Mock/Stub使用模式
+* **Python环境：** 检查`pyproject.toml`、`requirements.txt`、虚拟环境配置
+* **项目结构：** 使用`codebase_search`分析包结构、模块依赖、测试组织
+* **依赖关系：** 分析导入关系、接口定义、Mock/Fixture使用模式
 
 ### 2.3 技术实现诊断
-* 只有在前两步充分分析后，才考虑具体的测试实现
+* 只有在前两步充分分析后，才考虑具体的pytest测试实现
 
 **充分性验证要求：**
-* **功能完整性：** 每个需求点都有对应测试
-* **边界条件：** 输入边界、资源限制、极端情况
-* **异常处理：** 错误场景下的行为验证
-* **数据一致性：** 状态变化和数据处理正确性
+* **功能完整性：** 每个需求点都有对应测试用例
+* **边界条件：** 输入边界、类型边界、资源限制、极端情况
+* **异常处理：** 异常场景下的行为验证和错误消息检查
+* **数据一致性：** 状态变化和数据处理正确性验证
 
 ## 3. 测试实现规范
 
 **框架与工具：**
-* **测试框架：** 必须使用 Unity
-* **日志：** 必须使用 EasyLog
-* **Mocking：** 主要使用 FakeIt，参考 [`fakeit_doc.md`](mdc:test/fakeit/fakeit_doc.md) 和 [`ComprehensiveMockGuide.md`](mdc:.cursor/unit_test/ComprehensiveMockGuide.md)
+* **测试框架：** 必须使用 pytest
+* **日志：** 使用Python标准库 `logging` 模块
+* **Mocking：** 使用 `unittest.mock` 和 `pytest-mock` 进行Mock和Stub
+* **覆盖率：** 使用 `pytest-cov` 进行覆盖率检查
 
-**UNIT_TEST_MODE_LOG 宏：**
-* **作用：** 简化日志处理、避免链接完整日志库、加速编译
-* **启用：** 在测试 `Makefile` 中添加 `CFLAGS += -DUNIT_TEST_MODE_LOG` 和 `CXXFLAGS += -DUNIT_TEST_MODE_LOG`
-* **机制：** 重定向标准日志宏（`MsgError`、`MsgInfo`、`MsgDebug`）到轻量级实现，`MsgData` 转为空操作
-* **优点：** 测试代码直接使用项目日志接口，剥离复杂 `splog` 库依赖，编译更快
+**pytest配置要求：**
+* **配置文件：** 在 `pyproject.toml` 或 `pytest.ini` 中配置pytest选项
+* **测试发现：** 测试文件以 `test_` 开头，测试函数以 `test_` 开头
+* **标记系统：** 使用 `@pytest.mark` 对测试进行分类（unit、integration、slow等）
+* **插件使用：** 合理使用pytest插件提升测试效率
 
 **测试代码结构：**
-* **组织思想：** GWT (Given-When-Then) + AAA (Arrange-Act-Assert)
-* **验证重点：** 优先状态验证（结果/对象状态），行为验证用于外部依赖交互
-* **编码规范：** 必须使用带 `_MESSAGE` 后缀的 Unity 断言宏，遵循 `test_style_guide.md`
+* **组织思想：** AAA (Arrange-Act-Assert) + Given-When-Then模式
+* **验证重点：** 优先状态验证（返回值/对象状态），行为验证用于外部依赖交互
+* **编码规范：** 遵循 `python_coding_style.md`，使用类型提示和文档字符串
+* **命名约定：** 测试类以 `Test` 开头，测试方法以 `test_` 开头，描述性命名
 
 **测试策略：**
-* **优先黑盒：** 通过公共接口测试类行为
-* **必要时白盒：** 关键内部逻辑验证，谨慎使用 `friend` 或测试子类
-* **依赖隔离：** 外部依赖必须使用 Mock/Stub 隔离
+* **优先黑盒：** 通过公共接口测试模块行为
+* **必要时白盒：** 关键内部逻辑验证，使用私有方法访问或测试辅助函数
+* **依赖隔离：** 外部依赖必须使用Mock/Patch隔离
+* **参数化测试：** 使用 `@pytest.mark.parametrize` 进行多场景测试
 
 **覆盖率目标：**
 * 核心业务逻辑: > 90%
 * 工具/辅助函数: > 80%
 * 分支覆盖率: > 80%
+* 整体覆盖率: > 85%
 
-## 4. V8MCU构建执行规范
+## 4. Python测试执行规范
 
-**文件命名与映射规则：**
+**文件命名与组织规则：**
 
-| 测试源文件 | 可执行文件 | 示例 |
-|-----------|-----------|------|
-| `<Module><ClassName>Test.cpp` | `test_<module>_<component>` | `NetworkMonitorNodeTrackerTest.cpp` → `test_network_monitor_node_tracker` |
+| 测试类型 | 文件命名 | 目录结构 | 示例 |
+|---------|---------|---------|------|
+| 单元测试 | `test_<module>.py` | `tests/unit/` | `test_user_manager.py` |
+| 集成测试 | `test_<feature>_integration.py` | `tests/integration/` | `test_api_integration.py` |
+| 功能测试 | `test_<feature>_functional.py` | `tests/functional/` | `test_login_functional.py` |
 
-**⚠️ 重要：** 构建命令必须使用正确的可执行文件名，不要使用源文件名作为可执行文件名。
+**⚠️ 重要：** 测试文件必须以 `test_` 开头，测试函数必须以 `test_` 开头，确保pytest能够自动发现。
 
-**V8MCU构建流程 - 严格按序执行：**
+**Python测试执行流程：**
 
-1. **确保位于项目根目录：** `/home/mlf/code/v8code/v8_mcu`
-2. **设置环境：** `source setenv_<platform>.sh` （必须在根目录执行）
-3. **切换到测试目录：** `cd data/network_monitor/test`
-4. **构建测试：** `make <test_target>`
-5. **运行测试：** `./<test_executable>`
+1. **确保位于项目根目录**
+2. **激活虚拟环境：** `source venv/bin/activate` 或 `conda activate <env_name>`
+3. **安装测试依赖：** `pip install -e .[test]` 或 `poetry install --with dev`
+4. **运行测试：** `pytest <test_path>`
+5. **生成覆盖率报告：** `pytest --cov=src --cov-report=html`
 
 **命令组合示例：**
 
-**默认构建（不依赖项目库）：**
+**运行单个测试文件：**
 ```bash
-cd /home/mlf/code/v8code/v8_mcu && source setenv_x86.sh && cd data/network_monitor/test && make test_network_monitor_comprehensive && ./test_network_monitor_comprehensive
+pytest tests/unit/test_user_manager.py -v
 ```
 
-**特殊构建（需先编译项目库）：**
+**运行特定测试函数：**
 ```bash
-cd /home/mlf/code/v8code/v8_mcu && source setenv_x86.sh && make && cd data/network_monitor/test && make test_network_monitor_comprehensive && ./test_network_monitor_comprehensive
+pytest tests/unit/test_user_manager.py::test_create_user -v
+```
+
+**运行带覆盖率的完整测试：**
+```bash
+pytest --cov=src --cov-report=html --cov-report=term-missing --cov-fail-under=80
+```
+
+**运行特定标记的测试：**
+```bash
+pytest -m "not slow" -v  # 跳过慢速测试
+pytest -m integration -v  # 只运行集成测试
 ```
 
 **严禁操作：**
-* 在非根目录执行 `source`
-* 在 `source` 后、`cd` 前执行 `make`
-* 分开执行命令导致环境丢失
-* 使用 `./setenv`（必须用 `source`）
+* 在未激活虚拟环境时运行测试
+* 忽略测试失败直接提交代码
+* 运行测试时不检查覆盖率
+* 使用过时的测试依赖版本
 
 **执行策略：**
-* **开发调试：** 优先编译运行模块对应测试程序
-* **避免全量测试：** 不运行 `run_all_tests.sh`，聚焦当前问题
-* **CI流程：** 仅在全局回归测试时执行全量测试
+* **开发调试：** 优先运行相关模块的单元测试
+* **快速反馈：** 使用 `pytest -x` 在第一个失败时停止
+* **并行执行：** 使用 `pytest -n auto` 进行并行测试（需要pytest-xdist）
+* **CI流程：** 运行完整测试套件并生成覆盖率报告
 
 ## 5. AI执行策略
 
 **自动化测试循环：**
-每轮遵循：**需求分析 → 深度调研 → 编码 → 构建 → 评估 → 修复 → 记录**
+每轮遵循：**需求分析 → 深度调研 → 编码 → 测试执行 → 评估 → 修复 → 记录**
 
 **AI执行要求：**
 
 **强制分析流程：**
 1. **需求分析**（最高优先）：深入分析issue/PRD文档，识别功能点、边界条件、异常场景
-2. **深度调研**：使用`codebase_search`、`grep_search`、`file_search`分析模块结构、接口、依赖
+2. **深度调研**：使用`codebase_search`分析模块结构、类型提示、接口、依赖关系
 3. **根本原因分析**：理解问题本质，避免表面修复
 
 **自动化重试循环：**
 用户请求验证测试时，AI必须自动执行：
 1. 需求分析（识别验证点）
 2. 深度调研（分析项目结构和模块）
-3. 构建测试
-4. 运行测试
+3. 编写pytest测试
+4. 运行测试并检查覆盖率
 5. 根本原因分析
 6. 重复直至通过
 
 **连续3次失败处理：**
 1. 重新深入分析issue/PRD需求规格
-2. 全面分析项目结构、依赖、接口
+2. 全面分析项目结构、依赖、接口、类型提示
 3. 分析模块设计实现，确定问题根因
 4. 运用第一性原理分析
-5. 重新审视验证策略
+5. 重新审视验证策略和测试设计
 6. 提出新策略后重新尝试
 
 **主动引导建议：**
-* 提示使用GWT/AAA思想和测试模板
+* 提示使用AAA思想和pytest最佳实践
 * 建议验证流程步骤和场景覆盖
-* 识别覆盖不足并建议补充
-* 建议Mock/Stub策略和重构机会
-* 提示参考`test_style_guide.md`
+* 识别覆盖不足并建议补充测试用例
+* 建议Mock/Fixture策略和重构机会
+* 提示参考`python_coding_style.md`和pytest文档
+* 推荐使用参数化测试和测试标记
 
 **流程整合：**
-* **CI集成：** 所有测试必须在CI环境自动运行
-* **文档化：** 在`active.md`记录测试活动/决策/结果
-* **覆盖率监控：** 定期检查覆盖率报告
-* **人工审查：** 提醒用户审查C++测试逻辑、Mock/Stub实现及覆盖全面性
+* **CI集成：** 所有测试必须在CI环境自动运行，包括覆盖率检查
+* **文档化：** 记录测试活动、决策和结果
+* **覆盖率监控：** 定期检查覆盖率报告，确保达到目标
+* **代码质量：** 确保测试代码也遵循编码规范和类型提示要求
+* **人工审查：** 提醒用户审查Python测试逻辑、Mock实现及覆盖全面性

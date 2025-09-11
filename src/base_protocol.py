@@ -1,7 +1,8 @@
 # base_protocol.py
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass, field
 import re
 from src.console_log import ConsoleLog
 import sys
@@ -11,6 +12,37 @@ from src.field_parser import parse_multi_bit_date
 from collections import namedtuple
 
 ProtocolConfig = namedtuple('ProtocolConfig', ['head_len', 'tail_len', 'frame_head'])
+
+@dataclass
+class HeaderField:
+    """协议头部字段配置"""
+    name: str                           # 字段名称，如"cmd", "index", "addr"
+    offset: int                         # 字节偏移(0-based)
+    length: int                         # 字段长度(字节数)
+    endian: str                         # "little" 或 "big"
+    type: str                           # "uint", "const", "ascii", "hex"
+    const_value: Optional[int] = None   # 当type="const"时的期望值
+    required: bool = True               # 是否必须匹配(用于const验证)
+
+
+@dataclass
+class ProtocolConfigNew:
+    """协议配置"""
+    # 基础配置
+    head_len: int
+    tail_len: int
+    frame_head: str
+    
+    # 头部字段配置
+    head_fields: List[HeaderField] = field(default_factory=list)
+    
+    # 可选配置
+    time_regex: str = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:|\.]\d{3}"
+    cmd_aliases: Dict[int, int] = field(default_factory=dict)
+
+
+# Legacy support - will be removed later
+_LegacyProtocolConfig = namedtuple('_LegacyProtocolConfig', ['head_len', 'tail_len', 'frame_head'])
 
 class BaseProtocol(ABC):
     """
@@ -83,6 +115,85 @@ class BaseProtocol(ABC):
         except IOError as e:
             log.e_print(f"无法打开文件 {file_path}: {str(e)}")
             raise IOError(f"无法打开文件 {file_path}: {str(e)}")
+
+    def _extract_field_value(self, data_bytes: List[str], field: HeaderField) -> Any:
+        """根据字段配置提取值"""
+        if field.offset + field.length > len(data_bytes):
+            return None
+            
+        end_offset = field.offset + field.length
+        field_bytes = data_bytes[field.offset:end_offset]
+        
+        if field.type == "uint" or field.type == "const":
+            if field.endian == "little":
+                # 小端序：低字节在前
+                value = sum(int(b, 16) << (8*i) for i, b in enumerate(field_bytes))
+            else:  # big endian
+                # 大端序：高字节在前
+                value = sum(int(b, 16) << (8*(field.length-1-i)) for i, b in enumerate(field_bytes))
+            return value
+        elif field.type == "hex":
+            return ''.join(field_bytes)
+        elif field.type == "ascii":
+            return ''.join(chr(int(b, 16)) for b in field_bytes if int(b, 16) != 0)
+        else:
+            # 默认按uint处理
+            if field.endian == "little":
+                return sum(int(b, 16) << (8*i) for i, b in enumerate(field_bytes))
+            else:
+                return sum(int(b, 16) << (8*(field.length-1-i)) for i, b in enumerate(field_bytes))
+
+    def parse_data_content_unified(self, data_groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """统一的头部字段解析实现"""
+        if not hasattr(self.config, 'head_fields'):
+            # 向后兼容：如果是旧配置，使用抽象方法
+            return self.parse_data_content(data_groups)
+            
+        valid_cmd = cmdformat.load_filter()
+        if valid_cmd is None:
+            log.e_print("valid_cmd is None")
+            return []
+            
+        filtered_data_groups = []
+        
+        for group in data_groups:
+            data_bytes = group["data"].strip().split()
+            if len(data_bytes) < self.config.head_len:
+                continue
+                
+            # 解析所有头部字段
+            parsed_fields = {}
+            skip_group = False
+            
+            for field in self.config.head_fields:
+                value = self._extract_field_value(data_bytes, field)
+                
+                # 常量验证
+                if field.type == "const" and field.required:
+                    if value != field.const_value:
+                        skip_group = True
+                        break
+                
+                parsed_fields[field.name] = value
+            
+            if skip_group:
+                continue
+                
+            # 应用cmd别名
+            if "cmd" in parsed_fields:
+                cmd = parsed_fields["cmd"]
+                cmd = self.config.cmd_aliases.get(cmd, cmd)
+                parsed_fields["cmd"] = cmd
+                
+                # 应用过滤
+                if len(valid_cmd) > 0 and cmd not in valid_cmd:
+                    continue
+            
+            # 更新group
+            group.update(parsed_fields)
+            filtered_data_groups.append(group)
+        
+        return filtered_data_groups
 
     @abstractmethod
     def parse_data_content(self, data_groups: List[Dict[str, str]]) -> List[Dict[str, Any]]:

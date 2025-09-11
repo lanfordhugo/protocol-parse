@@ -22,40 +22,38 @@ V8Parse是一个专业的多协议通信报文解析工具，专门用于解析�
 
 ### 设计模式
 
+- **配置驱动模式**: 🚀 **新架构** 通过配置文件定义协议头部解析，零代码添加协议
 - **抽象工厂模式**: 通过ProtocolType枚举和工厂方法创建不同协议实例
 - **策略模式**: 每种协议实现不同的解析策略
 - **模板方法模式**: BaseProtocol定义通用解析流程，子类实现具体细节
 
 ### 核心组件
 
+- **🚀 UnifiedProtocol**: 统一协议类，使用配置驱动的头部解析（推荐）
+- **🚀 HeaderField**: 头部字段配置，支持偏移、长度、字节序、类型、验证
+- **🚀 ProtocolConfigNew**: 扩展协议配置，支持字段级配置和cmd别名
 - **BaseProtocol**: 抽象基类，定义协议解析的通用接口和流程
-- **ProtocolConfig**: 协议配置数据类，包含头长度、尾长度、帧头标识
 - **FieldParser**: 字段解析器，支持多种数据格式解析
 - **CmdFormat**: 命令格式管理器，处理协议格式定义文件
 
 ## 支持的协议类型
 
-| 协议名称 | 协议头标识 | 头长度 | 尾长度 | 格式文件 | 状态 |
-|---------|-----------|--------|--------|----------|------|
-| V8 | AA F5 | 11字节 | 2字节 | format_mcu_ccu.txt | ✅ 完整支持 |
-| 小桔(XIAOJU) | 7D D0 | 14字节 | 1字节 | format_xiaoju.txt | ✅ 完整支持 |
-| 运维(YUNWEI) | CC D7 | 8字节 | 1字节 | format_yunwei.txt | 🚧 部分支持 |
-| Sinexcel | DD E8 | 8字节 | 1字节 | format_sinexcel.txt | 🚧 部分支持 |
+| 协议名称 | 协议头标识 | 头长度 | 尾长度 | 格式文件 | 状态 | 配置驱动 |
+|---------|-----------|--------|--------|----------|------|---------|
+| V8 | AA F5 | 11字节 | 2字节 | format_mcu_ccu.txt | ✅ 完整支持 | 🚀 已支持 |
+| 小桔(XIAOJU) | 7D D0 | 14字节 | 1字节 | format_xiaoju.txt | ✅ 完整支持 | 🚀 已支持 |
+| 运维(YUNWEI) | CC D7 | 8字节 | 1字节 | format_yunwei.txt | ✅ 完整支持 | 🚀 已支持 |
+| Sinexcel | DD E8 | 8字节 | 1字节 | format_sinexcel.txt | ✅ 完整支持 | 🚀 已支持 |
 
 ## 项目结构
 
 ```text
 v8parse/
-├── main.py                    # 🚀 主程序入口，统一的协议解析框架
-├── v8_run.py                  # V8协议专用运行脚本（兼容性保留）
-├── sinexcel_run.py            # Sinexcel协议专用运行脚本
-├── yunwei_run.py              # 运维协议专用运行脚本
+├── main.py                    # 🚀 主程序入口，配置驱动协议解析框架
 ├── src/                       # 📦 核心源码目录
+│   ├── 🚀 unified_protocol.py   # 统一协议类（配置驱动）
+│   ├── 🚀 protocol_configs.py  # 协议配置定义（添加新协议只需修改此文件）
 │   ├── base_protocol.py       # 🏗️ 基础协议抽象类（核心架构）
-│   ├── v8_protocol.py         # V8协议具体实现
-│   ├── xiaoju_protocol.py     # 小桔协议具体实现
-│   ├── sincexcel_portocol.py  # Sinexcel协议具体实现
-│   ├── yunwei_portocol.py     # 运维协议具体实现
 │   ├── field_parser.py        # 🔧 字段解析器（支持多种数据格式）
 │   ├── cmdformat.py           # 📋 命令格式解析器
 │   ├── console_log.py         # 📝 控制台日志输出管理
@@ -111,28 +109,40 @@ python -m pytest src/test.py
 
 ### 3. 基本使用方法
 
-#### 方法一：使用统一框架（推荐）
+#### 使用配置驱动框架（统一方式）
 
 ```python
-# 修改main.py中的协议类型
-PROTOCOL_TYPE = ProtocolType.V8  # 可选: V8, XIAOJU, YUNWEI, SINCEXCEL
+# 在main.py中选择协议类型，无需修改代码！
+UNIFIED_PROTOCOL_TYPE = UnifiedProtocolType.V8       # V8协议
+# UNIFIED_PROTOCOL_TYPE = UnifiedProtocolType.XIAOJU   # 小桔协议  
+# UNIFIED_PROTOCOL_TYPE = UnifiedProtocolType.YUNWEI   # 运维协议
+# UNIFIED_PROTOCOL_TYPE = UnifiedProtocolType.SINEXCEL # Sinexcel协议
 
 # 运行解析
 python main.py
 ```
 
-#### 方法二：使用专用脚本
+#### 💡 新增协议（零代码）
 
-```bash
-# V8协议解析
-python v8_run.py
+只需3步即可添加新协议支持：
 
-# Sinexcel协议解析
-python sinexcel_run.py
+```python
+# 1. 在src/protocol_configs.py中添加配置
+def create_new_protocol_config():
+    return ProtocolConfigNew(
+        head_len=12, tail_len=2, frame_head=r"FF AA",
+        head_fields=[
+            HeaderField("cmd", 4, 2, "little", "uint"),
+            HeaderField("device_id", 6, 4, "big", "uint"),
+            # ... 更多字段
+        ]
+    )
 
-# 运维协议解析
-python yunwei_run.py
+# 2. 在main.py枚举中添加: NEW_PROTOCOL = ("new_protocol", "new.log", "./resources/format_new.txt")
+# 3. 创建resources/format_new.txt格式文件
 ```
+
+**就这样！无需编写协议解析代码！**
 
 ### 3. 日志文件准备
 
@@ -384,6 +394,15 @@ log.set_debug_mode(True)
 ```
 
 ## 更新日志
+
+### v2.0.0 (2025-09-11) 🚀 配置驱动架构
+
+- 🚀 **革命性重构**: 完全配置驱动的协议解析架构
+- 📦 **零代码扩展**: 新增协议只需修改配置文件，无需编写代码
+- 🔧 **统一解析**: 所有协议使用同一套解析逻辑
+- ✅ **头部配置化**: 支持字段级配置（偏移、长度、字节序、类型、验证）
+- 🎯 **简化架构**: 移除重复代码，统一入口
+- 🚀 **非开发人员友好**: 运维人员可独立添加协议支持
 
 ### v1.5.0 (2025-08-30)
 

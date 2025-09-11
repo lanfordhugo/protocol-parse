@@ -1,115 +1,82 @@
-# main.py
+# main.py - 配置驱动的协议解析框架
 
-from enum import Enum
-from typing import Type
-from src.v8_protocol import V8Protocol
-from src.xiaoju_protocol import XiaojuProtocol
-from src.base_protocol import BaseProtocol, ProtocolConfig
-
-
-class ProtocolType(Enum):
-    """
-    协议类型枚举
-    # 协议类型枚举包含以下参数：
-    # protocol_name: str - 协议名称
-    # file_name: str - 日志文件名
-    # file_path: str - 协议格式文件路径
-    # head_len: int - 协议头长度
-    #tail_len: int - 协议尾长度
-    """
-
-    V8 = ("v8", "v8_com.log", "./resources/format_mcu_ccu.txt", ProtocolConfig(11, 2, r"AA F5"))
-    YUNWEI = ("yunwei", "yunwei.log", "./resources/format_yunwei.txt", ProtocolConfig(8, 1, r"CC D7"))
-    SINCEXCEL = ("sincexcel", "sincexcel.csv", "./resources/format_sinexcel.txt", ProtocolConfig(8, 1, r"DD E8"))
-    XIAOJU = ("xiaoju", "xiaoju.log", "./resources/format_xiaoju.txt", ProtocolConfig(14, 1, r"7D D0"))
-
-    def __init__(
-        self, protocol_name: str, file_name: str, format_file_path: str, config: ProtocolConfig
-    ):
-        self.protocol_name = protocol_name
-        self.file_name = file_name
-        self.format_file_path = format_file_path
-        self.config = config
-
-    # 协议类型
-    @property
-    def protocol_type(self) -> str:
-        return self.protocol_name
-
-    # 日志文件名
-    @property
-    def log_file_name(self) -> str:
-        return self.file_name
-
-    # 协议格式文件路径
-    @property
-    def protocol_format_file_path(self) -> str:
-        return self.format_file_path
-
-    # 头长度
-    @property
-    def protocol_head_len(self) -> int:
-        return self.config.head_len
-
-    # 尾长度
-    @property
-    def protocol_tail_len(self) -> int:
-        return self.config.tail_len
-
-    # 协议配置
-    @property
-    def protocol_config(self) -> ProtocolConfig:
-        return self.config
+import sys
+import argparse
+from src.protocol_configs import get_protocol_info, get_supported_protocols
+from src.unified_protocol import UnifiedProtocol
 
 
-def get_protocol_class(protocol_type: ProtocolType) -> Type[BaseProtocol]:
-    """
-    根据协议类型获取对应的协议类
+def run_protocol(protocol_name: str):
+    """运行指定协议的解析"""
+    try:
+        protocol_info = get_protocol_info(protocol_name)
+        print(f"协议配置: {protocol_info.protocol_name}")
+        print(f"日志文件: {protocol_info.log_file}")
+        print(f"格式文件: {protocol_info.format_file}")
+        
+        protocol = UnifiedProtocol(
+            protocol_info.log_file,
+            protocol_info.format_file,
+            protocol_info.config
+        )
+        protocol.run()
+    except ValueError as e:
+        print(f"错误: {e}")
+        print(f"支持的协议: {', '.join(get_supported_protocols())}")
+        return False
+    except Exception as e:
+        print(f"运行时错误: {e}")
+        return False
+    return True
 
-    :param protocol_type: 协议类型枚举
-    :return: 对应的协议类
-    :raises ValueError: 如果协议类型不支持
-    """
-    protocol_map = {
-        ProtocolType.V8: V8Protocol,
-        ProtocolType.XIAOJU: XiaojuProtocol,
-        # 添加其他协议类型映射
-        # ProtocolType.YUNWEI: YunweiProtocol,
-        # ProtocolType.SINCEXCEL: SincexcelProtocol,
-    }
 
-    protocol_class = protocol_map.get(protocol_type)
-    if protocol_class is None:
-        raise ValueError(f"不支持的协议类型: {protocol_type}")
+def main():
+    """主函数，处理命令行参数"""
+    parser = argparse.ArgumentParser(
+        description="配置驱动的协议解析框架",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=f"""
+支持的协议: {', '.join(get_supported_protocols())}
 
-    return protocol_class
+使用示例:
+  python main.py v8        # 解析V8协议
+  python main.py xiaoju    # 解析小桔协议
+  python main.py yunwei    # 解析运维协议
+  python main.py sinexcel  # 解析Sinexcel协议
 
-
-def run_protocol(protocol_type: ProtocolType):
-    """
-    运行指定的协议
-
-    :param protocol_type: 协议类型枚举
-    """
-    protocol_class = get_protocol_class(protocol_type)
+🚀 新增协议只需1步：
+在 src/protocol_configs.py 的 PROTOCOL_CONFIGS 中添加新协议配置即可！
+        """
+    )
     
-    # 构造参数
-    log_file_name = protocol_type.log_file_name
-    format_file_path = protocol_type.protocol_format_file_path
-    config = protocol_type.protocol_config
+    parser.add_argument(
+        'protocol',
+        nargs='?',
+        default='v8',
+        help=f'协议名称 (默认: v8，可选: {", ".join(get_supported_protocols())})'
+    )
     
-    # 创建协议实例
-    protocol = protocol_class(log_file_name, format_file_path, config)
+    parser.add_argument(
+        '--list', '-l',
+        action='store_true',
+        help='列出所有支持的协议'
+    )
     
-    # 运行协议
-    protocol.run()
+    args = parser.parse_args()
+    
+    if args.list:
+        print("支持的协议:")
+        for protocol in get_supported_protocols():
+            protocol_info = get_protocol_info(protocol)
+            print(f"  {protocol:10} - {protocol_info.log_file}")
+        return
+    
+    print(f"使用配置驱动协议解析: {args.protocol}")
+    success = run_protocol(args.protocol)
+    
+    if not success:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    # 可以从配置文件或命令行参数中读取PROTOCOL_TYPE
-    # PROTOCOL_TYPE = ProtocolType.XIAOJU
-    PROTOCOL_TYPE = ProtocolType.V8
-    run_protocol(PROTOCOL_TYPE)
-    
-    
-# 如果要指定某个字段使用什么方式解析，在field_parser.py中指定
+    main()

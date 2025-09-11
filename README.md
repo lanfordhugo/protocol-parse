@@ -50,9 +50,9 @@ V8Parse是一个专业的多协议通信报文解析工具，专门用于解析�
 ```text
 v8parse/
 ├── main.py                    # 🚀 主程序入口，配置驱动协议解析框架
+├── 🚀 protocol_configs.py     # 📝 协议配置文件（顶层目录，易于操作）
 ├── src/                       # 📦 核心源码目录
 │   ├── 🚀 unified_protocol.py   # 统一协议类（配置驱动）
-│   ├── 🚀 protocol_configs.py  # 协议配置定义（添加新协议只需修改此文件）
 │   ├── base_protocol.py       # 🏗️ 基础协议抽象类（核心架构）
 │   ├── field_parser.py        # 🔧 字段解析器（支持多种数据格式）
 │   ├── cmdformat.py           # 📋 命令格式解析器
@@ -67,8 +67,14 @@ v8parse/
 │   ├── format_sinexcel.txt    # Sinexcel协议格式定义文件
 │   ├── filter.txt             # 命令过滤配置文件
 │   └── alarm.conf             # 告警配置文件
-├── parsed_log/                # 📤 解析结果输出目录
-├── log/                       # 📥 原始日志文件目录
+├── 📥 input_logs/             # 输入日志文件目录（统一存放待解析文件）
+│   ├── v8_com.log             # V8协议日志文件
+│   ├── xiaoju.log             # 小桔协议日志文件
+│   ├── yunwei.log             # 运维协议日志文件
+│   ├── sincexcel.log          # Sinexcel协议日志文件
+│   └── my_tcu_net.log         # 其他日志文件
+├── 📤 parsed_log/             # 解析结果输出目录
+├── log/                       # 📊 系统日志目录
 ├── .cursor/                   # 🔧 开发工具配置
 │   └── rules/                 # 代码规范配置
 ├── README.md                  # 📖 项目说明文档
@@ -80,9 +86,16 @@ v8parse/
 | 模块 | 功能描述 | 关键特性 |
 |------|----------|----------|
 | `BaseProtocol` | 协议解析基类 | 定义通用解析流程，抽象方法规范 |
-| `ProtocolType` | 协议类型枚举 | 配置化协议管理，工厂模式实现 |
+| `UnifiedProtocol` | 统一协议解析器 | 配置驱动的通用协议解析实现 |
+| `protocol_configs.py` | 协议配置中心 | 🚀 顶层配置文件，零代码新增协议 |
 | `FieldParser` | 字段解析引擎 | 支持BCD、ASCII、二进制等多种格式 |
 | `CmdFormat` | 格式定义管理 | 解析协议格式文件，支持循环和变长字段 |
+
+### 🎯 目录结构优化亮点
+
+- **📝 `protocol_configs.py` 提升至顶层**：配置文件放在项目根目录，方便非开发人员直接编辑
+- **📥 `input_logs/` 统一输入目录**：所有待解析的日志文件集中存放，目录结构更清晰
+- **🚀 零代码扩展**：添加新协议只需修改 `protocol_configs.py`，无需触碰任何源码
 
 ## 快速开始
 
@@ -146,25 +159,25 @@ def create_new_protocol_config():
 
 ### 3. 日志文件准备
 
-1. 将需要解析的日志文件复制到项目根目录
+1. 将需要解析的日志文件复制到 `input_logs/` 目录
 2. 根据协议类型重命名文件：
-   - V8协议: `v8_com.log`
-   - 小桔协议: `xiaoju.log`
-   - 运维协议: `yunwei.log`
-   - Sinexcel协议: `sincexcel.csv`
+   - V8协议: `input_logs/v8_com.log`
+   - 小桔协议: `input_logs/xiaoju.log`
+   - 运维协议: `input_logs/yunwei.log`
+   - Sinexcel协议: `input_logs/sincexcel.log`
 
 ### 4. 日志文件配置
 
 #### 4.1 文件命名规范
 
-根据协议类型将日志文件重命名并放置在项目根目录：
+根据协议类型将日志文件重命名并放置在 `input_logs/` 目录：
 
-| 协议类型 | 文件名 | 格式 | 示例 |
-|---------|--------|------|------|
-| V8 | `v8_com.log` | 文本格式 | 时间戳 + 十六进制数据 |
-| 小桔 | `xiaoju.log` | 文本格式 | 时间戳 + 十六进制数据 |
-| 运维 | `yunwei.log` | 文本格式 | 时间戳 + 十六进制数据 |
-| Sinexcel | `sincexcel.csv` | CSV格式 | 结构化数据 |
+| 协议类型 | 文件路径 | 格式 | 示例 |
+|---------|----------|------|------|
+| V8 | `input_logs/v8_com.log` | 文本格式 | 时间戳 + 十六进制数据 |
+| 小桔 | `input_logs/xiaoju.log` | 文本格式 | 时间戳 + 十六进制数据 |
+| 运维 | `input_logs/yunwei.log` | 文本格式 | 时间戳 + 十六进制数据 |
+| Sinexcel | `input_logs/sincexcel.log` | 文本格式 | 时间戳 + 十六进制数据 |
 
 #### 4.2 数据筛选配置
 

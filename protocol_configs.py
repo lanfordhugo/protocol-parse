@@ -79,7 +79,7 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
     # -----------------------------------------------------------------------------
     "v8": ProtocolInfo(
         protocol_name="v8",                                    # 协议名字
-        log_file="v8_com.log",                                # 日志文件名
+        log_file="input_logs/v8_com.log",                    # 日志文件名
         format_file="./resources/format_mcu_ccu.txt",         # 数据格式定义文件
         config=ProtocolConfigNew(
             head_len=11,                                       # 数据包头部占11个字节
@@ -100,7 +100,7 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
     # -----------------------------------------------------------------------------
     "xiaoju": ProtocolInfo(
         protocol_name="xiaoju",                                # 协议名字
-        log_file="xiaoju.log",                                # 日志文件名
+        log_file="input_logs/xiaoju.log",                   # 日志文件名
         format_file="./resources/format_xiaoju.txt",          # 数据格式定义文件
         config=ProtocolConfigNew(
             head_len=14,                                       # 数据包头部占14个字节
@@ -121,7 +121,7 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
     # -----------------------------------------------------------------------------
     "sinexcel": ProtocolInfo(
         protocol_name="sinexcel",                              # 协议名字
-        log_file="sincexcel.log",                             # 日志文件名
+        log_file="input_logs/sincexcel.log",                # 日志文件名
         format_file="./resources/format_sinexcel.txt",        # 数据格式定义文件
         config=ProtocolConfigNew(
             head_len=8,                                        # 数据包头部占8个字节
@@ -139,7 +139,7 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
     # -----------------------------------------------------------------------------
     "yunwei": ProtocolInfo(
         protocol_name="yunwei",                                # 协议名字
-        log_file="yunwei.log",                                # 日志文件名
+        log_file="input_logs/yunwei.log",                   # 日志文件名
         format_file="./resources/format_yunwei.txt",          # 数据格式定义文件
         config=ProtocolConfigNew(
             head_len=11,                                       # 数据包头部占11个字节（与V8相同）

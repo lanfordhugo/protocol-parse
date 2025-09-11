@@ -2,7 +2,7 @@
 
 import sys
 import argparse
-from src.protocol_configs import get_protocol_info, get_supported_protocols
+from protocol_configs import get_protocol_info, get_supported_protocols
 from src.unified_protocol import UnifiedProtocol
 
 

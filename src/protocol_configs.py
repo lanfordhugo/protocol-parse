@@ -121,12 +121,12 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
     # -----------------------------------------------------------------------------
     "sinexcel": ProtocolInfo(
         protocol_name="sinexcel",                              # 协议名字
-        log_file="sincexcel.csv",                             # 日志文件名
+        log_file="sincexcel.log",                             # 日志文件名
         format_file="./resources/format_sinexcel.txt",        # 数据格式定义文件
         config=ProtocolConfigNew(
             head_len=8,                                        # 数据包头部占8个字节
             tail_len=1,                                        # 数据包尾部占1个字节
-            frame_head=r"DD E8",                              # 识别标志：以"DD E8"开头
+            frame_head=r"AA F5",                              # 识别标志：以"DD E8"开头
             head_fields=[                                      # 头部各字段配置：
                 HeaderField("cmd", 6, 2, "little", "uint"),                            # 命令字段：第7-8字节，数字类型
             ],
@@ -135,18 +135,21 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
     ),
     
     # -----------------------------------------------------------------------------
-    # 运维协议配置 - 用于解析运维设备的通信数据
+    # 运维协议配置 - 用于解析运维设备的通信数据（与V8协议使用相同帧头）
     # -----------------------------------------------------------------------------
     "yunwei": ProtocolInfo(
         protocol_name="yunwei",                                # 协议名字
         log_file="yunwei.log",                                # 日志文件名
         format_file="./resources/format_yunwei.txt",          # 数据格式定义文件
         config=ProtocolConfigNew(
-            head_len=8,                                        # 数据包头部占8个字节
-            tail_len=1,                                        # 数据包尾部占1个字节
-            frame_head=r"CC D7",                              # 识别标志：以"CC D7"开头
+            head_len=11,                                       # 数据包头部占11个字节（与V8相同）
+            tail_len=2,                                        # 数据包尾部占2个字节（与V8相同）
+            frame_head=r"AA F5",                              # 识别标志：以"AA F5"开头（与V8相同）
             head_fields=[                                      # 头部各字段配置：
                 HeaderField("cmd", 6, 2, "little", "uint"),                            # 命令字段：第7-8字节，数字类型
+                HeaderField("deviceType", 4, 1, "little", "uint"),                     # 设备类型：第5字节
+                HeaderField("addr", 8, 1, "little", "uint"),                          # 地址字段：第9字节
+                HeaderField("gunNum", 9, 1, "little", "uint"),                        # 枪号字段：第10字节
             ]
         )
     ),

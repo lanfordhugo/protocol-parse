@@ -1,0 +1,46 @@
+meta:
+  protocol: sinexcel
+  version: 1
+  default_endian: LE
+  notes: Sinexcel协议配置，支持Sinexcel设备通信数据解析
+
+# 兼容性配置
+compatibility:
+  head_len: 8
+  tail_len: 1
+  frame_head: "AA F5"
+  head_fields:
+    - {name: "cmd", offset: 6, length: 2, endian: "little", type: "uint"}
+  cmd_aliases:
+    1103: 1102
+    1108: 1105
+
+types:
+  uint8:   { base: uint, bytes: 1, signed: false }
+  uint16:  { base: uint, bytes: 2, signed: false }
+  uint32:  { base: uint, bytes: 4, signed: false }
+  ascii:   { base: str,  encoding: ASCII }
+  hex:     { base: hex }
+
+enums:
+  device_status:
+    0: 离线
+    1: 在线
+
+cmds:
+  # cmd1102 - 设备状态上报
+  1102:
+    - {len: 1, name: 设备状态, type: uint8, enum: device_status}
+    - {len: 4, name: 设备序列号, type: uint32}
+    - {len: 2, name: 软件版本, type: uint16}
+    - {len: 2, name: 硬件版本, type: uint16}
+
+  # cmd1105 - 参数查询响应
+  1105:
+    - {len: 4, name: 参数地址, type: uint32}
+    - {len: 4, name: 参数值, type: uint32}
+    - {len: 1, name: 查询结果, type: uint8}
+
+filters:
+  include_cmds: []
+  exclude_cmds: []

@@ -1,0 +1,88 @@
+meta:
+  protocol: yunwei
+  version: 1
+  default_endian: LE
+  notes: 运维协议配置，支持运维设备通信数据解析
+
+# 兼容性配置
+compatibility:
+  head_len: 11
+  tail_len: 2
+  frame_head: "AA F5"
+  head_fields:
+    - {name: "cmd", offset: 6, length: 2, endian: "little", type: "uint"}
+    - {name: "deviceType", offset: 4, length: 1, endian: "little", type: "uint"}
+    - {name: "addr", offset: 8, length: 1, endian: "little", type: "uint"}
+    - {name: "gunNum", offset: 9, length: 1, endian: "little", type: "uint"}
+
+types:
+  uint8:   { base: uint, bytes: 1, signed: false }
+  uint16:  { base: uint, bytes: 2, signed: false }
+  uint32:  { base: uint, bytes: 4, signed: false }
+  ascii:   { base: str,  encoding: ASCII }
+  hex:     { base: hex }
+  bcd:     { base: bcd }
+  binary_str_3bytes: { base: binary_str, bytes: 3 }
+  binary_str_1byte:  { base: binary_str, bytes: 1 }
+
+enums:
+  param_type:
+    1: 设置
+    2: 查询
+
+cmds:
+  # cmd1 - 参数设置/查询命令
+  1:
+    - {len: 1, name: 类型, type: uint8, enum: param_type}
+    - {len: 4, name: 参数起始地址, type: uint32}
+    - {len: 1, name: 参数个数, type: uint8}
+    - {len: 2, name: 参数字节数, type: uint16}
+    - {len: 4, name: 设置数据, type: uint32}
+
+  # cmd2 - 参数设置/查询响应
+  2:
+    - {len: 32, name: 充电桩资产码, type: ascii}
+    - {len: 1, name: 类型, type: uint8, enum: param_type}
+    - {len: 4, name: 参数起始地址, type: uint32}
+    - {len: 1, name: 参数个数, type: uint8}
+    - {len: 1, name: 操作结果, type: uint8}
+    - {len: 4, name: 查询参数信息, type: uint32}
+
+  # cmd103 - 预留命令
+  103:
+    - {len: 4, name: 预留1, type: uint32}
+
+  # cmd104 - 充电状态上报
+  104:
+    - {len: 1, name: 充电口号, type: uint8}
+    - {len: 1, name: 充电枪类型, type: uint8}
+    - {len: 1, name: 工作状态, type: uint8}
+    - {len: 1, name: 当前SOC, type: uint8, unit: "%"}
+    - {len: 4, name: 当前最高告警编码, type: uint32}
+    - {len: 1, name: 车连接状态, type: uint8}
+    - {len: 2, name: 直流充电电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 直流充电电流, type: uint16, scale: 0.1, unit: A}
+    - {len: 2, name: BMS需求电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: BMS需求电流, type: uint16, scale: 0.1, unit: A}
+    - {len: 1, name: BMS充电模式, type: uint8}
+    - {len: 4, name: 充电时长, type: uint32, unit: s}
+    - {len: 4, name: 本次充电累计电量, type: uint32, scale: 0.01, unit: kWh}
+    - {len: 1, name: 充电启动方式, type: uint8}
+    - {len: 1, name: 充电策略, type: uint8}
+    - {len: 4, name: 充电策略参数, type: uint32}
+    - {len: 4, name: 充电功率, type: uint32, scale: 0.1, unit: kW}
+    - {len: 1, name: 出风口温度, type: uint8, unit: "°C"}
+    - {len: 1, name: 环境温度, type: uint8, unit: "°C"}
+    - {len: 1, name: 充电枪温度, type: uint8, unit: "°C"}
+    - {len: 18, name: 车辆VIN码, type: ascii}
+    - {len: 32, name: 充电流水号, type: ascii}
+    - {len: 1, name: 枪归位状态, type: uint8}
+    - {len: 1, name: 远程隧道状态, type: uint8}
+
+  # cmd3001 - 运维命令（临时处理）
+  3001:
+    - {len: 16, name: 运维数据, type: hex}
+
+filters:
+  include_cmds: []
+  exclude_cmds: []

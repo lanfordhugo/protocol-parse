@@ -1,0 +1,488 @@
+meta:
+  protocol: v8
+  version: 1
+  default_endian: LE
+  notes: V8协议配置，支持充电桩通信数据解析
+
+# 兼容性配置（保持与原protocol_configs.py一致）
+compatibility:
+  head_len: 11
+  tail_len: 2
+  frame_head: "AA F5"
+  head_fields:
+    - {name: "cmd", offset: 4, length: 2, endian: "little", type: "uint"}
+    - {name: "index", offset: 6, length: 2, endian: "little", type: "uint"}
+    - {name: "deviceType", offset: 8, length: 1, endian: "little", type: "uint"}
+    - {name: "addr", offset: 9, length: 1, endian: "little", type: "uint"}
+    - {name: "gunNum", offset: 10, length: 1, endian: "little", type: "uint"}
+
+types:
+  uint8:   { base: uint, bytes: 1, signed: false }
+  uint16:  { base: uint, bytes: 2, signed: false }
+  uint32:  { base: uint, bytes: 4, signed: false }
+  int16:   { base: int,  bytes: 2, signed: true }
+  ascii:   { base: str,  encoding: ASCII }
+  hex:     { base: hex }
+  bcd2:    { base: bcd, bytes: 2 }
+  bcd3:    { base: bcd, bytes: 3 }
+  bcd4:    { base: bcd, bytes: 4 }
+  bcd6:    { base: bcd, bytes: 6 }
+  cp56time2a: { base: time.cp56time2a, bytes: 7 }
+  binary_str_1byte:  { base: binary_str, bytes: 1 }
+  binary_str_2bytes: { base: binary_str, bytes: 2 }
+  binary_str_3bytes: { base: binary_str, bytes: 3 }
+  binary_str_4bytes: { base: binary_str, bytes: 4 }
+  binary_str_8bytes: { base: binary_str, bytes: 8 }
+  bitset8:
+    base: bitset
+    bits:
+      - {name: "热电偶1反馈"}
+      - {name: "热电偶2反馈"}
+      - {name: "热电偶3反馈"}
+      - {name: "热电偶4反馈"}
+      - {name: "预留隔离反馈1"}
+      - {name: "预留隔离反馈2"}
+      - {name: "倾斜"}
+      - {name: "水浸"}
+  bitset16:
+    base: bitset
+    bits:
+      - {name: "单体动力蓄电池电压过高或过低"}
+      - {name: "整车动力蓄电池荷电状态SOC过高或过低"}
+      - {name: "动力蓄电池充电过电流"}
+      - {name: "动力蓄电池温度过高"}
+      - {name: "动力蓄电池绝缘状态"}
+      - {name: "动力蓄电池组输出连接器连接状态"}
+      - {name: "允许充电"}
+      - {name: "预留"}
+
+enums:
+  login_result:
+    0: 失败
+    1: 成功
+  device_type:
+    1: MCU
+    2: M2
+    3: C2
+  gun_status:
+    0: 空闲
+    1: 准备
+    2: 充电
+    3: 故障
+
+cmds:
+  # cmd1 - 设备信息上报
+  1:
+    - {len: 1, name: 硬件类型, type: uint8}
+    - {len: 1, name: 拨码地址号, type: uint8}
+    - {len: 1, name: 充电枪路数, type: uint8}
+    - {len: 2, name: 项目号, type: uint16}
+    - {len: 2, name: 软件版本号, type: uint16}
+    - {len: 1, name: 需要更新参数表, type: uint8}
+
+  # cmd2 - 登录响应
+  2:
+    - {len: 1, name: 登录结果, type: uint8, enum: login_result}
+    - {len: 1, name: 登录失败原因, type: uint8}
+    - {len: 2, name: MCU软件项目号, type: uint16}
+    - {len: 2, name: MCU软件版本号, type: uint16}
+    - {len: 1, name: 终端类型, type: uint8}
+    - {len: 32, name: 终端桩编码, type: ascii}
+
+  # cmd3 - 终端状态上报
+  3:
+    - {len: 1, name: 本终端枪数, type: uint8}
+    - {len: 1, name: 车连接状态, type: uint8}
+    - {len: 2, name: CC1电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 1, name: 枪工作状态, type: uint8, enum: gun_status}
+    - {len: 4, name: 当前枪最高告警编码, type: uint32}
+    - {len: 2, name: 终端系统状态, type: binary_str_2bytes}
+    - {len: 2, name: 枪状态, type: binary_str_2bytes}
+    - {len: 1, name: 出风口温度, type: uint8, scale: 1, unit: "°C"}
+    - {len: 1, name: 环境温度, type: uint8, scale: 1, unit: "°C"}
+    - {len: 1, name: 枪正极温度, type: uint8, scale: 1, unit: "°C"}
+    - {len: 1, name: 枪负极温度, type: uint8, scale: 1, unit: "°C"}
+
+  # cmd5 - 启动充电命令
+  5:
+    - {len: 4, name: 命令序号, type: uint32}
+    - {len: 1, name: 启动方式, type: uint8}
+    - {len: 1, name: 限制SOC, type: uint8, unit: "%"}
+    - {len: 2, name: 限制充电电量, type: uint16, scale: 0.01, unit: kWh}
+    - {len: 2, name: 限功率大小, type: uint16, scale: 0.1, unit: kW}
+    - {len: 1, name: BMS辅源电压, type: uint8, scale: 0.1, unit: V}
+    - {len: 32, name: 交易流水号, type: ascii}
+    - {len: 1, name: VIN核对, type: uint8}
+    - {len: 17, name: 车辆VIN码, type: ascii}
+    - {len: 16, name: 停止充电密码, type: ascii}
+    - {len: 1, name: 并充组网状态, type: uint8}
+    - {len: 1, name: 组网枪数量, type: uint8}
+
+  # cmd6 - 启动充电响应
+  6:
+    - {len: 4, name: 响应命令序号, type: uint32}
+    - {len: 1, name: 命令执行结果, type: uint8}
+    - {len: 1, name: 执行失败原因, type: uint8}
+
+  # cmd7 - 停止充电命令
+  7:
+    - {len: 4, name: 命令序号, type: uint32}
+    - {len: 2, name: 停止原因, type: uint16}
+
+  # cmd8 - 停止充电响应
+  8:
+    - {len: 4, name: 响应命令序号, type: uint32}
+    - {len: 1, name: 命令执行结果, type: uint8}
+    - {len: 1, name: 执行失败原因, type: uint8}
+
+  # cmd9 - 充电握手阶段数据上报
+  9:
+    - {len: 4, name: 命令序号, type: uint32}
+    - {len: 2, name: 启动结果, type: uint16}
+    - {len: 2, name: BMS协议类型, type: uint16}
+    - {len: 3, name: 充电桩与BMS通信协议版本号, type: binary_str_3bytes}
+    - {len: 3, name: BMS与充电桩通信协议版本号, type: binary_str_3bytes}
+    - {len: 2, name: 充电机最高输出电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 充电机最低输出电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 充电机最大输出电流, type: uint16, scale: 0.1, unit: A}
+    - {len: 2, name: BHM-绝缘电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 1, name: BRM-电池类型, type: uint8}
+    - {len: 2, name: BRM-整车动力蓄电池系统额定容量, type: uint16, unit: Ah}
+    - {len: 2, name: BRM-整车动力蓄电池系统额定总电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 4, name: BRM-电池生产厂商, type: bcd4}
+    - {len: 4, name: BRM-电池组序号, type: bcd4}
+    - {len: 2, name: BRM-电池组生厂日期年, type: uint16}
+    - {len: 1, name: BRM-电池组生厂日期月, type: uint8}
+    - {len: 1, name: BRM-电池组生厂日期日, type: uint8}
+    - {len: 4, name: BRM-电池组充电次数, type: uint32}
+    - {len: 1, name: BRM-电池组产权标识, type: uint8}
+    - {len: 1, name: 预留, type: uint8}
+    - {len: 17, name: BRM-车辆识别码VIN, type: ascii}
+    - {len: 8, name: BRM-BMS软件版本号, type: ascii}
+    - {len: 2, name: BCP-单体动力蓄电池最高允许充电电压, type: uint16, scale: 0.01, unit: V}
+    - {len: 2, name: BCP-最高允许充电电流, type: uint16, scale: 0.1, unit: A}
+    - {len: 2, name: BCP-动力蓄电池标称总能量, type: uint16, scale: 0.1, unit: kWh}
+    - {len: 2, name: BCP-最高允许充电总电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 1, name: BCP-最高允许温度, type: uint8, unit: "°C"}
+    - {len: 2, name: BCP-整车动力蓄电池荷电状态, type: uint16, scale: 0.1, unit: "%"}
+    - {len: 2, name: BCP-整车动力蓄电池当前电池电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 1, name: BRO-BMS是否充电准备好, type: uint8}
+    - {len: 2, name: 绝缘电压异常时模块电压值, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 主枪绝缘设置电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 主枪绝缘正电阻, type: uint16, unit: kΩ}
+    - {len: 2, name: 主枪绝缘负电阻, type: uint16, unit: kΩ}
+    - {len: 2, name: 主枪第一次绝缘正电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 主枪第一次绝缘负电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 主枪第二次绝缘正电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 主枪第二次绝缘负电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 主枪预启动枪头电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 主枪预启动模电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: BCP异常电压1, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: BCP异常电压2, type: uint16, scale: 0.1, unit: V}
+
+  # cmd10 - 充电握手确认
+  10:
+    - {len: 4, name: 响应命令序号, type: uint32}
+    - {len: 1, name: 确认结果, type: uint8}
+
+  # cmd11 - 充电过程数据上报
+  11:
+    - {len: 2, name: BCS-BMS测量电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: BCS-BMS测量电流, type: uint16, scale: 0.1, unit: A}
+    - {len: 2, name: BCS-最高单体电压及其组号, type: uint16}
+    - {len: 1, name: BCS-当前车辆SOC, type: uint8, unit: "%"}
+    - {len: 2, name: BCS-剩余充电时间, type: uint16, unit: min}
+    - {len: 7, name: BCS-保留, type: hex}
+    - {len: 1, name: BSM-最高单体动力蓄电池电压所在编号, type: uint8}
+    - {len: 1, name: 最高电池包温度, type: uint8, scale: 1, unit: "°C", notes: "偏移-50"}
+    - {len: 1, name: BSM-最高温度检测点编号, type: uint8}
+    - {len: 1, name: 最低电池包温度, type: uint8, scale: 1, unit: "°C", notes: "偏移-50"}
+    - {len: 1, name: BSM-最低动力蓄电池温度检测点编号, type: uint8}
+    - {len: 2, name: BSM-单体动力蓄电池电压过高或过低, type: bitset16}
+    - {len: 2, name: BSM-整车动力蓄电池荷电状态SOC过高或过低, type: bitset16}
+    - {len: 2, name: BSM-动力蓄电池充电过电流, type: bitset16}
+    - {len: 2, name: BSM-动力蓄电池温度过高, type: bitset16}
+    - {len: 2, name: BSM-动力蓄电池绝缘状态, type: bitset16}
+    - {len: 2, name: BSM-动力蓄电池组输出连接器连接状态, type: bitset16}
+    - {len: 2, name: BSM-允许充电, type: bitset16}
+    - {len: 2, name: BSM-预留, type: bitset16}
+
+  # cmd13 - 充电结束数据上报
+  13:
+    - {len: 4, name: 命令序号, type: uint32}
+    - {len: 2, name: 停止充电原因, type: uint16}
+    - {len: 4, name: 充电电量, type: uint32, scale: 0.01, unit: kWh}
+    - {len: 4, name: 开始电表电量, type: uint32, scale: 0.01, unit: kWh}
+    - {len: 4, name: 结束电表电量, type: uint32, scale: 0.01, unit: kWh}
+    - {len: 1, name: 开始SOC, type: uint8, unit: "%"}
+    - {len: 1, name: 结束SOC, type: uint8, unit: "%"}
+    - {len: 2, name: 停止参数1, type: uint16}
+    - {len: 2, name: 停止参数2, type: uint16}
+    - {len: 2, name: 停止参数3, type: uint16}
+    - {len: 2, name: 停止参数4, type: uint16}
+    - {len: 2, name: 停止参数5, type: uint16}
+    - {len: 2, name: 停止参数6, type: uint16}
+    - {len: 2, name: 停止参数7, type: uint16}
+    - {len: 2, name: 停止参数8, type: uint16}
+    - {len: 8, name: BST报文, type: binary_str_8bytes}
+    - {len: 1, name: 中止荷电状态SOC, type: uint8, unit: "%"}
+    - {len: 2, name: 动力蓄电池单体最低电压, type: uint16, scale: 0.01, unit: V}
+    - {len: 2, name: 动力蓄电池单体最高电压, type: uint16, scale: 0.01, unit: V}
+    - {len: 1, name: 动力蓄电池最低温度, type: uint8, unit: "°C"}
+    - {len: 1, name: 动力蓄电池最高温度, type: uint8, unit: "°C"}
+    - {len: 1, name: 预留, type: uint8}
+    - {len: 8, name: BEM报文, type: binary_str_8bytes}
+    - {len: 1, name: 充放电标志, type: uint8}
+    - {len: 1, name: 瑞银电表标志, type: uint8}
+    - {len: 34, name: 加密数据, type: hex}
+    - {len: 6, name: 电表表号, type: bcd6}
+    - {len: 2, name: 电表协议版本, type: uint16}
+    - {len: 1, name: 加密方式, type: uint8}
+
+  # cmd15 - 日志上传请求
+  15:
+    - {len: 32, name: 充电流水号, type: ascii}
+    - {len: 1, name: 日志类型, type: uint8}
+    - {len: 4, name: 总包数量, type: uint32}
+    - {len: 4, name: 包序列号, type: uint32}
+    - {len: 1024, name: 数据域, type: hex}
+
+  # cmd16 - 日志上传响应
+  16:
+    - {len: 32, name: 充电流水号, type: ascii}
+    - {len: 1, name: 日志类型, type: uint8}
+    - {len: 4, name: 总包数量, type: uint32}
+    - {len: 4, name: 包序列号, type: uint32}
+    - {len: 1, name: 处理结果, type: uint8}
+
+  # cmd21 - 参数设置命令
+  21:
+    - {len: 4, name: 命令序号, type: uint32}
+    - {len: 1, name: 参数接收对象, type: uint8}
+    - {len: 1, name: 参数接收枪号, type: uint8}
+    - {len: 2, name: 参数地址, type: uint16}
+    - {len: 4, name: 参数值, type: uint32}
+
+  # cmd22 - 参数设置响应
+  22:
+    - {len: 4, name: 响应命令序号, type: uint32}
+    - {len: 1, name: 参数接收对象, type: uint8}
+    - {len: 1, name: 参数接收枪号, type: uint8}
+    - {len: 2, name: 参数地址, type: uint16}
+    - {len: 4, name: 参数值, type: uint32}
+    - {len: 2, name: 参数设置结果, type: uint16}
+
+  # cmd23 - 参数查询命令
+  23:
+    - {len: 4, name: 参数开始地址, type: uint32}
+    - {len: 4, name: 参数个数, type: uint32}
+
+  # cmd24 - 参数查询响应（带循环）
+  24:
+    - {len: 4, name: 参数开始地址, type: uint32}
+    - {len: 4, name: 参数个数, type: uint32, id: param_count}
+    - repeat_by: param_count
+      fields:
+        - {len: 4, name: 参数, type: uint32}
+
+  # cmd25 - 参数批量设置
+  25:
+    - {len: 4, name: 参数开始地址, type: uint32}
+    - {len: 4, name: 参数个数, type: uint32, id: param_count}
+    - repeat_by: param_count
+      fields:
+        - {len: 4, name: 参数, type: uint32}
+
+  # cmd29 - 参数批量查询响应
+  29:
+    - {len: 4, name: 参数开始地址, type: uint32}
+    - {len: 4, name: 参数个数, type: uint32, id: param_count}
+    - repeat_by: param_count
+      fields:
+        - {len: 4, name: 参数, type: uint32}
+
+  # cmd30 - 参数设置结果
+  30:
+    - {len: 4, name: 响应命令序号, type: uint32}
+    - {len: 2, name: 参数地址, type: uint16}
+    - {len: 2, name: 参数设置结果, type: uint16}
+
+  # cmd31 - 电价时段设置（变长循环）
+  31:
+    - {len: 4, name: 命令序号, type: uint32}
+    - {len: 1, name: 时段数量, type: uint8, id: period_count}
+    - repeat_by: period_count
+      fields:
+        - {len: 2, name: 开始时间, type: uint16, unit: hhmm}
+        - {len: 2, name: 结束时间, type: uint16, unit: hhmm}
+        - {len: 4, name: 电费, type: uint32, scale: 0.001, unit: CNY}
+        - {len: 4, name: 服务费, type: uint32, scale: 0.001, unit: CNY}
+        - {len: 1, name: 尖峰平谷标志段, type: uint8}
+
+  # cmd33 - 充电结算上报
+  33:
+    - {len: 4, name: 命令序号, type: uint32}
+    - {len: 2, name: 停止充电原因, type: uint16}
+    - {len: 4, name: 开始充电电量, type: uint32, scale: 0.01, unit: kWh}
+    - {len: 4, name: 充电电量, type: uint32, scale: 0.01, unit: kWh}
+    - {len: 1, name: 开始SOC, type: uint8, unit: "%"}
+    - {len: 1, name: 结束SOC, type: uint8, unit: "%"}
+    - {len: 4, name: 开始充电时间, type: uint32, unit: timestamp}
+    - {len: 4, name: 充电时长, type: uint32, unit: s}
+    - {len: 4, name: 电费, type: uint32, scale: 0.001, unit: CNY}
+    - {len: 4, name: 服务费, type: uint32, scale: 0.001, unit: CNY}
+
+  # cmd100 - 系统状态上报
+  100:
+    - {len: 1, name: 总枪数, type: uint8}
+    - {len: 4, name: 时间, type: uint32, unit: timestamp}
+    - {len: 2, name: 时间ms, type: uint16, unit: ms}
+    - {len: 4, name: MCU告警信息, type: binary_str_4bytes}
+    - {len: 4, name: 运营后台连接情况, type: uint32}
+    - {len: 1, name: 是否需要M2签到, type: uint8}
+    - {len: 1, name: MCU掉电紧急停机, type: uint8}
+
+  # cmd111 - 主机状态上报（复杂循环结构）
+  111:
+    - {len: 1, name: 主机工作状态, type: uint8}
+    - {len: 1, name: 热电偶1反馈, type: bitset8}
+    - {len: 1, name: 热电偶2反馈, type: bitset8}
+    - {len: 1, name: 热电偶3反馈, type: bitset8}
+    - {len: 1, name: 热电偶4反馈, type: bitset8}
+    - {len: 1, name: 预留隔离反馈1, type: bitset8}
+    - {len: 1, name: 预留隔离反馈2, type: bitset8}
+    - {len: 1, name: 倾斜, type: bitset8}
+    - {len: 1, name: 水浸, type: bitset8}
+    - {len: 1, name: 防雷1, type: bitset8}
+    - {len: 1, name: 防雷2, type: bitset8}
+    - {len: 1, name: 断路器1, type: bitset8}
+    - {len: 1, name: 断路器2, type: bitset8}
+    - {len: 1, name: 预留非隔离反馈1, type: bitset8}
+    - {len: 1, name: 预留非隔离反馈2, type: bitset8}
+    - {len: 1, name: 门禁1, type: bitset8}
+    - {len: 1, name: 门禁2, type: bitset8}
+    - {len: 1, name: 门禁3, type: bitset8}
+    - {len: 1, name: 预留输入干接点1, type: bitset8}
+    - {len: 1, name: 预留输入干接点2, type: bitset8}
+    - {len: 1, name: 主机掉电保护, type: bitset8}
+    - {len: 1, name: 硬件版本1, type: bitset8}
+    - {len: 1, name: 硬件版本2, type: bitset8}
+    - {len: 2, name: LED状态, type: bitset16}
+    - {len: 1, name: 风扇1调速, type: uint8}
+    - {len: 1, name: 门禁4, type: bitset8}
+    - {len: 1, name: 门禁5, type: bitset8}
+    - {len: 1, name: 门禁6, type: bitset8}
+    - {len: 1, name: C2掉电保护, type: bitset8}
+    - {len: 1, name: 断路器3, type: bitset8}
+    - {len: 1, name: 断路器4, type: bitset8}
+    - {len: 1, name: 防雷3, type: bitset8}
+    - {len: 1, name: 防雷4, type: bitset8}
+    - {len: 1, name: 断上级开关, type: bitset8}
+    - {len: 1, name: 急停状态, type: bitset8}
+    - {len: 6, name: 预留状态, type: hex}
+    - {len: 1, name: 预留状态2, type: uint8}
+    - {len: 1, name: 风扇2速度, type: uint8}
+    - {len: 4, name: 主机状态3, type: binary_str_4bytes}
+    - {len: 4, name: 主机状态4, type: binary_str_4bytes}
+    - {len: 2, name: A相电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: B相电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: C相电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: A相电流, type: uint16, scale: 0.1, unit: A}
+    - {len: 2, name: B相电流, type: uint16, scale: 0.1, unit: A}
+    - {len: 2, name: C相电流, type: uint16, scale: 0.1, unit: A}
+    - {len: 1, name: 电网频率, type: uint8, scale: 0.1, unit: Hz}
+    - {len: 4, name: 交流电表值, type: uint32, scale: 0.01, unit: kWh}
+    - {len: 1, name: 模块环境温度最高值, type: uint8, unit: "°C"}
+    - {len: 1, name: 模块环境温度最低值, type: uint8, unit: "°C"}
+    - {len: 4, name: 主机当前总需求功率, type: uint32, scale: 0.1, unit: kW}
+    - {len: 4, name: 主机当前输出功率, type: uint32, scale: 0.1, unit: kW}
+    - {len: 1, name: 主机进风口温度A, type: uint8, unit: "°C"}
+    - {len: 1, name: 主机进风口温度B, type: uint8, unit: "°C"}
+    - {len: 1, name: 主机出风口温度A, type: uint8, unit: "°C"}
+    - {len: 1, name: 主机出风口温度B, type: uint8, unit: "°C"}
+    - repeat_const: 4
+      fields:
+        - {len: 4, name: 主机系统告警, type: binary_str_4bytes}
+    - repeat_const: 28
+      fields:
+        - {len: 1, name: 枪状态, type: binary_str_1byte}
+        - {len: 2, name: 枪输出电压, type: uint16, scale: 0.1, unit: V}
+        - {len: 2, name: 枪输出电流, type: uint16, scale: 0.1, unit: A}
+        - {len: 1, name: 枪当前实际占用模块个数, type: uint8}
+        - {len: 1, name: 枪满足负载率最少模块个数, type: uint8}
+        - {len: 1, name: 枪满足最大功率最少模块个数, type: uint8}
+    - repeat_const: 2
+      fields:
+        - {len: 1, name: 液冷出口压力, type: uint8, scale: 0.1, unit: bar}
+
+  # cmd112 - 模块状态上报
+  112:
+    - {len: 1, name: 模块数量, type: uint8, id: module_count}
+    - repeat_const: 40
+      fields:
+        - {len: 2, name: 模块电压, type: uint16, scale: 0.1, unit: V}
+        - {len: 2, name: 模块电流, type: uint16, scale: 0.1, unit: A}
+        - {len: 1, name: 模块组号, type: uint8}
+        - {len: 1, name: 父节点模块, type: uint8}
+        - {len: 1, name: 子节点1模块, type: uint8}
+        - {len: 1, name: 子节点2模块, type: uint8}
+        - {len: 1, name: 子节点3模块, type: uint8}
+        - {len: 1, name: 子节点4模块, type: uint8}
+        - {len: 1, name: 子节点5模块, type: uint8}
+        - {len: 1, name: 子节点6模块, type: uint8}
+        - {len: 1, name: 子节点7模块, type: uint8}
+        - {len: 1, name: 子节点8模块, type: uint8}
+        - {len: 1, name: 子节点9模块, type: uint8}
+        - {len: 1, name: 子节点10模块, type: uint8}
+        - {len: 1, name: 子节点11模块, type: uint8}
+        - {len: 1, name: 子节点12模块, type: uint8}
+        - {len: 1, name: 模块故障码, type: uint8}
+        - {len: 2, name: 模块状态码, type: binary_str_2bytes}
+
+  # cmd114 - 模块版本信息
+  114:
+    - repeat_const: 40
+      fields:
+        - {len: 2, name: 模块AC版本, type: uint16}
+        - {len: 2, name: 模块DC版本, type: uint16}
+
+  # cmd115 - 接触器状态
+  115:
+    - {len: 4, name: 接触器有效个数, type: uint32}
+    - {len: 8, name: A面控制信号, type: hex}
+    - {len: 8, name: A面反馈信号+, type: hex}
+    - {len: 8, name: A面反馈信号-, type: hex}
+    - {len: 8, name: B面控制信号, type: hex}
+    - {len: 8, name: B面反馈信号+, type: hex}
+    - {len: 8, name: B面反馈信号-, type: hex}
+
+  # cmd201 - 终端充电状态上报
+  201:
+    - {len: 1, name: 工作状态, type: uint8}
+    - {len: 32, name: 枪故障状态, type: hex}
+    - {len: 1, name: 并充主枪的号, type: uint8}
+    - {len: 4, name: 当前电表读数, type: uint32, scale: 0.01, unit: kWh}
+    - {len: 4, name: 本次充电累计充电电量, type: uint32, scale: 0.01, unit: kWh}
+    - {len: 2, name: 当前充电功率, type: uint16, scale: 0.1, unit: kW}
+    - {len: 2, name: 终端充电状态, type: binary_str_2bytes}
+    - {len: 2, name: 枪需要输出的电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 枪需要输出的电流, type: uint16, scale: 0.1, unit: A}
+    - {len: 1, name: 充电模式, type: uint8}
+    - {len: 2, name: BMS需求电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: BMS需求电流, type: uint16, scale: 0.1, unit: A}
+    - {len: 2, name: 枪采样的模块电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 枪采样电池电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 单枪实际输出电流, type: uint16, scale: 0.1, unit: A}
+    - {len: 2, name: 总直流充电电流, type: uint16, scale: 0.1, unit: A}
+    - {len: 4, name: 启动充电订单识别码, type: uint32}
+    - {len: 2, name: 液冷2枪模块电压采样, type: uint16, scale: 0.1, unit: V}
+    - {len: 1, name: 并充组网状态, type: uint8}
+    - {len: 1, name: 组网枪数量, type: uint8}
+    - {len: 1, name: 并充组网1地址, type: uint8}
+    - {len: 1, name: 并充组网2地址, type: uint8}
+    - {len: 1, name: 并充组网3地址, type: uint8}
+    - {len: 1, name: 并充组网4地址, type: uint8}
+
+filters:
+  include_cmds: []
+  exclude_cmds: []

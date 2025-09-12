@@ -4,6 +4,7 @@ import sys
 import argparse
 from protocol_configs import get_protocol_info, get_supported_protocols
 from src.unified_protocol import UnifiedProtocol
+from src.yaml_unified_protocol import YamlUnifiedProtocol
 
 
 def run_protocol(protocol_name: str):
@@ -12,13 +13,22 @@ def run_protocol(protocol_name: str):
         protocol_info = get_protocol_info(protocol_name)
         print(f"协议配置: {protocol_info.protocol_name}")
         print(f"日志文件: {protocol_info.log_file}")
-        print(f"格式文件: {protocol_info.format_file}")
         
-        protocol = UnifiedProtocol(
-            protocol_info.log_file,
-            protocol_info.format_file,
-            protocol_info.config
-        )
+        # 检查是否有YAML配置文件
+        if hasattr(protocol_info, 'yaml_config_file') and protocol_info.yaml_config_file:
+            print(f"YAML配置: {protocol_info.yaml_config_file}")
+            protocol = YamlUnifiedProtocol(
+                protocol_info.log_file,
+                protocol_info.yaml_config_file
+            )
+        else:
+            print(f"格式文件: {protocol_info.format_file}")
+            protocol = UnifiedProtocol(
+                protocol_info.log_file,
+                protocol_info.format_file,
+                protocol_info.config
+            )
+        
         protocol.run()
     except ValueError as e:
         print(f"错误: {e}")

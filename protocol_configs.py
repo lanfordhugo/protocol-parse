@@ -52,16 +52,18 @@ HeaderField("startField", 0, 2, "big", "const", const_value=0x7dd0)
 =============================================================================
 """
 
-from typing import Dict, NamedTuple
+from typing import Dict, Optional
+from dataclasses import dataclass
 from src.base_protocol import HeaderField, ProtocolConfigNew
 
-
-class ProtocolInfo(NamedTuple):
+@dataclass
+class ProtocolInfo:
     """协议信息结构"""
     protocol_name: str
     log_file: str
-    format_file: str
+    format_file: str  # 兼容性保留，新协议使用yaml_config_file
     config: ProtocolConfigNew
+    yaml_config_file: Optional[str] = None  # 新增YAML配置文件路径
 
 
 # 所有协议配置已集中到下面的 PROTOCOL_CONFIGS 中，无需单独的配置函数
@@ -75,12 +77,13 @@ class ProtocolInfo(NamedTuple):
 PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
     
     # -----------------------------------------------------------------------------
-    # V8协议配置 - 用于解析V8设备的通信数据
+    # V8协议配置 - 用于解析V8设备的通信数据（已迁移到YAML）
     # -----------------------------------------------------------------------------
     "v8": ProtocolInfo(
         protocol_name="v8",                                    # 协议名字
         log_file="input_logs/v8_com.log",                    # 日志文件名
-        format_file="configs/v8/format.txt",         # 数据格式定义文件
+        format_file="configs/v8/format.txt",         # 数据格式定义文件（兼容性保留）
+        yaml_config_file="configs/v8/protocol.yaml",         # YAML配置文件
         config=ProtocolConfigNew(
             head_len=11,                                       # 数据包头部占11个字节
             tail_len=2,                                        # 数据包尾部占2个字节
@@ -98,12 +101,13 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
     ),
     
     # -----------------------------------------------------------------------------
-    # 小桔协议配置 - 用于解析小桔充电设备的通信数据
+    # 小桔协议配置 - 用于解析小桔充电设备的通信数据（已迁移到YAML）
     # -----------------------------------------------------------------------------
     "xiaoju": ProtocolInfo(
         protocol_name="xiaoju",                                # 协议名字
         log_file="input_logs/xiaoju.log",                   # 日志文件名
-        format_file="configs/xiaoju/format.txt",          # 数据格式定义文件
+        format_file="configs/xiaoju/format.txt",          # 数据格式定义文件（兼容性保留）
+        yaml_config_file="configs/xiaoju/protocol.yaml",         # YAML配置文件
         config=ProtocolConfigNew(
             head_len=14,                                       # 数据包头部占14个字节
             tail_len=1,                                        # 数据包尾部占1个字节
@@ -121,16 +125,17 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
     ),
     
     # -----------------------------------------------------------------------------
-    # Sinexcel协议配置 - 用于解析Sinexcel设备的通信数据
+    # Sinexcel协议配置 - 用于解析Sinexcel设备的通信数据（已迁移到YAML）
     # -----------------------------------------------------------------------------
     "sinexcel": ProtocolInfo(
         protocol_name="sinexcel",                              # 协议名字
         log_file="input_logs/sincexcel.log",                # 日志文件名
-        format_file="configs/sinexcel/format.txt",        # 数据格式定义文件
+        format_file="configs/sinexcel/format.txt",        # 数据格式定义文件（兼容性保留）
+        yaml_config_file="configs/sinexcel/protocol.yaml",         # YAML配置文件
         config=ProtocolConfigNew(
             head_len=8,                                        # 数据包头部占8个字节
             tail_len=1,                                        # 数据包尾部占1个字节
-            frame_head=r"AA F5",                              # 识别标志：以"DD E8"开头
+            frame_head=r"AA F5",                              # 识别标志：以"AA F5"开头
             head_fields=[                                      # 头部各字段配置：
                 HeaderField("cmd", 6, 2, "little", "uint"),                            # 命令字段：第7-8字节，数字类型
             ],
@@ -141,12 +146,13 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
     ),
     
     # -----------------------------------------------------------------------------
-    # 运维协议配置 - 用于解析运维设备的通信数据（与V8协议使用相同帧头）
+    # 运维协议配置 - 用于解析运维设备的通信数据（已迁移到YAML）
     # -----------------------------------------------------------------------------
     "yunwei": ProtocolInfo(
         protocol_name="yunwei",                                # 协议名字
         log_file="input_logs/yunwei.log",                   # 日志文件名
-        format_file="configs/yunwei/format.txt",          # 数据格式定义文件
+        format_file="configs/yunwei/format.txt",          # 数据格式定义文件（兼容性保留）
+        yaml_config_file="configs/yunwei/protocol.yaml",         # YAML配置文件
         config=ProtocolConfigNew(
             head_len=11,                                       # 数据包头部占11个字节（与V8相同）
             tail_len=2,                                        # 数据包尾部占2个字节（与V8相同）

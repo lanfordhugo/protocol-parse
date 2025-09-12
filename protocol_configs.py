@@ -80,7 +80,7 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
     "v8": ProtocolInfo(
         protocol_name="v8",                                    # 协议名字
         log_file="input_logs/v8_com.log",                    # 日志文件名
-        format_file="./resources/format_mcu_ccu.txt",         # 数据格式定义文件
+        format_file="configs/v8/format.txt",         # 数据格式定义文件
         config=ProtocolConfigNew(
             head_len=11,                                       # 数据包头部占11个字节
             tail_len=2,                                        # 数据包尾部占2个字节
@@ -91,7 +91,9 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
                 HeaderField("deviceType", 8, 1, "little", "uint"),   # 设备类型：第9字节，数字类型
                 HeaderField("addr", 9, 1, "little", "uint"),         # 地址字段：第10字节，数字类型
                 HeaderField("gunNum", 10, 1, "little", "uint"),      # 枪号字段：第11字节，数字类型
-            ]
+            ],
+            filter_file="configs/v8/filter.txt",
+            field_types_file="configs/v8/field_types.ini",
         )
     ),
     
@@ -101,7 +103,7 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
     "xiaoju": ProtocolInfo(
         protocol_name="xiaoju",                                # 协议名字
         log_file="input_logs/xiaoju.log",                   # 日志文件名
-        format_file="./resources/format_xiaoju.txt",          # 数据格式定义文件
+        format_file="configs/xiaoju/format.txt",          # 数据格式定义文件
         config=ProtocolConfigNew(
             head_len=14,                                       # 数据包头部占14个字节
             tail_len=1,                                        # 数据包尾部占1个字节
@@ -112,7 +114,9 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
                 HeaderField("version", 4, 4, "big", "hex"),                            # 版本字段：第5-8字节，十六进制类型
                 HeaderField("sequence", 8, 4, "little", "uint"),                       # 序列号字段：第9-12字节，数字类型
                 HeaderField("cmd", 12, 2, "little", "uint"),                          # 命令字段：第13-14字节，数字类型
-            ]
+            ],
+            filter_file="configs/xiaoju/filter.txt",
+            field_types_file="configs/xiaoju/field_types.ini",
         )
     ),
     
@@ -122,7 +126,7 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
     "sinexcel": ProtocolInfo(
         protocol_name="sinexcel",                              # 协议名字
         log_file="input_logs/sincexcel.log",                # 日志文件名
-        format_file="./resources/format_sinexcel.txt",        # 数据格式定义文件
+        format_file="configs/sinexcel/format.txt",        # 数据格式定义文件
         config=ProtocolConfigNew(
             head_len=8,                                        # 数据包头部占8个字节
             tail_len=1,                                        # 数据包尾部占1个字节
@@ -131,6 +135,8 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
                 HeaderField("cmd", 6, 2, "little", "uint"),                            # 命令字段：第7-8字节，数字类型
             ],
             cmd_aliases={1103: 1102, 1108: 1105}              # 命令别名：1103当作1102处理，1108当作1105处理
+            ,filter_file="configs/sinexcel/filter.txt",
+            field_types_file="configs/sinexcel/field_types.ini",
         )
     ),
     
@@ -140,7 +146,7 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
     "yunwei": ProtocolInfo(
         protocol_name="yunwei",                                # 协议名字
         log_file="input_logs/yunwei.log",                   # 日志文件名
-        format_file="./resources/format_yunwei.txt",          # 数据格式定义文件
+        format_file="configs/yunwei/format.txt",          # 数据格式定义文件
         config=ProtocolConfigNew(
             head_len=11,                                       # 数据包头部占11个字节（与V8相同）
             tail_len=2,                                        # 数据包尾部占2个字节（与V8相同）
@@ -150,7 +156,9 @@ PROTOCOL_CONFIGS: Dict[str, ProtocolInfo] = {
                 HeaderField("deviceType", 4, 1, "little", "uint"),                     # 设备类型：第5字节
                 HeaderField("addr", 8, 1, "little", "uint"),                          # 地址字段：第9字节
                 HeaderField("gunNum", 9, 1, "little", "uint"),                        # 枪号字段：第10字节
-            ]
+            ],
+            filter_file="configs/yunwei/filter.txt",
+            field_types_file="configs/yunwei/field_types.ini",
         )
     ),
     

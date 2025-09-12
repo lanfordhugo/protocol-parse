@@ -8,7 +8,7 @@ from src.console_log import ConsoleLog
 import sys
 from src.logger_instance import log
 import src.cmdformat as cmdformat
-from src.field_parser import parse_multi_bit_date
+from src.field_parser import parse_multi_bit_date, FieldParseEngine
 from collections import namedtuple
 
 ProtocolConfig = namedtuple('ProtocolConfig', ['head_len', 'tail_len', 'frame_head'])
@@ -39,6 +39,9 @@ class ProtocolConfigNew:
     # 可选配置
     time_regex: str = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:|\.]\d{3}"
     cmd_aliases: Dict[int, int] = field(default_factory=dict)
+    # 新增：协议专属过滤与字段类型配置路径
+    filter_file: str = ""
+    field_types_file: str = ""
 
 
 # Legacy support - will be removed later
@@ -54,6 +57,15 @@ class BaseProtocol(ABC):
         self.log_file_name = log_file_name
         self.format_file_path = format_file_path
         self.config = config
+        # 字段解析引擎（基于协议的 field_types.ini）
+        try:
+            if hasattr(config, 'field_types_file') and config.field_types_file:
+                self.field_parse_engine = FieldParseEngine(config.field_types_file)
+            else:
+                self.field_parse_engine = None
+        except Exception as e:
+            log.e_print(f"初始化字段解析引擎失败: {e}")
+            self.field_parse_engine = None
 
     def parse_message(self, cmd: int, message: str) -> Dict[str, Any]:
         """
@@ -63,11 +75,16 @@ class BaseProtocol(ABC):
         :param message: 消息字符串
         :return: 解析后的消息字典
         """
-        format_ = cmdformat.get_format(self.format_file_path, cmd)
+        try:
+            format_ = cmdformat.get_format(self.format_file_path, cmd)
+        except Exception as e:
+            # 缺失格式或解析失败时，跳过该报文
+            self.log.d_print(f"cmd={cmd} 缺少格式定义或格式解析失败: {e}")
+            return {}
         data_list = cmdformat.strlist_to_hexlist(message)
         data_start_index = self.config.head_len
         valid_data_list = data_list[data_start_index:-self.config.tail_len]
-        return parse_multi_bit_date(valid_data_list, format_)
+        return parse_multi_bit_date(valid_data_list, format_, self.field_parse_engine)
 
     def extract_data_from_file(self, file_path: str) -> List[Dict[str, str]]:
         """
@@ -149,7 +166,7 @@ class BaseProtocol(ABC):
             # 向后兼容：如果是旧配置，使用抽象方法
             return self.parse_data_content(data_groups)
             
-        valid_cmd = cmdformat.load_filter()
+        valid_cmd = cmdformat.load_filter(self.config.filter_file)
         if valid_cmd is None:
             log.e_print("valid_cmd is None")
             return []

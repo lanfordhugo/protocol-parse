@@ -27,10 +27,17 @@ class UnifiedProtocol(BaseProtocol):
         legacy_config = LegacyConfig(config.head_len, config.tail_len, config.frame_head)
         
         super().__init__(log_file_name, format_file_path, legacy_config)
+        # 使用协议专属字段类型配置初始化解析引擎
+        try:
+            from src.field_parser import FieldParseEngine
+            if self.new_config.field_types_file:
+                self.field_parse_engine = FieldParseEngine(self.new_config.field_types_file)
+        except Exception as e:
+            log.e_print(f"初始化字段解析引擎失败: {e}")
 
     def parse_data_content(self, data_groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """使用配置驱动的头部字段解析"""
-        valid_cmd = cmdformat.load_filter()
+        valid_cmd = cmdformat.load_filter(self.new_config.filter_file)
         if valid_cmd is None:
             log.e_print("valid_cmd is None")
             return []

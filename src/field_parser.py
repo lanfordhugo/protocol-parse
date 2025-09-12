@@ -1,5 +1,6 @@
 from src import cmdformat
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
+import configparser
 
 
 # Define lists for different types of keys
@@ -324,7 +325,186 @@ def get_multi_bit_val(byte: int, start: int, bit_number: int) -> int:
     return (byte >> start) & (0xFF >> (8 - bit_number))
 
 
-def parse_multi_bit_date(data_list: List[int], format_: List[Any]) -> Dict[str, Any]:
+class ParserRegistry:
+    """字段解析器注册表"""
+    def __init__(self):
+        self._parsers = {
+            "ascii": self._parse_ascii,
+            "bcd": self._parse_bcd,
+            "uint": self._parse_uint,
+            "hex": self._parse_hex,
+            "cp56time2a": self._parse_cp56time2a,
+            "binary_str": self._parse_binary_str,
+        }
+
+    def parse(self, parser_key: str, data: List[int], options: Optional[Dict[str, Any]] = None) -> Any:
+        if parser_key not in self._parsers:
+            # 默认回退为 uint
+            return data_byte_merge(data)
+        return self._parsers[parser_key](data, options or {})
+
+    @staticmethod
+    def _parse_ascii(data: List[int], _: Dict[str, Any]) -> str:
+        return get_ascii_data(data)
+
+    @staticmethod
+    def _parse_bcd(data: List[int], _: Dict[str, Any]) -> str:
+        return get_bcd_data(data)
+
+    @staticmethod
+    def _parse_uint(data: List[int], _: Dict[str, Any]) -> Optional[int]:
+        return data_byte_merge(data)
+
+    @staticmethod
+    def _parse_hex(data: List[int], _: Dict[str, Any]) -> str:
+        if not data:
+            return ""
+        return "".join(f"{b:02X}" for b in data)
+
+    @staticmethod
+    def _parse_cp56time2a(data: List[int], _: Dict[str, Any]) -> str:
+        try:
+            if len(data) != 7:
+                # 长度不匹配，回退为 hex 表示，避免抛错
+                return "".join(f"{b:02X}" for b in data)
+            return get_time_from_cp56time2a(data)
+        except Exception:
+            return "".join(f"{b:02X}" for b in data)
+
+    @staticmethod
+    def _parse_binary_str(data: List[int], options: Dict[str, Any]) -> str:
+        size = options.get("bytes")
+        value = data_byte_merge(data)
+        if size is None:
+            size = len(data)
+        try:
+            if size == 8:
+                return get_eight_binary_str(value)
+            if size == 4:
+                return get_four_binary_str(value)
+            if size == 3:
+                return get_three_binary_str(value)
+            if size == 2:
+                return get_two_binary_str(value)
+            # 默认按1字节
+            return get_binary_str(value & 0xFF)
+        except Exception:
+            return get_binary_str(value & 0xFF)
+
+
+class FieldParseEngine:
+    """根据 INI 配置将字段名映射到解析类型"""
+
+    ALLOWED_SECTIONS = {
+        "ascii",
+        "bcd",
+        "uint",
+        "hex",
+        "time.cp56time2a",
+        "binary_str.1byte",
+        "binary_str.2bytes",
+        "binary_str.3bytes",
+        "binary_str.4bytes",
+        "binary_str.8bytes",
+        "meta",
+    }
+
+    def __init__(self, ini_path: str):
+        self.ini_path = ini_path
+        self.name_to_spec: Dict[str, Tuple[str, Dict[str, Any]]] = {}
+        self.fallback_type: str = "uint"
+        self._load()
+
+    @staticmethod
+    def _normalize_field_name(name: str) -> str:
+        if not name:
+            return name
+        stripped = name.strip()
+        # 去除尾部数字序号
+        while stripped and stripped[-1].isdigit():
+            stripped = stripped[:-1]
+        return stripped.strip()
+
+    def _parse_names_value(self, raw: str) -> List[str]:
+        if not raw:
+            return []
+        lines = [line.strip() for line in raw.splitlines()]
+        return [ln for ln in lines if ln]
+
+    def _register_group(self, section: str, names: List[str]):
+        if section == "ascii":
+            parser_key, options = "ascii", {}
+        elif section == "bcd":
+            parser_key, options = "bcd", {}
+        elif section == "uint":
+            parser_key, options = "uint", {}
+        elif section == "hex":
+            parser_key, options = "hex", {}
+        elif section == "time.cp56time2a":
+            parser_key, options = "cp56time2a", {}
+        elif section.startswith("binary_str."):
+            size_map = {
+                "binary_str.1byte": 1,
+                "binary_str.2bytes": 2,
+                "binary_str.3bytes": 3,
+                "binary_str.4bytes": 4,
+                "binary_str.8bytes": 8,
+            }
+            parser_key, options = "binary_str", {"bytes": size_map.get(section)}
+        else:
+            raise ValueError(f"未知分组: {section}")
+
+        for n in names:
+            norm = self._normalize_field_name(n)
+            if not norm:
+                continue
+            self.name_to_spec[norm] = (parser_key, options)
+
+    def _load(self):
+        parser = configparser.ConfigParser(interpolation=None, delimiters=("="))
+        parser.optionxform = str  # 保持大小写
+        read_ok = parser.read(self.ini_path, encoding="utf-8")
+        if not read_ok:
+            raise IOError(f"无法读取字段类型配置: {self.ini_path}")
+
+        # 校验未知分组
+        unknown = set(parser.sections()) - self.ALLOWED_SECTIONS
+        if unknown:
+            raise ValueError(f"未知分组 {unknown}，允许的分组为 {sorted(self.ALLOWED_SECTIONS)}")
+
+        # meta
+        if parser.has_section("meta"):
+            self.fallback_type = parser.get("meta", "fallback_type", fallback="uint").strip() or "uint"
+
+        for section in parser.sections():
+            if section == "meta":
+                continue
+            if not parser.has_option(section, "names"):
+                raise ValueError(f"分组 [{section}] 缺少 names，请逐行填写字段名")
+            raw = parser.get(section, "names")
+            names = self._parse_names_value(raw)
+            self._register_group(section, names)
+
+    def resolve_parse_type(self, field_name: str) -> Tuple[str, Dict[str, Any]]:
+        norm = self._normalize_field_name(field_name)
+        spec = self.name_to_spec.get(norm)
+        if spec:
+            return spec
+        # 回退
+        if self.fallback_type == "hex":
+            return ("hex", {})
+        if self.fallback_type == "ascii":
+            return ("ascii", {})
+        if self.fallback_type == "bcd":
+            return ("bcd", {})
+        # 默认 uint
+        return ("uint", {})
+
+
+_GLOBAL_PARSER_REGISTRY = ParserRegistry()
+
+
+def parse_multi_bit_date(data_list: List[int], format_: List[Any], engine: Optional[FieldParseEngine] = None) -> Dict[str, Any]:
     """
     解析报文中的数据，支持按位划分和按字节划分的混合格式，也兼容普通报文
 
@@ -384,7 +564,12 @@ def parse_multi_bit_date(data_list: List[int], format_: List[Any]) -> Dict[str, 
             # 按字节解析
             # 调用parse_byte_data函数解析按字节处理的数据
             parse_byte_data(
-                data_list, cur_parse_index, data, key_format[index], parsed_dict
+                data_list,
+                cur_parse_index,
+                data,
+                key_format[index],
+                parsed_dict,
+                engine,
             )
             # 更新当前解析的索引，指向下一个字段
             cur_parse_index += data
@@ -429,6 +614,7 @@ def parse_byte_data(
     length: int,
     key: str,
     parsed_dict: Dict[str, Any],
+    engine: Optional[FieldParseEngine] = None,
 ):
     """
     解析按字节处理的报文
@@ -449,35 +635,15 @@ def parse_byte_data(
     # 移除键名中的数字，以便于匹配预定义的键类型
     format_key = key.strip("1234567890")
 
-    # 根据字段类型选择相应的解析方法
-    if format_key in bcd_keys:
-        parsed_dict[key] = get_bcd_data(data)  # BCD编码数据解析
-    elif format_key in cp_time_keys:
-        parsed_dict[key] = get_time_from_cp56time2a(
-            data
-        )  # 时间数据解析（CP56Time2a格式）
-    elif format_key in ascii_keys:
-        parsed_dict[key] = get_ascii_data(data)  # ASCII编码数据解析
-    elif format_key in eight_binary_keys:
-        parsed_dict[key] = get_eight_binary_str(
-            data_byte_merge(data)
-        )  # 8位二进制字符串解析
-    elif format_key in four_binary_keys:
-        parsed_dict[key] = get_four_binary_str(
-            data_byte_merge(data)
-        )  # 4位二进制字符串解析
-    elif format_key in three_binary_keys:
-        parsed_dict[key] = get_three_binary_str(
-            data_byte_merge(data)
-        )  # 3位二进制字符串解析
-    elif format_key in two_binary_keys:
-        parsed_dict[key] = get_two_binary_str(
-            data_byte_merge(data)
-        )  # 2位二进制字符串解析
-    elif format_key in binary_keys:
-        parsed_dict[key] = get_binary_str(data_byte_merge(data))  # 普通二进制字符串解析
-    else:
-        # 对于未定义的类型，直接合并字节数据
+    # 使用配置驱动解析（无引擎时回退为 uint）
+    try:
+        if engine is None:
+            parsed_dict[key] = data_byte_merge(data)
+            return
+        parser_key, options = engine.resolve_parse_type(format_key)
+        parsed_dict[key] = _GLOBAL_PARSER_REGISTRY.parse(parser_key, data, options)
+    except Exception as e:
+        # 出错时回退，避免整体解析中断
         parsed_dict[key] = data_byte_merge(data)
 
 

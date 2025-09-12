@@ -297,25 +297,26 @@ def get_alarm_stop_dict():
     return alarm_dict, stop_dict
 
 
-def load_filter():
+def load_filter(filter_file_path: str) -> list:
     """
-    加载过滤参数
+    加载过滤参数（强制传入路径）
     """
-    # 从文件./resources/filter.txt中读取过滤参数,cmd=[609,610,611,612]
-    with open("./resources/filter.txt", "r", encoding="utf-8") as file:
-        filter_lines = file.readlines()
-        for one_line in filter_lines:
-            if "cmd" in one_line:
-                cmd = one_line.split("=")[1].strip()
-                try:
-                    # 使用 ast.literal_eval 安全地评估字符串，避免代码注入风险
-                    cmd_list = ast.literal_eval(cmd)
-                    if isinstance(cmd_list, list):
-                        return cmd_list
-                except (ValueError, SyntaxError):
-                    # 如果解析失败，返回空列表
-                    return []
-    # 如果没有找到 "cmd" 行，返回空列表
+    try:
+        with open(filter_file_path, "r", encoding="utf-8") as file:
+            filter_lines = file.readlines()
+            for one_line in filter_lines:
+                if "cmd" in one_line:
+                    cmd = one_line.split("=")[1].strip()
+                    try:
+                        # 使用 ast.literal_eval 安全地评估字符串，避免代码注入风险
+                        cmd_list = ast.literal_eval(cmd)
+                        if isinstance(cmd_list, list):
+                            return cmd_list
+                    except (ValueError, SyntaxError):
+                        return []
+    except IOError as e:
+        log.e_print(f"无法读取过滤文件 {filter_file_path}: {str(e)}")
+        return []
     return []
 
 if __name__ == "__main__":

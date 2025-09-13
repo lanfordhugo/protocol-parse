@@ -271,6 +271,10 @@ class MyLogger:
         :param max_files: 最大保留的日志文件数量
         :return: MyLogger 实例
         """
+        # PRINT_ONLY模式下不需要检查文件路径冲突
+        if log_mode == LogMode.PRINT_ONLY:
+            return super(MyLogger, cls).__new__(cls)
+            
         log_dir = log_dir or "log"
         file_name = f"log_{log_file}.txt"
         file_path = os.path.join(log_dir, file_name)
@@ -308,16 +312,26 @@ class MyLogger:
             'log_mode': log_mode,
             'max_size': max_size
         }
-        self.file_name = f"{self.config['base_file_name']}.txt"
-        os.makedirs(self.config['log_dir'], exist_ok=True)
-        self.file_path = os.path.join(self.config['log_dir'], self.file_name)
-        self.file = None
-        self.last_flush_time = time.time()
-        self.flush_interval = 60
-        self.open_file()
-        if not MyLogger._exit_handler_registered:
-            atexit.register(self._exit_handler)
-            MyLogger._exit_handler_registered = True
+        
+        # 只有在需要保存文件的模式下才创建文件相关资源
+        if log_mode in [LogMode.SAVE_ONLY, LogMode.PRINT_AND_SAVE]:
+            self.file_name = f"{self.config['base_file_name']}.txt"
+            os.makedirs(self.config['log_dir'], exist_ok=True)
+            self.file_path = os.path.join(self.config['log_dir'], self.file_name)
+            self.file = None
+            self.last_flush_time = time.time()
+            self.flush_interval = 60
+            self.open_file()
+            if not MyLogger._exit_handler_registered:
+                atexit.register(self._exit_handler)
+                MyLogger._exit_handler_registered = True
+        else:
+            # PRINT_ONLY模式下不创建文件相关资源
+            self.file_name = None
+            self.file_path = None
+            self.file = None
+            self.last_flush_time = None
+            self.flush_interval = None
 
         # 标记初始化完成
         self.initialized = True
@@ -343,7 +357,11 @@ class MyLogger:
     def open_file(self):
         """
         打开日志文件。如果文件未打开或已关闭，则重新打开。
+        只有在需要保存文件的模式下才执行。
         """
+        if self.config['log_mode'] == LogMode.PRINT_ONLY:
+            return  # PRINT_ONLY模式下不操作文件
+            
         print("打开日志文件:", self.file_path)
         if self.file is None or self.file.closed:
             try:
@@ -388,6 +406,9 @@ class MyLogger:
         """
         检查是否需要刷新文件，如果距离上次刷新时间超过设定间隔，则刷新文件。
         """
+        if self.config['log_mode'] == LogMode.PRINT_ONLY:
+            return  # PRINT_ONLY模式下不操作文件
+            
         current_time = time.time()
         if current_time - self.last_flush_time > self.flush_interval:
             if self.file:
@@ -398,6 +419,9 @@ class MyLogger:
         """
         滚动日志文件。
         """
+        if self.config['log_mode'] == LogMode.PRINT_ONLY:
+            return  # PRINT_ONLY模式下不操作文件
+            
         self.close_file()
         print(f"关闭文件: {self.file_path}")
 

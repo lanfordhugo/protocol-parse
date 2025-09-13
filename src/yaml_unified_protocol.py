@@ -82,7 +82,7 @@ class YamlUnifiedProtocol(BaseProtocol):
                     
                     # 构建结果
                     result = {
-                        'timestamp': group.get('timestamp', ''),
+                        'timestamp': group.get('time', ''),  # 使用'time'而不是'timestamp'
                         'direction': group.get('direction', ''),
                         'raw_data': group.get('data', ''),
                         'header': header_info,
@@ -96,7 +96,7 @@ class YamlUnifiedProtocol(BaseProtocol):
                     log.d_print(f"解析命令{cmd_id}数据失败: {e}")
                     # 添加原始数据作为备用
                     result = {
-                        'timestamp': group.get('timestamp', ''),
+                        'timestamp': group.get('time', ''),  # 使用'time'而不是'timestamp'
                         'direction': group.get('direction', ''),
                         'raw_data': group.get('data', ''),
                         'header': header_info,
@@ -175,7 +175,7 @@ class YamlUnifiedProtocol(BaseProtocol):
             raise ValueError(f"Unsupported uint size: {len(data)}")
 
     def screen_parse_data(self, parse_data: List[Dict[str, Any]]):
-        """筛选并打印解析结果"""
+        """筛选并打印解析结果，同时输出到特定的解析文件"""
         # 记录日志信息（带时间戳）
         log.i_print("筛选解析报文并打印")
         
@@ -183,12 +183,26 @@ class YamlUnifiedProtocol(BaseProtocol):
             log.printf("没有解析到有效数据")
             return
         
-        log.printf(f"成功解析 {len(parse_data)} 条数据")
-        
-        # 打印协议信息
+        # 创建解析结果输出文件
         protocol_info = self.yaml_format.get_protocol_info()
-        log.printf(f"协议: {protocol_info['protocol']} v{protocol_info['version']}")
-        log.printf(f"支持命令: {len(protocol_info['supported_cmds'])} 个")
+        protocol_name = protocol_info['protocol']
+        
+        import datetime
+        import os
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")
+        output_filename = f"parsed_{protocol_name}_log_{timestamp}.txt"
+        output_path = os.path.join("parsed_log", output_filename)
+        
+        # 确保输出目录存在
+        os.makedirs("parsed_log", exist_ok=True)
+        
+        # 准备输出内容
+        output_lines = []
+        
+        # 协议信息
+        output_lines.append(f"成功解析 {len(parse_data)} 条数据")
+        output_lines.append(f"协议: {protocol_name} v{protocol_info['version']}")
+        output_lines.append(f"支持命令: {len(protocol_info['supported_cmds'])} 个")
         
         # 统计命令频次
         cmd_stats = {}
@@ -197,28 +211,38 @@ class YamlUnifiedProtocol(BaseProtocol):
             if cmd:
                 cmd_stats[cmd] = cmd_stats.get(cmd, 0) + 1
         
-        log.printf("命令统计:")
+        output_lines.append("命令统计:")
         for cmd, count in sorted(cmd_stats.items()):
-            log.printf(f"  cmd{cmd}: {count} 条")
+            output_lines.append(f"  cmd{cmd}: {count} 条")
         
-        # 详细输出前几条数据
-        for i, item in enumerate(parse_data[:5]):  # 只显示前5条
-            log.printf(f"\n=== 数据项 {i+1} ===")
-            log.printf(f"时间: {item.get('timestamp', 'N/A')}")
-            log.printf(f"方向: {item.get('direction', 'N/A')}")
-            log.printf(f"命令: cmd{item.get('cmd', 'N/A')}")
+        # 详细输出所有数据
+        for i, item in enumerate(parse_data):
+            output_lines.append(f"\n=== 数据项 {i+1} ===")
+            output_lines.append(f"时间: {item.get('timestamp', 'N/A')}")
+            output_lines.append(f"方向: {item.get('direction', 'N/A')}")
+            output_lines.append(f"命令: cmd{item.get('cmd', 'N/A')}")
             
             # 打印解析内容
             content = item.get('content', {})
             if content:
-                log.printf("解析内容:")
-                self._print_content(content, indent=2)
+                output_lines.append("解析内容:")
+                self._collect_content_lines(content, output_lines, indent=2)
             
             if 'parse_error' in item:
-                log.printf(f"解析错误: {item['parse_error']}")
+                output_lines.append(f"解析错误: {item['parse_error']}")
         
-        if len(parse_data) > 5:
-            log.printf(f"\n... 还有 {len(parse_data) - 5} 条数据未显示")
+        # 同时输出到控制台和文件
+        for line in output_lines:
+            log.printf(line)
+        
+        # 写入解析结果文件
+        try:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                for line in output_lines:
+                    f.write(line + '\n')
+            log.i_print(f"解析结果已保存到: {output_path}")
+        except Exception as e:
+            log.e_print(f"保存解析结果失败: {e}")
 
     def _print_content(self, content: Dict[str, Any], indent: int = 0):
         """递归打印内容"""
@@ -245,6 +269,94 @@ class YamlUnifiedProtocol(BaseProtocol):
                     log.printf(f"{prefix}  ... 还有 {len(value) - 3} 项")
             else:
                 log.printf(f"{prefix}{key}: {value}")
+
+    def _collect_content_lines(self, content: Dict[str, Any], output_lines: List[str], indent: int = 0):
+        """递归收集内容行到列表中"""
+        prefix = "  " * indent
+        
+        for key, value in content.items():
+            if isinstance(value, dict):
+                if 'value' in value and 'name' in value:
+                    # 枚举值
+                    output_lines.append(f"{prefix}{key}: {value['value']} ({value['name']})")
+                else:
+                    # 嵌套字典
+                    output_lines.append(f"{prefix}{key}:")
+                    self._collect_content_lines(value, output_lines, indent + 1)
+            elif isinstance(value, list):
+                output_lines.append(f"{prefix}{key}: [{len(value)} 项]")
+                for i, item in enumerate(value[:3]):  # 只显示前3项
+                    if isinstance(item, dict):
+                        output_lines.append(f"{prefix}  [{i}]:")
+                        self._collect_content_lines(item, output_lines, indent + 2)
+                    else:
+                        output_lines.append(f"{prefix}  [{i}]: {item}")
+                if len(value) > 3:
+                    output_lines.append(f"{prefix}  ... 还有 {len(value) - 3} 项")
+            else:
+                output_lines.append(f"{prefix}{key}: {value}")
+
+    def extract_data_from_file(self, file_path: str) -> List[Dict[str, str]]:
+        """
+        从文件中提取数据，增强版本支持提取方向信息
+        
+        :param file_path: 文件路径
+        :return: 提取的数据列表
+        """
+        import re
+        
+        info_line_re = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:|\.]\d{3}")
+        byte_sequence_re = re.compile(self.yaml_config.frame_head)
+        direction_re = re.compile(r"(Send|Recv)")  # 提取发送/接收方向
+
+        data_groups = []
+        current_group = None
+        is_collecting_data = False
+
+        try:
+            with open(file_path, "r", encoding='utf-8') as file:
+                for line in file:
+                    line = line.strip()
+                    if line == "":
+                        continue
+
+                    info_line_match = info_line_re.search(line)
+                    if info_line_match:
+                        if current_group:
+                            data_groups.append(current_group)
+                            is_collecting_data = False
+                        
+                        # 提取时间
+                        time_str = info_line_match.group()
+                        
+                        # 提取方向
+                        direction_match = direction_re.search(line)
+                        direction = direction_match.group() if direction_match else ""
+                        
+                        current_group = {
+                            "time": time_str,
+                            "direction": direction,
+                            "data": ""
+                        }
+                        continue
+
+                    # 检查行中是否包含特定字节序列
+                    byte_sequence_match = byte_sequence_re.search(line)
+                    if byte_sequence_match:
+                        is_collecting_data = True
+                        # 从匹配的字节序列开始收集数据
+                        line = line[byte_sequence_match.start():]
+
+                    if is_collecting_data and current_group is not None:
+                        current_group["data"] += line + " "
+
+                if current_group and current_group["data"]:
+                    data_groups.append(current_group)
+
+            return data_groups
+        except IOError as e:
+            log.e_print(f"无法打开文件 {file_path}: {str(e)}")
+            raise IOError(f"无法打开文件 {file_path}: {str(e)}")
 
     def run(self):
         """运行协议解析"""

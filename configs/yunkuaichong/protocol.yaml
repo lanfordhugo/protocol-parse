@@ -1,0 +1,236 @@
+# ==================================================================================
+# 云快充平台协议V1.6配置文件
+# ==================================================================================
+
+# 协议基本信息
+meta:
+  protocol: yunkuaichong
+  version: 1.6
+  default_endian: LE
+  notes: 云快充平台协议V1.6 - 充电桩与云快充服务平台交互协议
+
+# 协议兼容性配置
+compatibility:
+  head_len: 6                     # 报文头长度（字节数）
+  tail_len: 2                     # 报文尾长度（字节数）  
+  frame_head: "68"               # 帧头标识（16进制字符串）
+  
+  # 头部字段定义 - 从报文头中提取关键信息
+  head_fields:
+    - {name: "frame_type", offset: 4, length: 1, endian: "little", type: "uint"}    # 帧类型码
+    - {name: "sequence", offset: 2, length: 2, endian: "little", type: "uint"}      # 序列号
+    - {name: "encrypt_flag", offset: 3, length: 1, endian: "little", type: "uint"}  # 加密标志
+    - {name: "data_length", offset: 1, length: 1, endian: "little", type: "uint"}   # 数据长度
+
+# 数据类型定义
+types:
+  # 基础整数类型
+  uint8:   { base: uint, bytes: 1, signed: false }
+  uint16:  { base: uint, bytes: 2, signed: false }
+  uint32:  { base: uint, bytes: 4, signed: false }
+  int16:   { base: int,  bytes: 2, signed: true }
+  int32:   { base: int,  bytes: 4, signed: true }
+  
+  # 字符串类型
+  ascii:   { base: str,  encoding: ASCII }
+  utf8:    { base: str,  encoding: UTF8 }
+  
+  # 特殊显示类型
+  hex:     { base: hex }
+  
+  # BCD码类型
+  bcd1:    { base: bcd, bytes: 1 }
+  bcd2:    { base: bcd, bytes: 2 }
+  bcd3:    { base: bcd, bytes: 3 }
+  bcd4:    { base: bcd, bytes: 4 }
+  bcd6:    { base: bcd, bytes: 6 }
+  bcd7:    { base: bcd, bytes: 7 }
+  bcd10:   { base: bcd, bytes: 10 }
+  bcd16:   { base: bcd, bytes: 16 }
+  
+  # 时间类型
+  cp56time2a: { base: time.cp56time2a, bytes: 7 }
+  
+  # 二进制字符串类型
+  binary_str_1byte:  { base: binary_str, bytes: 1 }
+  binary_str_2bytes: { base: binary_str, bytes: 2 }
+  binary_str_4bytes: { base: binary_str, bytes: 4 }
+
+# 枚举定义
+enums:
+  # 登录结果枚举
+  login_result:
+    0: 登陆成功
+    1: 登陆失败
+  
+  # 桩类型枚举
+  pile_type:
+    0: 交流
+    1: 直流
+    2: 交直流一体
+  
+  # 网络连接类型枚举
+  network_type:
+    1: LAN
+    2: WAN
+    3: 其他
+  
+  # 运营商枚举
+  operator:
+    0: 移动
+    2: 电信
+    3: 联通
+    4: 其他
+  
+  # 枪状态枚举
+  gun_status:
+    0: 正常
+    1: 故障
+  
+  # 充电状态枚举
+  charge_status:
+    0: 未知
+    1: 空闲
+    2: 占位
+    3: 准备充电
+    4: 正在充电
+    5: 充电结束
+    6: 故障
+
+# 命令定义
+cmds:
+  # --------------------------------------------------------------------------------
+  # 0x01：充电桩登录认证
+  # --------------------------------------------------------------------------------
+  1:
+    - {len: 7, name: 桩编码, type: bcd7}                                        # 桩编码，不足7位补0
+    - {len: 1, name: 桩类型, type: uint8, enum: pile_type}                      # 桩类型
+    - {len: 1, name: 充电枪数量, type: uint8}                                   # 充电枪数量
+    - {len: 1, name: 通信协议版本, type: uint8}                                # 通信协议版本
+    - {len: 16, name: 程序版本, type: ascii}                                   # 程序版本
+    - {len: 1, name: 网络连接类型, type: uint8, enum: network_type}             # 网络连接类型
+    - {len: 10, name: SIM卡, type: bcd10}                                      # SIM卡号，不足10位补零
+    - {len: 1, name: 运营商, type: uint8, enum: operator}                      # 运营商
+  
+  # --------------------------------------------------------------------------------
+  # 0x02：登录认证应答
+  # --------------------------------------------------------------------------------
+  2:
+    - {len: 7, name: 桩编码, type: bcd7}                                        # 桩编码
+    - {len: 1, name: 登陆结果, type: uint8, enum: login_result}                 # 登陆结果
+  
+  # --------------------------------------------------------------------------------
+  # 0x03：充电桩心跳包
+  # --------------------------------------------------------------------------------
+  3:
+    - {len: 7, name: 桩编码, type: bcd7}                                        # 桩编码
+    - {len: 1, name: 枪号, type: bcd1}                                          # 枪号
+    - {len: 1, name: 枪状态, type: uint8, enum: gun_status}                     # 枪状态
+  
+  # --------------------------------------------------------------------------------
+  # 0x04：心跳包应答
+  # --------------------------------------------------------------------------------
+  4:
+    - {len: 7, name: 桩编码, type: bcd7}                                        # 桩编码
+    - {len: 1, name: 应答结果, type: uint8}                                     # 应答结果
+  
+  # --------------------------------------------------------------------------------
+  # 0x05：计费模型验证请求
+  # --------------------------------------------------------------------------------
+  5:
+    - {len: 7, name: 桩编码, type: bcd7}                                        # 桩编码
+    - {len: 1, name: 枪号, type: bcd1}                                          # 枪号
+    - {len: 16, name: 计费模型编码, type: ascii}                                # 计费模型编码
+  
+  # --------------------------------------------------------------------------------
+  # 0x06：计费模型验证请求应答
+  # --------------------------------------------------------------------------------
+  6:
+    - {len: 7, name: 桩编码, type: bcd7}                                        # 桩编码
+    - {len: 1, name: 枪号, type: bcd1}                                          # 枪号
+    - {len: 1, name: 验证结果, type: uint8}                                     # 验证结果：0一致，1不一致
+  
+  # --------------------------------------------------------------------------------
+  # 0x09：充电桩计费模型请求
+  # --------------------------------------------------------------------------------
+  9:
+    - {len: 7, name: 桩编码, type: bcd7}                                        # 桩编码
+    - {len: 1, name: 枪号, type: bcd1}                                          # 枪号
+  
+  # --------------------------------------------------------------------------------
+  # 0x0A：计费模型请求应答
+  # --------------------------------------------------------------------------------
+  10:
+    - {len: 7, name: 桩编码, type: bcd7}                                        # 桩编码
+    - {len: 1, name: 枪号, type: bcd1}                                          # 枪号
+    - {len: 16, name: 计费模型编码, type: ascii}                                # 计费模型编码
+    - {len: 192, name: 费率信息, type: hex}                                     # 48段费率信息，每段4字节
+  
+  # --------------------------------------------------------------------------------
+  # 0x12：读取实时监测数据
+  # --------------------------------------------------------------------------------
+  18:
+    - {len: 7, name: 桩编码, type: bcd7}                                        # 桩编码
+    - {len: 1, name: 枪号, type: bcd1}                                          # 枪号
+  
+  # --------------------------------------------------------------------------------
+  # 0x13：离线监测数据（实时数据上传）
+  # --------------------------------------------------------------------------------
+  19:
+    - {len: 7, name: 桩编码, type: bcd7}                                        # 桩编码
+    - {len: 1, name: 枪号, type: bcd1}                                          # 枪号
+    - {len: 1, name: 充电枪状态, type: uint8, enum: charge_status}              # 充电枪状态
+    - {len: 2, name: SOC, type: uint16, scale: 0.1, unit: "%"}                 # SOC百分比，精度0.1%
+    - {len: 4, name: 需求电压, type: uint32, scale: 0.1, unit: "V"}            # 需求电压，精度0.1V
+    - {len: 4, name: 需求电流, type: uint32, scale: 0.01, unit: "A"}           # 需求电流，精度0.01A
+    - {len: 1, name: 充电模式, type: uint8}                                     # 充电模式
+    - {len: 4, name: 输出电压, type: uint32, scale: 0.1, unit: "V"}            # 输出电压，精度0.1V
+    - {len: 4, name: 输出电流, type: uint32, scale: 0.01, unit: "A"}           # 输出电流，精度0.01A
+    - {len: 4, name: 充电电量, type: uint32, scale: 0.0001, unit: "kWh"}       # 充电电量，精度0.0001kWh
+    - {len: 7, name: 开始时间, type: cp56time2a}                               # 开始时间
+    - {len: 4, name: 累计充电时间, type: uint32, unit: "min"}                   # 累计充电时间，单位分钟
+    - {len: 2, name: 充电前电表读数, type: uint16, scale: 0.01, unit: "kWh"}   # 充电前电表读数
+    - {len: 2, name: 当前电表读数, type: uint16, scale: 0.01, unit: "kWh"}     # 当前电表读数
+  
+  # --------------------------------------------------------------------------------
+  # 0x31：充电桩主动申请启动充电
+  # --------------------------------------------------------------------------------
+  49:
+    - {len: 7, name: 桩编码, type: bcd7}                                        # 桩编码
+    - {len: 1, name: 枪号, type: bcd1}                                          # 枪号
+    - {len: 2, name: 鉴权方式, type: uint16}                                    # 鉴权方式
+    - {len: 32, name: 鉴权数据, type: hex}                                      # 鉴权数据
+  
+  # --------------------------------------------------------------------------------
+  # 0x32：运营平台确认启动充电
+  # --------------------------------------------------------------------------------
+  50:
+    - {len: 7, name: 桩编码, type: bcd7}                                        # 桩编码
+    - {len: 1, name: 枪号, type: bcd1}                                          # 枪号
+    - {len: 1, name: 启动结果, type: uint8}                                     # 启动结果：0成功，其他失败
+    - {len: 16, name: 交易流水号, type: bcd16}                                  # 交易流水号
+    - {len: 2, name: 失败原因, type: uint16}                                    # 失败原因码
+  
+  # --------------------------------------------------------------------------------
+  # 0x3B：交易记录
+  # --------------------------------------------------------------------------------
+  59:
+    - {len: 16, name: 交易流水号, type: bcd16}                                  # 交易流水号
+    - {len: 7, name: 桩编码, type: bcd7}                                        # 桩编码
+    - {len: 1, name: 枪号, type: bcd1}                                          # 枪号
+    - {len: 32, name: 卡号, type: hex}                                          # 卡号
+    - {len: 7, name: 开始时间, type: cp56time2a}                               # 开始时间
+    - {len: 7, name: 结束时间, type: cp56time2a}                               # 结束时间
+    - {len: 4, name: 充电时长, type: uint32, unit: "min"}                       # 充电时长，单位分钟
+    - {len: 4, name: 开始SOC, type: uint32, scale: 0.1, unit: "%"}             # 开始SOC
+    - {len: 4, name: 结束SOC, type: uint32, scale: 0.1, unit: "%"}             # 结束SOC
+    - {len: 1, name: 中止原因, type: uint8}                                     # 中止原因
+    - {len: 4, name: 充电电量, type: uint32, scale: 0.0001, unit: "kWh"}       # 充电电量
+    - {len: 4, name: 开始电表读数, type: uint32, scale: 0.0001, unit: "kWh"}   # 开始电表读数  
+    - {len: 4, name: 结束电表读数, type: uint32, scale: 0.0001, unit: "kWh"}   # 结束电表读数
+    - {len: 4, name: 总金额, type: uint32, scale: 0.01, unit: "元"}            # 总金额
+
+# 过滤器配置
+filters:
+  include_cmds: []
+  exclude_cmds: []

@@ -1,8 +1,8 @@
 meta:
   protocol: yunwei
-  version: 1
+  version: 3.0A03
   default_endian: LE
-  notes: 运维协议配置，支持运维设备通信数据解析
+  notes: 运维协议配置V3.0A03，基于盛弘充电桩与运维平台通迅协议V3.0A03-20250702
 
 # 兼容性配置
 compatibility:
@@ -19,19 +19,57 @@ types:
   uint8:   { base: uint, bytes: 1, signed: false }
   uint16:  { base: uint, bytes: 2, signed: false }
   uint32:  { base: uint, bytes: 4, signed: false }
+  uint64:  { base: uint, bytes: 8, signed: false }
   ascii:   { base: str,  encoding: ASCII }
   hex:     { base: hex }
   bcd:     { base: bcd }
   binary_str_3bytes: { base: binary_str, bytes: 3 }
   binary_str_1byte:  { base: binary_str, bytes: 1 }
+  ieee754_double: { base: float, bytes: 8 }
 
 enums:
   param_type:
     1: 设置
     2: 查询
+  
+  gun_type:
+    1: 直流
+    2: 交流
+  
+  work_status:
+    0: 空闲中
+    1: 正准备开始充电
+    2: 充电进行中
+    3: 充电结束
+    4: 启动失败
+    5: 预约状态
+    6: 系统故障
+  
+  master_status:
+    0x01: 主机待机
+    0x02: 主机充电
+    0x03: 主机故障
+    0x04: 主机禁用
+    0x05: 主机升级
+    0xff: 主机状态未知
+  
+  fan_status:
+    0x00: 待机
+    0x01: 启动
+  
+  board_type:
+    0xA1: M2板
+    0xA2: M1板
+    0xA3: C3板
+    0xA4: C2板
+    0xA5: 主机MCU
+    0xA6: 屏幕
+    0xA7: 主机液冷U2板
 
 cmds:
-  # cmd1 - 参数设置/查询命令
+  # 基础参数设置相关命令 (1-4)
+  
+  # cmd1 - 后台服务器下发充电桩整形工作参数
   1:
     - {len: 1, name: 类型, type: uint8, enum: param_type}
     - {len: 4, name: 参数起始地址, type: uint32}
@@ -39,7 +77,7 @@ cmds:
     - {len: 2, name: 参数字节数, type: uint16}
     - {len: 4, name: 设置数据, type: uint32}
 
-  # cmd2 - 参数设置/查询响应
+  # cmd2 - 充电桩参数整形设置/查询应答
   2:
     - {len: 32, name: 充电桩资产码, type: ascii}
     - {len: 1, name: 类型, type: uint8, enum: param_type}
@@ -48,15 +86,30 @@ cmds:
     - {len: 1, name: 操作结果, type: uint8}
     - {len: 4, name: 查询参数信息, type: uint32}
 
-  # cmd103 - 预留命令
-  103:
-    - {len: 4, name: 预留1, type: uint32}
+  # cmd3 - 充电桩主动上报参数
+  3:
+    - {len: 32, name: 充电桩资产码, type: ascii}
+    - {len: 4, name: 参数起始地址, type: uint32}
+    - {len: 1, name: 参数个数, type: uint8}
+    - {len: 4, name: 参数信息, type: uint32}
 
-  # cmd104 - 充电状态上报
+  # cmd4 - 后台服务器回复充电桩主动上报参数
+  4:
+    - {len: 1, name: 充电枪口, type: uint8}
+    - {len: 32, name: 充电流水号, type: ascii}
+    - {len: 4, name: 内部索引号, type: uint32}
+
+  # 状态信息上报相关命令 (103-123)
+  
+  # cmd103 - 服务器应答充电桩状态报文
+  103:
+    - {len: 1, name: 应答结果, type: uint8}
+
+  # cmd104 - 充电桩状态信息包上报
   104:
     - {len: 1, name: 充电口号, type: uint8}
-    - {len: 1, name: 充电枪类型, type: uint8}
-    - {len: 1, name: 工作状态, type: uint8}
+    - {len: 1, name: 充电枪类型, type: uint8, enum: gun_type}
+    - {len: 1, name: 工作状态, type: uint8, enum: work_status}
     - {len: 1, name: 当前SOC, type: uint8}
     - {len: 4, name: 当前最高告警编码, type: uint32}
     - {len: 1, name: 车连接状态, type: uint8}
@@ -79,7 +132,364 @@ cmds:
     - {len: 1, name: 枪归位状态, type: uint8}
     - {len: 1, name: 远程隧道状态, type: uint8}
 
-  # cmd3001 - 运维命令（临时处理）
-  3001:
-    - {len: 16, name: 运维数据, type: hex}
+  # cmd105 - 服务器应答充电桩签到命令
+  105:
+    - {len: 1, name: 服务器处理结果, type: uint8}
+    - {len: 8, name: 签到时间, type: uint64}
+    - {len: 1, name: 设置目标, type: uint8}
+    - {len: 4, name: 心跳周期, type: uint32}
+    - {len: 1, name: 平台连接地址, type: uint8}
 
+  # cmd106 - 充电桩签到信息上报
+  106:
+    - {len: 32, name: 充电桩资产码, type: ascii}
+    - {len: 8, name: 签到时间, type: uint64}
+    - {len: 1, name: 充电桩SIM卡卡号, type: uint8}
+    - {len: 15, name: 充电桩ICCID码, type: ascii}
+    - {len: 4, name: CSQ信号强度, type: uint32}
+    - {len: 8, name: 经度, type: ieee754_double}
+    - {len: 8, name: 纬度, type: ieee754_double}
+    - {len: 16, name: 充电桩软件版本, type: ascii}
+    - {len: 16, name: 充电桩主要硬件版本, type: ascii}
+    - {len: 1, name: 充电枪个数, type: uint8}
+    - {len: 1, name: 心跳周期, type: uint8}
+    - {len: 32, name: 主机资产码, type: ascii}
+    - {len: 1, name: 终端1号枪的CCU地址, type: uint8}
+
+  # cmd107 - 服务器应答充电桩告警信息
+  107:
+    - {len: 1, name: 应答结果, type: uint8}
+
+  # cmd108 - 充电桩告警信息上报
+  108:
+    - {len: 32, name: 充电桩资产码, type: ascii}
+    - {len: 1, name: 充电口号, type: uint8}
+    - {len: 1, name: 告警状态, type: uint8}
+    - {len: 2, name: 告警代码, type: uint16}
+    - {len: 8, name: 告警时间, type: uint64}
+
+  # cmd111 - 服务器应答充电桩上报模块信息
+  111:
+    - {len: 1, name: 应答结果, type: uint8}
+
+  # cmd112 - 充电桩模块告警信息上报
+  112:
+    - {len: 32, name: 充电桩资产码, type: ascii}
+    - {len: 1, name: 充电口号, type: uint8}
+    - {len: 1, name: 模块地址, type: uint8}
+    - {len: 1, name: 告警状态, type: uint8}
+    - {len: 2, name: 告警代码, type: uint16}
+    - {len: 8, name: 告警时间, type: uint64}
+
+  # cmd119 - 服务器应答充电桩版本信息
+  119:
+    - {len: 1, name: 应答结果, type: uint8}
+
+  # cmd120 - 充电桩软件版本信息上报
+  120:
+    - {len: 32, name: 充电桩资产码, type: ascii}
+    - {len: 16, name: 充电桩软件版本, type: ascii}
+    - {len: 16, name: 充电桩主要硬件版本, type: ascii}
+    - {len: 8, name: 版本上报时间, type: uint64}
+
+  # cmd121 - 服务器应答充电桩使用情况统计信息
+  121:
+    - {len: 1, name: 应答结果, type: uint8}
+
+  # cmd122 - 充电桩使用情况统计信息上报
+  122:
+    - {len: 4, name: 累计上线时间, type: uint32, notes: 单位分钟}
+    - {len: 4, name: 累计充电时间, type: uint32, notes: 单位分钟}
+    - {len: 4, name: 累计待机时间, type: uint32, notes: 单位分钟}
+    - {len: 4, name: 累计充电次数, type: uint32}
+    - {len: 4, name: 累计充电电量, type: uint32, notes: kWh}
+    - {len: 4, name: 日均充电电量, type: uint32, notes: kWh}
+    - {len: 4, name: 系统上电次数, type: uint32}
+    - {len: 4, name: 累计上电时长, type: uint32, notes: 单位分钟}
+    - {len: 4, name: 充电桩使用率, type: uint32, scale: 0.01, notes: 百分比}
+    - {len: 4, name: 累计插枪次数, type: uint32}
+    - {len: 4, name: 充电成功次数, type: uint32}
+    - {len: 4, name: 当天在线时间, type: uint32, notes: 单位分钟}
+    - {len: 4, name: 最近两周在线时长, type: uint32, notes: 单位分钟}
+    - {len: 4, name: 当天离线次数, type: uint32}
+    - {len: 4, name: 平均在线率, type: uint32, scale: 0.01, notes: 百分比}
+    - {len: 4, name: 充电成功率, type: uint32, scale: 0.01, notes: 百分比}
+    - {len: 4, name: 主动防护次数, type: uint32}
+    - {len: 4, name: BST触发保护次数, type: uint32}
+    - {len: 4, name: AC接触器使用次数, type: uint32}
+    - {len: 4, name: 1枪DC接触器使用次数, type: uint32}
+    - {len: 4, name: 2枪DC接触器使用次数, type: uint32}
+    - {len: 4, name: 中间接触器1使用次数, type: uint32}
+    - {len: 4, name: 中间接触器2使用次数, type: uint32}
+    - {len: 4, name: 中间接触器3使用次数, type: uint32}
+
+  # cmd123 - 充电桩具体告警信息上报
+  123:
+    - {len: 1, name: 充电枪口, type: uint8}
+    - {len: 2, name: 故障告警码, type: uint16}
+    - {len: 4, name: 开始时间, type: uint32, notes: Unix时间戳}
+    - {len: 4, name: 结束时间, type: uint32, notes: Unix时间戳}
+
+  # 充电信息数据相关命令 (201-202)
+  
+  # cmd201 - 服务器应答充电桩上报充电信息报文
+  201:
+    - {len: 1, name: 充电枪口, type: uint8}
+    - {len: 32, name: 充电流水号, type: ascii}
+    - {len: 4, name: 内部索引号, type: uint32}
+
+  # cmd202 - 充电桩上报充电记录信息
+  202:
+    - {len: 32, name: 充电桩资产码, type: ascii}
+    - {len: 1, name: 充电枪类型, type: uint8, enum: gun_type}
+    - {len: 1, name: 充电枪口, type: uint8}
+    - {len: 32, name: 卡号用户id, type: ascii}
+    - {len: 8, name: 充电开始时间, type: uint64, notes: 标准时间}
+    - {len: 8, name: 充电结束时间, type: uint64, notes: 标准时间}
+    - {len: 4, name: 充电时长, type: uint32, notes: 单位秒}
+    - {len: 4, name: 开始SOC, type: uint32, scale: 0.1}
+    - {len: 4, name: 结束SOC, type: uint32, scale: 0.1}
+    - {len: 4, name: 充电结束原因, type: uint32}
+    - {len: 4, name: 充电电量, type: uint32, scale: 0.01, notes: kWh}
+    - {len: 4, name: 开始度数, type: uint32, scale: 0.01, notes: kWh}
+    - {len: 4, name: 结束度数, type: uint32, scale: 0.01, notes: kWh}
+    - {len: 4, name: 金额, type: uint32, scale: 0.01, notes: 元}
+    - {len: 32, name: 充电流水号, type: ascii}
+    - {len: 17, name: 车辆VIN码, type: ascii}
+    - {len: 1, name: 充电策略, type: uint8}
+    - {len: 4, name: 充电策略参数, type: uint32}
+    - {len: 4, name: 内部索引号, type: uint32}
+
+  # BMS信息数据相关命令 (303-312)
+  
+  # cmd303 - 服务器应答充电桩上报BMS设置信息
+  303:
+    - {len: 1, name: 结果, type: uint8}
+
+  # cmd304 - 充电桩上报BMS设置信息
+  304:
+    - {len: 1, name: 充电枪号, type: uint8}
+    - {len: 32, name: 流水号, type: ascii}
+    - {len: 1, name: 工作状态, type: uint8, enum: work_status}
+    - {len: 3, name: BRM-BMS通讯协议版本号, type: binary_str_3bytes}
+    - {len: 1, name: BR-电池类型, type: uint8}
+    - {len: 2, name: BRM-整车动力蓄电池系统额定容量/Ah, type: uint16, scale: 0.1, notes: Ah}
+    - {len: 2, name: BRM-整车动力蓄电池系统额定总电压/V, type: uint16, scale: 0.1, notes: V}
+    - {len: 4, name: BRM-电池生产厂商, type: uint32}
+    - {len: 4, name: BRM-电池组序号, type: uint32}
+    - {len: 2, name: BRM-电池组生厂日期：年, type: uint16}
+    - {len: 1, name: BRM-电池组生厂日期：月, type: uint8}
+    - {len: 1, name: BRM-电池组生厂日期：日, type: uint8}
+    - {len: 4, name: BRM-电池组充电次数, type: uint32}
+    - {len: 1, name: BRM-电池组产权标识, type: uint8}
+    - {len: 1, name: 预留, type: uint8}
+    - {len: 17, name: BRM-车辆识别码VIN, type: ascii}
+    - {len: 8, name: BRM-BMS软件版本号, type: hex}
+    - {len: 2, name: BCP-单体动力蓄电池最高允许充电电压, type: uint16, scale: 0.01, notes: V}
+    - {len: 2, name: BCP-最高允许充电电流, type: uint16, scale: 0.1, notes: A}
+    - {len: 2, name: BCP-动力蓄电池标称总能量, type: uint16, scale: 0.1, notes: kw.h}
+    - {len: 2, name: BCP-最高允许充电总电压, type: uint16, scale: 0.1, notes: V}
+    - {len: 1, name: BCP-最高允许温度, type: uint8, notes: 摄氏度}
+    - {len: 2, name: BCP-整车动力蓄电池荷电状态, type: uint16, scale: 0.1, notes: 百分比}
+    - {len: 2, name: BCP-整车动力蓄电池当前电池电压, type: uint16, scale: 0.1, notes: V}
+    - {len: 1, name: BRO-BMS是否充电准备好, type: uint8}
+    - {len: 1, name: CRO-充电机是否充电准备好, type: uint8}
+
+  # cmd305 - 服务器应答充电桩上报充电过程中BMS设置信息
+  305:
+    - {len: 1, name: 结果, type: uint8}
+
+  # cmd306 - 充电桩上报充电过程中BMS数据
+  306:
+    - {len: 1, name: 充电枪号, type: uint8}
+    - {len: 32, name: 流水号, type: ascii}
+    - {len: 1, name: 工作状态, type: uint8, enum: work_status}
+    - {len: 2, name: BCL-电压需求, type: uint16, scale: 0.1, notes: V}
+    - {len: 2, name: BCL-电流需求, type: uint16, scale: 0.1, notes: A}
+    - {len: 1, name: BCL-充电模式, type: uint8}
+    - {len: 2, name: BCS-充电电压测量值, type: uint16, scale: 0.1, notes: V}
+    - {len: 2, name: BCS-充电电流测量值, type: uint16, scale: 0.1, notes: A}
+    - {len: 2, name: BCS-最高单体动力蓄电池电压, type: uint16, scale: 0.01, notes: V}
+    - {len: 1, name: BCS-最高单体动力蓄电池组号, type: uint8}
+    - {len: 1, name: BCS-当前荷电状态soc%, type: uint8, notes: 百分比}
+    - {len: 2, name: 估算剩余充电时间, type: uint16, notes: 分钟}
+    - {len: 1, name: BSM-最高单体动力蓄电池电压所在编号, type: uint8}
+    - {len: 1, name: BSM-最高动力蓄电池温度, type: uint8, notes: 摄氏度}
+    - {len: 1, name: BSM-最高温度检测点编号, type: uint8}
+    - {len: 1, name: BSM-最低动力蓄电池温度, type: uint8, notes: 摄氏度}
+    - {len: 1, name: BSM-最低动力蓄电池温度检测点编号, type: uint8}
+    - {len: 1, name: BSM-单体动力蓄电池电压过高或过低, type: uint8}
+    - {len: 1, name: BSM-整车动力蓄电池荷电状态soc过高或过低, type: uint8}
+    - {len: 1, name: BSM-动力蓄电池充电过电流, type: uint8}
+    - {len: 1, name: BSM-动力蓄电池温度过高, type: uint8}
+    - {len: 1, name: BSM-动力蓄电池绝缘状态, type: uint8}
+    - {len: 1, name: BSM-动力蓄电池组输出连接器连接状态, type: uint8}
+    - {len: 1, name: BSM-允许充电, type: uint8}
+
+  # cmd309 - 服务器应答充电中止BMS-BST数据
+  309:
+    - {len: 1, name: 结果, type: uint8}
+
+  # cmd310 - 充电桩上报充电中止BMS-BST数据
+  310:
+    - {len: 1, name: 充电枪号, type: uint8}
+    - {len: 32, name: 流水号, type: ascii}
+    - {len: 1, name: 工作状态, type: uint8, enum: work_status}
+    - {len: 1, name: BST - BMS中止原因, type: uint8}
+    - {len: 2, name: BST - BMS中止充电故障原因, type: uint16}
+    - {len: 1, name: BST - BMS中止充电错误原因, type: uint8}
+
+  # cmd311 - 服务器应答充电桩上报充电阶段结束
+  311:
+    - {len: 1, name: 结果, type: uint8}
+
+  # cmd312 - 充电桩上报充电结束BMS统计数据
+  312:
+    - {len: 1, name: 充电枪号, type: uint8}
+    - {len: 32, name: 流水号, type: ascii}
+    - {len: 1, name: 工作状态, type: uint8, enum: work_status}
+    - {len: 1, name: BSD-中止荷电状态soc, type: uint8, notes: 百分比}
+    - {len: 2, name: BSD-动力蓄电池单体最低电压, type: uint16, scale: 0.01, notes: V}
+    - {len: 2, name: BSD-动力蓄电池单体最高电压, type: uint16, scale: 0.01, notes: V}
+    - {len: 1, name: BSD-动力蓄电池最低温度, type: uint8, notes: 摄氏度}
+    - {len: 1, name: BSD-动力蓄电池最高温度, type: uint8, notes: 摄氏度}
+    - {len: 1, name: BEM-接收SPN2560=0x00的充电桩辨识报文超时, type: uint8}
+    - {len: 1, name: BEM-接收SPN2560=0xaa的充电桩辨识报文超时, type: uint8}
+    - {len: 1, name: BEM-接收充电桩的时间同步和最大输出能力报文, type: uint8}
+    - {len: 1, name: BEM-接收充电桩完成充电准备报文超时, type: uint8}
+    - {len: 1, name: BEM-接收充电桩充电状态报文超时, type: uint8}
+    - {len: 1, name: BEM-接收充电桩终止充电报文超时, type: uint8}
+    - {len: 1, name: BEM-接收充电桩充电统计报文超时, type: uint8}
+    - {len: 1, name: BEM-其他, type: uint8}
+
+  # FTP远程升级和日志上传相关命令 (1401-1407)
+  
+  # cmd1401 - 服务器下发FTP远程升级命令
+  1401:
+    - {len: 256, name: FTP地址, type: ascii}
+    - {len: 5, name: FTP端口, type: ascii}
+    - {len: 32, name: FTP用户名, type: ascii}
+    - {len: 32, name: FTP密码, type: ascii}
+    - {len: 256, name: 升级文件路径, type: ascii}
+    - {len: 1, name: 升级类型, type: uint8}
+
+  # cmd1402 - 充电桩应答服务器下发FTP远程升级命令
+  1402:
+    - {len: 1, name: 是否同意升级, type: uint8}
+
+  # cmd1403 - 充电桩上报升级进度
+  1403:
+    - {len: 1, name: 升级结果, type: uint8}
+    - {len: 1, name: 升级进度, type: uint8, notes: 百分比}
+
+  # cmd1406 - 服务器下发获取充电桩日志信息命令
+  1406:
+    - {len: 256, name: FTP地址, type: ascii}
+    - {len: 5, name: FTP端口, type: ascii}
+    - {len: 32, name: FTP用户名, type: ascii}
+    - {len: 32, name: FTP密码, type: ascii}
+    - {len: 256, name: 日志存储路径, type: ascii}
+    - {len: 1, name: 日志类型, type: uint8}
+
+  # cmd1407 - 充电桩应答服务器下发获取充电桩日志命令
+  1407:
+    - {len: 1, name: 操作结果, type: uint8}
+
+  # 调试相关命令 (2001-2002)
+  
+  # cmd2001 - 服务器下发frp远程隧道启用命令
+  2001:
+    - {len: 256, name: 远程隧道服务器地址, type: ascii}
+    - {len: 5, name: 远程隧道服务器端口, type: ascii}
+    - {len: 32, name: 远程隧道用户名, type: ascii}
+    - {len: 32, name: 远程隧道密码, type: ascii}
+    - {len: 5, name: 远程隧道本地端口, type: ascii}
+    - {len: 1, name: 启用状态, type: uint8}
+
+  # cmd2002 - 充电桩应答远程隧道启用命令
+  2002:
+    - {len: 1, name: 操作结果, type: uint8}
+
+  # 充电堆主机运维相关命令 (3001-3004, 3101)
+  
+  # cmd3001 - 充电堆工作状态主机状态
+  3001:
+    - {len: 1, name: 主机工作状态, type: uint8, enum: master_status}
+    - {len: 1, name: 主机风扇工作状态, type: uint8, enum: fan_status}
+    - {len: 1, name: 主机环境温度, type: uint8, notes: 摄氏度}
+    - {len: 1, name: 主机出风口温度, type: uint8, notes: 摄氏度}
+    - {len: 1, name: 模块环境温度最高值, type: uint8, notes: 摄氏度}
+    - {len: 1, name: 模块环境温度最低值, type: uint8, notes: 摄氏度}
+    - {len: 2, name: A相电压, type: uint16, notes: V}
+    - {len: 2, name: B相电压, type: uint16, notes: V}
+    - {len: 2, name: C相电压, type: uint16, notes: V}
+    - {len: 2, name: 主机需求功率, type: uint16, notes: KW}
+    - {len: 2, name: 主机输出功率, type: uint16, notes: KW}
+    - {len: 1, name: 充电终端数量, type: uint8, notes: 个}
+    - {len: 1, name: 充电堆模块数量, type: uint8}
+    - {len: 1, name: 4G模块1信号强度, type: uint8, notes: dB}
+    - {len: 1, name: 4G模块2信号强度, type: uint8, notes: dB}
+
+  # cmd3002 - 充电堆系统版本信息
+  3002:
+    - {len: 32, name: 充电堆堆资产码, type: ascii}
+    - {len: 1, name: 堆号, type: uint8}
+    - {len: 1, name: 系统板数量, type: uint8, notes: 个}
+    - {len: 1, name: 1板类型, type: uint8, enum: board_type}
+    - {len: 2, name: 1板版本号, type: uint16}
+    - {len: 1, name: 2板类型, type: uint8, enum: board_type}
+    - {len: 2, name: 2板版本号, type: uint16}
+    - {len: 1, name: 3板类型, type: uint8, enum: board_type}
+    - {len: 2, name: 3板版本号, type: uint16}
+    - {len: 1, name: 4板类型, type: uint8, enum: board_type}
+    - {len: 2, name: 4板版本号, type: uint16}
+    - {len: 1, name: 5板类型, type: uint8, enum: board_type}
+    - {len: 2, name: 5板版本号, type: uint16}
+    - {len: 1, name: 6板类型, type: uint8, enum: board_type}
+    - {len: 2, name: 6板版本号, type: uint16}
+    - {len: 1, name: 7板类型, type: uint8, enum: board_type}
+    - {len: 2, name: 7板版本号, type: uint16}
+    - {len: 1, name: 8板类型, type: uint8, enum: board_type}
+    - {len: 2, name: 8板版本号, type: uint16}
+
+  # cmd3003 - 充电堆枪工作状态主机状态1
+  3003:
+    - {len: 32, name: 充电堆堆资产码, type: ascii}
+    - {len: 1, name: 堆号, type: uint8}
+    - {len: 1, name: 终端数量, type: uint8, notes: 个}
+    - {len: 32, name: 终端1资产码, type: ascii}
+    - {len: 1, name: 终端1工作状态, type: uint8, enum: work_status}
+    - {len: 1, name: 终端1枪口1工作状态, type: uint8, enum: work_status}
+    - {len: 1, name: 终端1枪口2工作状态, type: uint8, enum: work_status}
+    - {len: 32, name: 终端2资产码, type: ascii}
+    - {len: 1, name: 终端2工作状态, type: uint8, enum: work_status}
+    - {len: 1, name: 终端2枪口1工作状态, type: uint8, enum: work_status}
+    - {len: 1, name: 终端2枪口2工作状态, type: uint8, enum: work_status}
+
+  # cmd3004 - 充电堆模块工作状态主机状态2
+  3004:
+    - {len: 32, name: 充电堆堆资产码, type: ascii}
+    - {len: 1, name: 堆号, type: uint8}
+    - {len: 1, name: 模块数量, type: uint8, notes: 个}
+    - {len: 1, name: 模块1地址, type: uint8}
+    - {len: 1, name: 模块1工作状态, type: uint8}
+    - {len: 2, name: 模块1输出电压, type: uint16, scale: 0.1, notes: V}
+    - {len: 2, name: 模块1输出电流, type: uint16, scale: 0.1, notes: A}
+    - {len: 1, name: 模块1输入电压状态, type: uint8}
+    - {len: 1, name: 模块1输出电压状态, type: uint8}
+    - {len: 1, name: 模块1输出电流状态, type: uint8}
+    - {len: 1, name: 模块1环境温度, type: uint8, notes: 摄氏度}
+    - {len: 1, name: 模块2地址, type: uint8}
+    - {len: 1, name: 模块2工作状态, type: uint8}
+    - {len: 2, name: 模块2输出电压, type: uint16, scale: 0.1, notes: V}
+    - {len: 2, name: 模块2输出电流, type: uint16, scale: 0.1, notes: A}
+    - {len: 1, name: 模块2输入电压状态, type: uint8}
+    - {len: 1, name: 模块2输出电压状态, type: uint8}
+    - {len: 1, name: 模块2输出电流状态, type: uint8}
+    - {len: 1, name: 模块2环境温度, type: uint8, notes: 摄氏度}
+
+  # cmd3101 - 平台回应充电堆工作状态主机状态
+  3101:
+    - {len: 1, name: 充电终端数量, type: uint8, notes: 个}
+    - {len: 2, name: 充电堆机型, type: uint16}
+    - {len: 1, name: 主机工作状态, type: uint8, enum: master_status}

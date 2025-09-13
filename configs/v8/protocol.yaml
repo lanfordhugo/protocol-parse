@@ -103,6 +103,13 @@ cmds:
     - {len: 1, name: 枪正极温度, type: uint8, scale: 1}
     - {len: 1, name: 枪负极温度, type: uint8, scale: 1}
 
+  # cmd4 - 服务器心跳包
+  4:
+    - {len: 4, name: 当前时间, type: uint32}
+    - {len: 8, name: MCU 1枪告警状态, type: binary_str_8bytes}
+    - {len: 8, name: MCU 2枪告警状态, type: binary_str_8bytes}
+    - {len: 4, name: MCU对枪的禁用状态, type: binary_str_4bytes}
+
   # cmd5 - 启动充电命令
   5:
     - {len: 4, name: 命令序号, type: uint32}
@@ -111,7 +118,7 @@ cmds:
     - {len: 2, name: 限制充电电量, type: uint16, scale: 0.01}
     - {len: 2, name: 限功率大小, type: uint16, scale: 0.1}
     - {len: 1, name: BMS辅源电压, type: uint8, scale: 0.1}
-    - {len: 32, name: 交易流水号, type: ascii}
+    - {len: 32, name: 订单流水号, type: ascii}
     - {len: 1, name: VIN核对, type: uint8}
     - {len: 17, name: 车辆VIN码, type: ascii}
     - {len: 16, name: 停止充电密码, type: ascii}
@@ -122,7 +129,7 @@ cmds:
   6:
     - {len: 4, name: 响应命令序号, type: uint32}
     - {len: 1, name: 命令执行结果, type: uint8}
-    - {len: 1, name: 执行失败原因, type: uint8}
+    - {len: 2, name: 执行失败原因, type: uint16}
 
   # cmd7 - 停止充电命令
   7:
@@ -133,7 +140,7 @@ cmds:
   8:
     - {len: 4, name: 响应命令序号, type: uint32}
     - {len: 1, name: 命令执行结果, type: uint8}
-    - {len: 1, name: 执行失败原因, type: uint8}
+    - {len: 2, name: 执行失败原因, type: uint16}
 
   # cmd9 - 充电握手阶段数据上报
   9:
@@ -241,7 +248,7 @@ cmds:
 
   # cmd15 - 日志上传请求
   15:
-    - {len: 32, name: 充电流水号, type: ascii}
+    - {len: 32, name: 订单流水号, type: ascii}
     - {len: 1, name: 日志类型, type: uint8}
     - {len: 4, name: 总包数量, type: uint32}
     - {len: 4, name: 包序列号, type: uint32}
@@ -249,7 +256,7 @@ cmds:
 
   # cmd16 - 日志上传响应
   16:
-    - {len: 32, name: 充电流水号, type: ascii}
+    - {len: 32, name: 订单流水号, type: ascii}
     - {len: 1, name: 日志类型, type: uint8}
     - {len: 4, name: 总包数量, type: uint32}
     - {len: 4, name: 包序列号, type: uint32}
@@ -293,6 +300,26 @@ cmds:
       fields:
         - {len: 4, name: 参数, type: uint32}
 
+  # cmd26 - MCU应答CCU推送参数信息
+  26:
+    - {len: 4, name: 参数开始地址, type: uint32}
+    - {len: 4, name: 参数个数, type: uint32}
+    - {len: 2, name: 参数设置结果, type: uint16}
+
+  # cmd27 - MCU主动推送参数信息
+  27:
+    - {len: 4, name: 参数开始地址, type: uint32}
+    - {len: 4, name: 参数个数, type: uint32, id: param_count}
+    - repeat_by: param_count
+      fields:
+        - {len: 4, name: 整数参数内容, type: uint32}
+
+  # cmd28 - CCU应答MCU推送参数信息
+  28:
+    - {len: 4, name: 参数开始地址, type: uint32}
+    - {len: 4, name: 参数个数, type: uint32}
+    - {len: 2, name: 参数设置结果, type: uint16}
+
   # cmd29 - 参数批量查询响应
   29:
     - {len: 4, name: 参数开始地址, type: uint32}
@@ -319,6 +346,10 @@ cmds:
         - {len: 4, name: 服务费, type: uint32, scale: 0.001}
         - {len: 1, name: 尖峰平谷标志段, type: uint8}
 
+  # cmd32 - CCU费率模型应答
+  32:
+    - {len: 4, name: 响应命令序号, type: uint32}
+
   # cmd33 - 充电结算上报
   33:
     - {len: 4, name: 命令序号, type: uint32}
@@ -331,6 +362,55 @@ cmds:
     - {len: 4, name: 充电时长, type: uint32}
     - {len: 4, name: 电费, type: uint32, scale: 0.001}
     - {len: 4, name: 服务费, type: uint32, scale: 0.001}
+
+  # cmd34 - CCU应答结算信息
+  34:
+    - {len: 4, name: 响应命令序号, type: uint32}
+
+  # cmd35 - CCU请求主动充电
+  35:
+    - {len: 4, name: 命令序号, type: uint32}
+    - {len: 1, name: 启动类型, type: uint8}
+    - {len: 32, name: 充电卡卡号, type: ascii}
+    - {len: 48, name: 充电卡随机数, type: ascii}
+    - {len: 8, name: 物理卡号, type: ascii}
+    - {len: 18, name: VIN码, type: ascii}
+    - {len: 4, name: 充电时长, type: uint32}
+
+  # cmd36 - MCU应答主动请求充电
+  36:
+    - {len: 4, name: 响应命令序号, type: uint32}
+    - {len: 1, name: 启动类型, type: uint8}
+    - {len: 1, name: 鉴权结果, type: uint8}
+    - {len: 4, name: 余额, type: uint32, scale: 0.01}
+
+  # cmd37 - CCU主动上传VIN充电失败信息
+  37:
+    - {len: 4, name: 命令序号, type: uint32}
+    - {len: 2, name: 停止充电原因, type: uint16}
+    - {len: 4, name: 充电电量, type: uint32, scale: 0.001}
+    - {len: 4, name: 开始电表电量, type: uint32, scale: 0.001}
+    - {len: 4, name: 结束电表电量, type: uint32, scale: 0.001}
+    - {len: 2, name: 停止参数1, type: uint16}
+    - {len: 2, name: 停止参数2, type: uint16}
+    - {len: 2, name: 停止参数3, type: uint16}
+    - {len: 2, name: 停止参数4, type: uint16}
+    - {len: 2, name: 停止参数5, type: uint16}
+    - {len: 2, name: 停止参数6, type: uint16}
+    - {len: 2, name: 停止参数7, type: uint16}
+    - {len: 2, name: 停止参数8, type: uint16}
+
+  # cmd71 - 控制命令
+  71:
+    - {len: 4, name: 命令序号, type: uint32}
+    - {len: 2, name: 控制命令索引, type: uint16}
+    - {len: 4, name: 控制值, type: uint32}
+
+  # cmd72 - 控制命令应答
+  72:
+    - {len: 4, name: 响应命令序号, type: uint32}
+    - {len: 2, name: 控制命令索引, type: uint16}
+    - {len: 2, name: 处理结果, type: uint16}
 
   # cmd100 - 系统状态上报
   100:
@@ -439,6 +519,14 @@ cmds:
         - {len: 1, name: 模块故障码, type: uint8}
         - {len: 2, name: 模块状态码, type: binary_str_2bytes}
 
+  # cmd113 - M2广播C3板接触器共享模块状态
+  113:
+    - {len: 1, name: 共享模块上层接触器个数, type: uint8}
+    - {len: 1, name: 共享模块下层接触器个数, type: uint8}
+    - repeat_const: 72
+      fields:
+        - {len: 2, name: 接触器状态, type: binary_str_2bytes}
+
   # cmd114 - 模块版本信息
   114:
     - repeat_const: 40
@@ -455,6 +543,43 @@ cmds:
     - {len: 8, name: B面控制信号, type: hex}
     - {len: 8, name: B面反馈信号+, type: hex}
     - {len: 8, name: B面反馈信号-, type: hex}
+
+  # cmd120 - 液冷M2广播U2板接触器状态
+  120:
+    - {len: 4, name: 1U2板状态, type: binary_str_4bytes}
+    - {len: 4, name: 2U2板状态, type: binary_str_4bytes}
+    - {len: 4, name: 3U2板状态, type: binary_str_4bytes}
+    - {len: 4, name: 4U2板状态, type: binary_str_4bytes}
+    - {len: 1, name: A正接触器数量, type: uint8}
+    - {len: 1, name: A负接触器数量, type: uint8}
+    - {len: 1, name: B正接触器数量, type: uint8}
+    - {len: 1, name: B负接触器数量, type: uint8}
+    - repeat_const: 80
+      fields:
+        - {len: 2, name: 接触器状态, type: binary_str_2bytes}
+
+  # cmd121 - M2广播液冷水泵及系统风扇信息
+  121:
+    - {len: 1, name: 液冷泵状态, type: uint8, notes: "低4位泵1状态，高4位泵2状态"}
+    - {len: 1, name: 液冷泵1_PWM, type: uint8}
+    - {len: 1, name: 液冷泵2_PWM, type: uint8}
+    - {len: 1, name: 液冷泵1压力, type: uint8}
+    - {len: 1, name: 液冷泵2压力, type: uint8}
+    - {len: 1, name: 换热器1出水口温度, type: uint8}
+    - {len: 1, name: 进水口1温度, type: uint8, scale: 1, notes: "偏移-50"}
+    - {len: 1, name: 换热器2出水口温度, type: uint8}
+    - {len: 1, name: 进水口2温度, type: uint8, scale: 1, notes: "偏移-50"}
+    - {len: 1, name: 系统风扇1转速, type: uint8}
+    - {len: 1, name: 系统风扇2转速, type: uint8}
+    - {len: 1, name: 系统风扇3转速, type: uint8}
+    - {len: 1, name: 系统风扇4转速, type: uint8}
+    - {len: 1, name: 系统风扇5转速, type: uint8}
+    - {len: 4, name: M2软件版本号, type: uint32}
+    - {len: 4, name: U1软件版本号, type: uint32}
+    - {len: 4, name: U2_1号板软件版本号, type: uint32}
+    - {len: 4, name: U2_2号板软件版本号, type: uint32}
+    - {len: 4, name: U2_3号板软件版本号, type: uint32}
+    - {len: 4, name: U2_4号板软件版本号, type: uint32}
 
   # cmd201 - 终端充电状态上报
   201:
@@ -482,4 +607,197 @@ cmds:
     - {len: 1, name: 并充组网2地址, type: uint8}
     - {len: 1, name: 并充组网3地址, type: uint8}
     - {len: 1, name: 并充组网4地址, type: uint8}
+
+  # cmd202 - CCU-V8当前充电枪的液冷实时状态
+  202:
+    - {len: 1, name: 液冷系统风扇速率, type: uint8}
+    - {len: 1, name: 液冷泵速, type: uint8}
+    - {len: 1, name: 液冷枪进水温度, type: uint8, scale: 1, notes: "偏移-50"}
+    - {len: 1, name: 液冷枪出水温度, type: uint8, scale: 1, notes: "偏移-50"}
+    - {len: 1, name: 液冷量化水压, type: uint8}
+    - {len: 2, name: 液冷水压压力值, type: uint16, scale: 0.01}
+    - {len: 1, name: D1软件版本号, type: uint8}
+    - {len: 1, name: D2软件版本号, type: uint8}
+
+  # cmd203 - CCU-V8状态需求短报文
+  203:
+    - {len: 2, name: 终端充电状态, type: binary_str_2bytes}
+    - {len: 2, name: 枪需要输出的电流, type: uint16, scale: 0.1}
+
+  # cmd221 - CCU广播当前所有模块的状态信息数据
+  221:
+    - {len: 1, name: 最大模块数量, type: uint8}
+    - {len: 1, name: 实际模块数量, type: uint8, id: module_count}
+    - repeat_by: module_count
+      fields:
+        - {len: 2, name: 模块电压, type: uint16, scale: 0.1}
+        - {len: 2, name: 模块电流, type: uint16, scale: 0.1}
+        - {len: 1, name: 模块当前设置分组号, type: uint8}
+        - {len: 1, name: 模块故障码, type: uint8}
+        - {len: 2, name: 模块状态码, type: binary_str_2bytes}
+
+  # cmd222 - CCU广播模块版本信息
+  222:
+    - {len: 1, name: 最大模块数量, type: uint8}
+    - {len: 1, name: 实际模块数量, type: uint8, id: module_count}
+    - repeat_by: module_count
+      fields:
+        - {len: 2, name: 模块AC版本, type: uint16}
+        - {len: 2, name: 模块DC版本, type: uint16}
+
+  # cmd301 - CCU-V8主机允许进入并枪的辅枪信息
+  301:
+    - {len: 1, name: 拨码地址, type: uint8}
+    - {len: 1, name: 总枪数, type: uint8}
+    - {len: 1, name: 本枪枪号, type: uint8}
+    - {len: 1, name: 同一个CAN总线终端数量, type: uint8}
+    - {len: 8, name: 允许进入辅枪的地址, type: hex}
+    - {len: 8, name: 主机已收到副枪确认地址, type: hex}
+
+  # cmd302 - CCU-MCU并枪的副枪信息
+  302:
+    - {len: 1, name: 拨码地址, type: uint8}
+    - {len: 1, name: 总枪数, type: uint8}
+    - {len: 1, name: 本枪枪号, type: uint8}
+    - {len: 1, name: 并充状态, type: uint8}
+    - {len: 1, name: 并充主机拨码地址, type: uint8}
+    - {len: 1, name: 并充主机拨码枪号, type: uint8}
+    - {len: 4, name: 初始电表度, type: uint32, scale: 0.01}
+    - {len: 4, name: 当前电表度, type: uint32, scale: 0.01}
+    - {len: 2, name: 当前充电电流, type: uint16, scale: 0.1}
+
+  # cmd303 - CCU-V8并充订单信息
+  303:
+    - {len: 1, name: 主枪地址, type: uint8}
+    - {len: 1, name: 并充状态, type: uint8}
+    - {len: 1, name: 并充副枪数量, type: uint8}
+    - repeat_const: 8
+      fields:
+        - {len: 1, name: 副枪地址, type: uint8}
+        - {len: 4, name: 副枪起始电表值, type: uint32, scale: 0.01}
+        - {len: 4, name: 副枪当前电表值, type: uint32, scale: 0.01}
+
+  # cmd51 - M2注册帧
+  51:
+    - {len: 1, name: 硬件类型, type: uint8, enum: device_type}
+    - {len: 1, name: 拨码地址号, type: uint8}
+    - {len: 2, name: 项目号, type: uint16}
+    - {len: 2, name: M2软件版本号, type: uint16}
+    - {len: 32, name: M2软件编译时间, type: ascii}
+    - {len: 2, name: C2软件版本号, type: uint16}
+    - {len: 2, name: C3软件版本号-1号, type: uint16}
+    - {len: 2, name: C3软件版本号-2号, type: uint16}
+    - {len: 2, name: C3软件版本号-3号, type: uint16}
+    - {len: 2, name: C3软件版本号-4号, type: uint16}
+    - {len: 2, name: C3软件版本号-5号, type: uint16}
+    - {len: 2, name: C3软件版本号-6号, type: uint16}
+    - {len: 2, name: C3软件版本号-7号, type: uint16}
+    - {len: 2, name: C3软件版本号-8号, type: uint16}
+    - {len: 2, name: 主机类型, type: uint16}
+    - {len: 4, name: 时间, type: uint32}
+
+  # cmd52 - 注册回复帧
+  52:
+    - {len: 1, name: 登录结果, type: uint8, enum: login_result}
+    - {len: 1, name: 登录失败原因, type: uint8}
+    - {len: 2, name: MCU软件项目号, type: uint16}
+    - {len: 2, name: MCU软件版本号, type: uint16}
+
+  # cmd53 - 参数请求同步
+  53:
+    - {len: 4, name: 参数开始地址, type: uint32}
+    - {len: 4, name: 参数个数, type: uint32}
+
+  # cmd54 - 参数请求同步应答
+  54:
+    - {len: 4, name: 参数开始地址, type: uint32}
+    - {len: 4, name: 参数个数, type: uint32, id: param_count}
+    - repeat_by: param_count
+      fields:
+        - {len: 4, name: 整数参数内容, type: uint32}
+
+  # cmd55 - MCU-M2整形参数设置
+  55:
+    - {len: 4, name: 命令序号, type: uint32}
+    - {len: 2, name: 参数地址, type: uint16}
+    - {len: 4, name: 参数值, type: uint32}
+
+  # cmd56 - M2-MCU整形参数设置应答
+  56:
+    - {len: 4, name: 响应命令序号, type: uint32}
+    - {len: 2, name: 参数地址, type: uint16}
+    - {len: 4, name: 参数值, type: uint32}
+    - {len: 2, name: 参数设置结果, type: uint16}
+
+  # cmd57 - MCU请求获取模块详细状态
+  57:
+    - {len: 4, name: 命令序号, type: uint32}
+
+  # cmd58 - M2应答模块详细状态信息
+  58:
+    - {len: 4, name: 响应命令序号, type: uint32}
+    - {len: 1, name: 有效模块数量, type: uint8, id: module_count}
+    - repeat_by: module_count
+      fields:
+        - {len: 1, name: PFC_MOS温度1, type: uint8, scale: 1, notes: "偏移-50"}
+        - {len: 1, name: PFC_MOS温度2, type: uint8, scale: 1, notes: "偏移-50"}
+        - {len: 1, name: PFC_MOS温度3, type: uint8, scale: 1, notes: "偏移-50"}
+        - {len: 1, name: 防反二极管温度, type: uint8, scale: 1, notes: "偏移-50"}
+        - {len: 1, name: 整流二极管温度, type: uint8, scale: 1, notes: "偏移-50"}
+        - {len: 1, name: 谐振电感温度, type: uint8, scale: 1, notes: "偏移-50"}
+        - {len: 1, name: 变压器温度, type: uint8, scale: 1, notes: "偏移-50"}
+        - {len: 1, name: LLC_MOS温度, type: uint8, scale: 1, notes: "偏移-50"}
+        - {len: 1, name: 环境温度或液冷进水口温度, type: uint8, scale: 1, notes: "偏移-50"}
+        - {len: 1, name: 风扇转速, type: uint8}
+
+  # cmd401 - 日志文件请求指令下发
+  401:
+    - {len: 4, name: 事务号, type: uint32}
+    - {len: 2, name: 设备类型, type: uint16}
+    - {len: 2, name: 日志类型, type: binary_str_2bytes}
+    - {len: 128, name: 日志上传文件路径, type: ascii}
+
+  # cmd402 - 日志文件请求指令回复
+  402:
+    - {len: 4, name: 事务号, type: uint32}
+    - {len: 2, name: 设备类型, type: uint16}
+    - {len: 1, name: 结果, type: uint8}
+    - {len: 2, name: 拒绝原因, type: uint16}
+
+  # cmd403 - 日志文件上传状态
+  403:
+    - {len: 2, name: 设备类型, type: uint16}
+    - {len: 2, name: 上传状态, type: uint16}
+    - {len: 1, name: 上传进度, type: uint8}
+
+  # cmd411 - 在线升级指令下发
+  411:
+    - {len: 4, name: 事务号, type: uint32}
+    - {len: 2, name: 设备类型, type: uint16}
+    - {len: 128, name: 升级文件路径, type: ascii}
+    - {len: 32, name: 升级文件MD5, type: ascii}
+    - {len: 4, name: 升级文件大小, type: uint32}
+
+  # cmd412 - 在线升级指令应答
+  412:
+    - {len: 4, name: 命令序号, type: uint32}
+    - {len: 1, name: 设备类型, type: uint8}
+    - {len: 1, name: 结果, type: uint8}
+    - {len: 2, name: 拒绝原因, type: uint16}
+
+  # cmd413 - 在线升级状态上报
+  413:
+    - {len: 1, name: 设备类型, type: uint8}
+    - {len: 2, name: 升级状态, type: uint16}
+    - {len: 1, name: 下载进度, type: uint8}
+
+  # cmd415 - 在线升级复位指令下发
+  415:
+    - {len: 4, name: 命令序号, type: uint32}
+
+  # cmd416 - 在线升级复位指令回复
+  416:
+    - {len: 4, name: 命令序号, type: uint32}
+    - {len: 1, name: 结果, type: uint8}
+    - {len: 2, name: 拒绝原因, type: uint16}
 

@@ -52,7 +52,6 @@ class Field:
     type: str  # 类型名称
     id: Optional[str] = None  # 字段ID，用于引用
     scale: Optional[float] = None  # 缩放因子
-    unit: Optional[str] = None  # 单位
     endian: Optional[str] = None  # 端序，覆盖默认值
     enum: Optional[str] = None  # 枚举名称
     when: Optional[str] = None  # 条件表达式

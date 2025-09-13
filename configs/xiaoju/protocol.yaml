@@ -43,12 +43,12 @@ cmds:
     - {len: 4, name: 充电策略, type: uint32}
     - {len: 4, name: 充电策略参数, type: uint32}
     - {len: 7, name: 预约开始时间, type: cp56time2a}
-    - {len: 1, name: 预约超时时间, type: uint8, unit: h}
+    - {len: 1, name: 预约超时时间, type: uint8}
     - {len: 32, name: 订单号, type: ascii}
     - {len: 1, name: 断网充电标志, type: uint8}
-    - {len: 4, name: 离线可充电电量, type: uint32, scale: 0.01, unit: kWh}
+    - {len: 4, name: 离线可充电电量, type: uint32, scale: 0.01}
     - {len: 1, name: 是否收取延时费, type: uint8}
-    - {len: 4, name: 延时费等待时间, type: uint32, unit: s}
+    - {len: 4, name: 延时费等待时间, type: uint32}
 
   # cmd8 - 充电启动响应
   8:
@@ -62,40 +62,40 @@ cmds:
   # cmd106 - 设备信息上报
   106:
     - {len: 2, name: 电源模块总数, type: uint16}
-    - {len: 2, name: 电源模块总功率, type: uint16, unit: kW}
+    - {len: 2, name: 电源模块总功率, type: uint16}
     - {len: 32, name: 充电桩编码, type: ascii}
     - {len: 1, name: 离线在线充电设置, type: uint8}
     - {len: 4, name: 充电桩软件版本, type: binary_str_4bytes}
     - {len: 2, name: 充电桩类型, type: uint16}
     - {len: 4, name: 启动次数, type: uint32}
     - {len: 1, name: 数据上传模式, type: uint8}
-    - {len: 2, name: 签到间隔时间, type: uint16, unit: s}
+    - {len: 2, name: 签到间隔时间, type: uint16}
     - {len: 1, name: 小桔TCU标识, type: uint8}
     - {len: 1, name: 充电枪个数, type: uint8}
-    - {len: 1, name: 心跳上报周期, type: uint8, unit: s}
+    - {len: 1, name: 心跳上报周期, type: uint8}
 
   # cmd107 - 充电状态上报
   107:
     - {len: 1, name: 充电枪口, type: uint8}
     - {len: 1, name: 充电枪类型, type: uint8}
     - {len: 1, name: 工作状态, type: uint8}
-    - {len: 1, name: 当前SOC, type: uint8, unit: "%"}
+    - {len: 1, name: 当前SOC, type: uint8}
     - {len: 4, name: 当前最高告警编码, type: uint32}
     - {len: 1, name: 车连接状态, type: uint8}
-    - {len: 2, name: 直流充电电压, type: uint16, scale: 0.1, unit: V}
-    - {len: 2, name: 直流充电电流, type: uint16, scale: 0.1, unit: A}
-    - {len: 2, name: BMS需求电压, type: uint16, scale: 0.1, unit: V}
-    - {len: 2, name: BMS需求电流, type: uint16, scale: 0.1, unit: A}
+    - {len: 2, name: 直流充电电压, type: uint16, scale: 0.1}
+    - {len: 2, name: 直流充电电流, type: uint16, scale: 0.1}
+    - {len: 2, name: BMS需求电压, type: uint16, scale: 0.1}
+    - {len: 2, name: BMS需求电流, type: uint16, scale: 0.1}
     - {len: 1, name: BMS充电模式, type: uint8}
-    - {len: 4, name: 充电时长, type: uint32, unit: s}
-    - {len: 4, name: 本次充电累计电量, type: uint32, scale: 0.01, unit: kWh}
+    - {len: 4, name: 充电时长, type: uint32}
+    - {len: 4, name: 本次充电累计电量, type: uint32, scale: 0.01}
     - {len: 1, name: 充电启动方式, type: uint8}
     - {len: 1, name: 充电策略, type: uint8}
     - {len: 4, name: 充电策略参数, type: uint32}
-    - {len: 4, name: 充电功率, type: uint32, scale: 0.1, unit: kW}
-    - {len: 1, name: 出风口温度, type: uint8, unit: "°C"}
-    - {len: 1, name: 环境温度, type: uint8, unit: "°C"}
-    - {len: 1, name: 充电枪温度, type: uint8, unit: "°C"}
+    - {len: 4, name: 充电功率, type: uint32, scale: 0.1}
+    - {len: 1, name: 出风口温度, type: uint8}
+    - {len: 1, name: 环境温度, type: uint8}
+    - {len: 1, name: 充电枪温度, type: uint8}
     - {len: 18, name: 车辆VIN码, type: ascii}
     - {len: 32, name: 充电流水号, type: ascii}
     - {len: 1, name: 枪归位状态, type: uint8}
@@ -117,14 +117,14 @@ cmds:
     - {len: 32, name: 充电桩编码, type: ascii}
     - {len: 1, name: 充电枪口, type: uint8}
     - {len: 2, name: 停止充电原因, type: uint16}
-    - {len: 4, name: 开始充电电量, type: uint32, scale: 0.01, unit: kWh}
-    - {len: 4, name: 充电电量, type: uint32, scale: 0.01, unit: kWh}
-    - {len: 1, name: 开始SOC, type: uint8, unit: "%"}
-    - {len: 1, name: 结束SOC, type: uint8, unit: "%"}
+    - {len: 4, name: 开始充电电量, type: uint32, scale: 0.01}
+    - {len: 4, name: 充电电量, type: uint32, scale: 0.01}
+    - {len: 1, name: 开始SOC, type: uint8}
+    - {len: 1, name: 结束SOC, type: uint8}
     - {len: 7, name: 开始充电时间, type: cp56time2a}
-    - {len: 4, name: 充电时长, type: uint32, unit: s}
-    - {len: 4, name: 电费, type: uint32, scale: 0.001, unit: CNY}
-    - {len: 4, name: 服务费, type: uint32, scale: 0.001, unit: CNY}
+    - {len: 4, name: 充电时长, type: uint32}
+    - {len: 4, name: 电费, type: uint32, scale: 0.001}
+    - {len: 4, name: 服务费, type: uint32, scale: 0.001}
     - {len: 32, name: 订单编号, type: ascii}
 
   # cmd304 - 未知命令（临时处理）

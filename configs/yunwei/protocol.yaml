@@ -57,23 +57,23 @@ cmds:
     - {len: 1, name: 充电口号, type: uint8}
     - {len: 1, name: 充电枪类型, type: uint8}
     - {len: 1, name: 工作状态, type: uint8}
-    - {len: 1, name: 当前SOC, type: uint8, unit: "%"}
+    - {len: 1, name: 当前SOC, type: uint8}
     - {len: 4, name: 当前最高告警编码, type: uint32}
     - {len: 1, name: 车连接状态, type: uint8}
-    - {len: 2, name: 直流充电电压, type: uint16, scale: 0.1, unit: V}
-    - {len: 2, name: 直流充电电流, type: uint16, scale: 0.1, unit: A}
-    - {len: 2, name: BMS需求电压, type: uint16, scale: 0.1, unit: V}
-    - {len: 2, name: BMS需求电流, type: uint16, scale: 0.1, unit: A}
+    - {len: 2, name: 直流充电电压, type: uint16, scale: 0.1}
+    - {len: 2, name: 直流充电电流, type: uint16, scale: 0.1}
+    - {len: 2, name: BMS需求电压, type: uint16, scale: 0.1}
+    - {len: 2, name: BMS需求电流, type: uint16, scale: 0.1}
     - {len: 1, name: BMS充电模式, type: uint8}
-    - {len: 4, name: 充电时长, type: uint32, unit: s}
-    - {len: 4, name: 本次充电累计电量, type: uint32, scale: 0.01, unit: kWh}
+    - {len: 4, name: 充电时长, type: uint32}
+    - {len: 4, name: 本次充电累计电量, type: uint32, scale: 0.01}
     - {len: 1, name: 充电启动方式, type: uint8}
     - {len: 1, name: 充电策略, type: uint8}
     - {len: 4, name: 充电策略参数, type: uint32}
-    - {len: 4, name: 充电功率, type: uint32, scale: 0.1, unit: kW}
-    - {len: 1, name: 出风口温度, type: uint8, unit: "°C"}
-    - {len: 1, name: 环境温度, type: uint8, unit: "°C"}
-    - {len: 1, name: 充电枪温度, type: uint8, unit: "°C"}
+    - {len: 4, name: 充电功率, type: uint32, scale: 0.1}
+    - {len: 1, name: 出风口温度, type: uint8}
+    - {len: 1, name: 环境温度, type: uint8}
+    - {len: 1, name: 充电枪温度, type: uint8}
     - {len: 18, name: 车辆VIN码, type: ascii}
     - {len: 32, name: 充电流水号, type: ascii}
     - {len: 1, name: 枪归位状态, type: uint8}

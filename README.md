@@ -66,15 +66,18 @@ v8parse/
 │   ├── validate_configs.py    # YAML配置验证工具
 │   ├── logger_instance.py     # 📊 日志实例管理
 │   └── m_print.py             # 🖨️ 打印工具
+
 ├── tools/                     # 🔧 其他辅助工具目录
 ├── input_logs/                # 📥 输入日志文件目录
-│   ├── v8_com.log             # V8协议日志文件
+│   ├── v8.log                  # V8协议日志文件
 │   ├── xiaoju.log             # 小桔协议日志文件
 │   ├── yunwei.log             # 运维协议日志文件
-│   └── sincexcel.log          # Sinexcel协议日志文件
+│   └── sinexcel.log            # Sinexcel协议日志文件
 ├── parsed_log/                # 📤 解析结果输出目录（按协议+时间戳）
+├── protocol_template.yaml     # 📋 协议配置模板文件
 ├── README.md                  # 📖 项目说明文档
-└── .gitignore                 # 🔧 版本控制忽略文件
+├── .gitignore                 # 🔧 版本控制忽略文件
+└── v8协议解析.code-workspace   # 💻 VS Code工作区配置
 ```
 
 ### 🎯 架构亮点
@@ -130,10 +133,10 @@ python main.py --validate
 
 | 协议类型 | 文件路径 | 格式 |
 |---------|----------|------|
-| V8 | `input_logs/v8_com.log` | 文本格式，时间戳 + 十六进制数据 |
+| V8 | `input_logs/v8.log` | 文本格式，时间戳 + 十六进制数据 |
 | 小桔 | `input_logs/xiaoju.log` | 文本格式，时间戳 + 十六进制数据 |
 | 运维 | `input_logs/yunwei.log` | 文本格式，时间戳 + 十六进制数据 |
-| Sinexcel | `input_logs/sincexcel.log` | 文本格式，时间戳 + 十六进制数据 |
+| Sinexcel | `input_logs/sinexcel.log` | 文本格式，时间戳 + 十六进制数据 |
 
 ## 💡 添加新协议（零代码）
 
@@ -263,6 +266,7 @@ filters:                       # 过滤器
 - {len: 1, name: 状态, type: uint8, enum: device_status}
 ```
 
+
 ## 🛠️ 配置验证
 
 使用内置的配置验证工具：
@@ -331,7 +335,7 @@ parsed_<protocol>_log_YYYY-MM-DD HH-MM-SS.txt
 
 ### 技术特点
 
-- ✅ **生产就绪**：所有功能经过完整测试
+- ✅ **生产就绪**：核心功能稳定可靠
 - ✅ **零技术债务**：全新架构，代码简洁
 - ✅ **高扩展性**：新协议添加极其简单
 - ✅ **类型安全**：完整的类型检查和验证

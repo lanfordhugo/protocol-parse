@@ -1,41 +1,34 @@
 """
 基于YAML配置的统一协议实现
-完全使用YAML配置驱动，取代原有的unified_protocol.py
+完全基于YAML配置驱动的协议解析器，无需依赖任何旧模块
 """
 
 from typing import Any, Dict, List, Optional
 import logging
 from pathlib import Path
+import re
+from datetime import datetime
 
-from src.base_protocol import BaseProtocol
 from src.yaml_cmdformat import YamlCmdFormat
 from src.yaml_field_parser import YamlFieldParser
-from src.console_log import ConsoleLog
 from src.logger_instance import log
 
 logger = logging.getLogger(__name__)
 
 
-class YamlUnifiedProtocol(BaseProtocol):
+class YamlUnifiedProtocol:
     """基于YAML配置的统一协议类"""
 
     def __init__(self, log_file_name: str, protocol_yaml_path: str):
+        # 保存文件路径
+        self.log_file_name = log_file_name
+        self.protocol_yaml_path = protocol_yaml_path
+        
         # 加载YAML配置
         self.yaml_format = YamlCmdFormat(protocol_yaml_path)
         self.yaml_config = self.yaml_format.config
         
-        # 创建兼容的旧配置格式给父类
-        from collections import namedtuple
-        LegacyConfig = namedtuple('ProtocolConfig', ['head_len', 'tail_len', 'frame_head'])
-        legacy_config = LegacyConfig(
-            self.yaml_config.head_len, 
-            self.yaml_config.tail_len, 
-            self.yaml_config.frame_head
-        )
-        
-        # 初始化父类（传入dummy format_file_path）
-        super().__init__(log_file_name, "", legacy_config)
-        
+        # 创建字段解析器
         self.field_parser = YamlFieldParser(self.yaml_format.config)
         
         logger.info(f"Initialized YAML protocol: {self.yaml_config.meta.protocol}")

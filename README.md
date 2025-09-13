@@ -63,10 +63,10 @@ v8parse/
 │   ├── yaml_unified_protocol.py # YAML统一协议解析器
 │   ├── yaml_field_parser.py   # YAML字段解析器
 │   ├── yaml_cmdformat.py      # YAML命令格式管理器
+│   ├── validate_configs.py    # YAML配置验证工具
 │   ├── logger_instance.py     # 📊 日志实例管理
 │   └── m_print.py             # 🖨️ 打印工具
-├── tools/                     # 🔧 工具目录
-│   └── validate_configs.py    # YAML配置验证工具
+├── tools/                     # 🔧 其他辅助工具目录
 ├── input_logs/                # 📥 输入日志文件目录
 │   ├── v8_com.log             # V8协议日志文件
 │   ├── xiaoju.log             # 小桔协议日志文件
@@ -105,7 +105,7 @@ cd v8parse
 python --version
 
 # 验证配置文件（可选）
-python tools/validate_configs.py --all
+python src/validate_configs.py --all
 ```
 
 ### 3. 基本使用
@@ -269,10 +269,10 @@ filters:                       # 过滤器
 
 ```bash
 # 验证单个配置
-python tools/validate_configs.py configs/v8/protocol.yaml
+python src/validate_configs.py configs/v8/protocol.yaml
 
 # 验证所有配置
-python tools/validate_configs.py --all
+python src/validate_configs.py --all
 
 # 集成到主程序
 python main.py --validate

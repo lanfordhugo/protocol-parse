@@ -25,7 +25,6 @@
 ## Python标准规范 (PEP 8 & More)
 
 - **严格遵循PEP 8:** 所有代码必须严格遵循PEP 8编码规范。
-- **Python版本:** 推荐使用Python 3.8+，充分利用现代Python特性。
 - **强制类型提示:** 所有公共函数、方法和类属性必须有类型提示。
 - **现代Python特性优先:** f-string、dataclass、上下文管理器、生成器、async/await等。
 

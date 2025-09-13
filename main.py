@@ -106,7 +106,7 @@ def validate_all_configs():
     # 使用已有的验证工具
     import subprocess
     result = subprocess.run([
-        sys.executable, "tools/validate_configs.py", "--all"
+        sys.executable, "src/validate_configs.py", "--all"
     ], capture_output=True, text=True)
     
     print(result.stdout)

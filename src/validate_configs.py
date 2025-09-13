@@ -9,8 +9,7 @@ import argparse
 from pathlib import Path
 from typing import List, Dict, Any
 
-# 添加src目录到路径
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+# 当前文件已在src目录中，无需添加路径
 
 from yaml_config import yaml_loader, ProtocolConfig
 
@@ -134,21 +133,21 @@ class ConfigValidator:
         print(f"\n=== Validation Results for {config_path.name} ===")
         
         if self.errors:
-            print(f"\n❌ Errors ({len(self.errors)}):")
+            print(f"\n[ERROR] Errors ({len(self.errors)}):")
             for error in self.errors:
                 print(f"  - {error}")
         
         if self.warnings:
-            print(f"\n⚠️  Warnings ({len(self.warnings)}):")
+            print(f"\n[WARNING] Warnings ({len(self.warnings)}):")
             for warning in self.warnings:
                 print(f"  - {warning}")
         
         if not self.errors and not self.warnings:
-            print("\n✅ Configuration is valid!")
+            print("\n[OK] Configuration is valid!")
         elif not self.errors:
-            print(f"\n✅ Configuration is valid (with {len(self.warnings)} warnings)")
+            print(f"\n[OK] Configuration is valid (with {len(self.warnings)} warnings)")
         else:
-            print(f"\n❌ Configuration has {len(self.errors)} errors")
+            print(f"\n[ERROR] Configuration has {len(self.errors)} errors")
 
 
 def validate_all_configs(configs_dir: Path) -> bool:
@@ -178,9 +177,9 @@ def validate_all_configs(configs_dir: Path) -> bool:
     
     print(f"\n{'='*60}")
     if all_valid:
-        print("✅ All configurations are valid!")
+        print("[OK] All configurations are valid!")
     else:
-        print("❌ Some configurations have errors!")
+        print("[ERROR] Some configurations have errors!")
     print('='*60)
     
     return all_valid

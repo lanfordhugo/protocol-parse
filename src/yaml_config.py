@@ -76,21 +76,12 @@ class Group:
 
 
 @dataclass
-class Filters:
-    """过滤器配置"""
-    include_cmds: Optional[List[int]] = None
-    exclude_cmds: Optional[List[int]] = None
-    time_window: Optional[Dict[str, str]] = None
-
-
-@dataclass
 class ProtocolConfig:
     """完整的协议配置"""
     meta: Meta
     types: Dict[str, TypeDef]
     enums: Dict[str, EnumDef]
     cmds: Dict[int, List[Union[Field, Group]]]
-    filters: Filters
     
     # 原协议配置兼容字段
     head_len: int
@@ -160,13 +151,6 @@ class YamlConfigLoader:
         for cmd_id, cmd_fields in data.get('cmds', {}).items():
             cmds[int(cmd_id)] = self._parse_fields(cmd_fields)
         
-        # 解析过滤器
-        filter_data = data.get('filters', {})
-        filters = Filters(
-            include_cmds=filter_data.get('include_cmds'),
-            exclude_cmds=filter_data.get('exclude_cmds'),
-            time_window=filter_data.get('time_window')
-        )
         
         # 兼容性字段（从原protocol_configs.py迁移）
         compat_data = data.get('compatibility', {})
@@ -180,7 +164,6 @@ class YamlConfigLoader:
             types=types,
             enums=enums,
             cmds=cmds,
-            filters=filters,
             head_len=head_len,
             tail_len=tail_len,
             frame_head=frame_head,

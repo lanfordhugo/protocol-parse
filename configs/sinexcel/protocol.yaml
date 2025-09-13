@@ -41,6 +41,3 @@ cmds:
     - {len: 4, name: 参数值, type: uint32}
     - {len: 1, name: 查询结果, type: uint8}
 
-filters:
-  include_cmds: []
-  exclude_cmds: []

@@ -41,20 +41,6 @@ class YamlCmdFormat:
         """获取支持的命令列表"""
         return list(self.config.cmds.keys())
     
-    def should_include_cmd(self, cmd_id: int) -> bool:
-        """检查是否应该包含指定命令（基于过滤器）"""
-        filters = self.config.filters
-        
-        # 检查排除列表
-        if filters.exclude_cmds and cmd_id in filters.exclude_cmds:
-            return False
-        
-        # 检查包含列表
-        if filters.include_cmds:
-            return cmd_id in filters.include_cmds
-        
-        # 默认包含所有命令
-        return True
     
     def get_protocol_info(self) -> Dict[str, Any]:
         """获取协议信息"""

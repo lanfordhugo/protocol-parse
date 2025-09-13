@@ -58,9 +58,6 @@ class YamlUnifiedProtocol:
                     log.d_print("未找到命令ID，跳过")
                     continue
                 
-                # 检查命令过滤
-                if not self.yaml_format.should_include_cmd(cmd_id):
-                    continue
                 
                 # 检查是否支持该命令
                 if not self.yaml_format.has_cmd(cmd_id):

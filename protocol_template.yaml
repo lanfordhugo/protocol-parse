@@ -1,0 +1,135 @@
+# 协议配置模板 - 展示所有可用配置选项
+# 复制此文件并重命名为 configs/<protocol_name>/protocol.yaml
+
+meta:
+  protocol: example_protocol      # 协议名称
+  version: 1                     # 协议版本
+  default_endian: LE             # 默认字节序: LE(小端) 或 BE(大端)
+  notes: 协议配置说明            # 可选：协议说明
+
+# 兼容性配置（与原protocol_configs.py保持一致）
+compatibility:
+  head_len: 11                   # 报文头长度
+  tail_len: 2                    # 报文尾长度
+  frame_head: "AA F5"           # 帧头标识（16进制字符串）
+  head_fields:                  # 头部字段定义
+    - {name: "cmd", offset: 4, length: 2, endian: "little", type: "uint"}
+    - {name: "index", offset: 6, length: 2, endian: "little", type: "uint"}
+
+# 类型定义 - 定义所有可用的数据类型
+types:
+  # 基础整数类型
+  uint8:   { base: uint, bytes: 1, signed: false }
+  uint16:  { base: uint, bytes: 2, signed: false }
+  uint32:  { base: uint, bytes: 4, signed: false }
+  int16:   { base: int,  bytes: 2, signed: true }
+  
+  # 字符串类型
+  ascii:   { base: str,  encoding: ASCII }
+  
+  # 特殊类型
+  hex:     { base: hex }                    # 16进制显示
+  
+  # BCD码类型
+  bcd2:    { base: bcd, bytes: 2 }         # 2字节BCD码
+  bcd4:    { base: bcd, bytes: 4 }         # 4字节BCD码
+  
+  # 时间类型
+  cp56time2a: { base: time.cp56time2a, bytes: 7 }  # IEC104时间格式
+  
+  # 二进制字符串类型
+  binary_str_1byte:  { base: binary_str, bytes: 1 }
+  binary_str_2bytes: { base: binary_str, bytes: 2 }
+  binary_str_4bytes: { base: binary_str, bytes: 4 }
+  
+  # 位集合类型 - 用于状态位解析
+  status_bits:
+    base: bitset
+    bits:
+      - {name: "状态位0"}
+      - {name: "状态位1"}
+      - {name: "状态位2"}
+      - {name: "预留位"}
+
+# 枚举定义 - 定义字段值的含义
+enums:
+  result_code:
+    0: 失败
+    1: 成功
+  device_status:
+    0: 离线
+    1: 在线
+    2: 故障
+
+# 命令定义 - 定义各种命令的数据结构
+cmds:
+  # 简单命令 - 固定字段
+  1:
+    - {len: 1, name: 设备类型, type: uint8}
+    - {len: 2, name: 设备ID, type: uint16}
+    - {len: 4, name: 时间戳, type: uint32}
+    - {len: 1, name: 状态, type: uint8, enum: device_status}
+    - {len: 32, name: 设备名称, type: ascii}
+  
+  # 带缩放因子的命令
+  2:
+    - {len: 2, name: 电压值, type: uint16, scale: 0.1}      # 实际值 = 原始值 * 0.1
+    - {len: 2, name: 电流值, type: uint16, scale: 0.01}     # 实际值 = 原始值 * 0.01
+    - {len: 1, name: 温度, type: uint8, notes: "偏移-40"}   # 备注说明
+  
+  # 带枚举的命令
+  3:
+    - {len: 1, name: 执行结果, type: uint8, enum: result_code}
+    - {len: 1, name: 错误码, type: uint8}
+  
+  # 变长循环命令 - 循环次数由字段值决定
+  10:
+    - {len: 1, name: 数据个数, type: uint8, id: data_count}  # id用于引用
+    - repeat_by: data_count                                   # 按data_count字段值循环
+      fields:
+        - {len: 2, name: 数据项, type: uint16}
+        - {len: 1, name: 标志, type: uint8}
+  
+  # 固定循环命令 - 固定循环次数
+  11:
+    - {len: 1, name: 头部信息, type: uint8}
+    - repeat_const: 8                                        # 固定循环8次
+      fields:
+        - {len: 2, name: 通道值, type: uint16, scale: 0.1}
+        - {len: 1, name: 通道状态, type: uint8}
+  
+  # 条件字段命令 - 根据条件显示字段
+  12:
+    - {len: 1, name: 数据类型, type: uint8, id: data_type}
+    - {len: 2, name: 基础数据, type: uint16}
+    - {len: 4, name: 扩展数据, type: uint32, when: "data_type == 1"}  # 仅当data_type=1时解析
+  
+  # 复杂嵌套循环
+  20:
+    - {len: 1, name: 组数, type: uint8, id: group_count}
+    - repeat_by: group_count
+      fields:
+        - {len: 1, name: 组ID, type: uint8}
+        - {len: 1, name: 项目数, type: uint8, id: item_count}
+        - repeat_by: item_count
+          fields:
+            - {len: 2, name: 项目值, type: uint16}
+            - {len: 1, name: 项目状态, type: uint8}
+
+# 过滤器配置 - 控制哪些命令需要解析
+filters:
+  include_cmds: []              # 包含的命令列表，空表示包含所有
+  exclude_cmds: [255]           # 排除的命令列表
+
+# 配置说明:
+# 1. len: 字段长度（字节数）
+# 2. name: 字段显示名称
+# 3. type: 数据类型（必须在types中定义）
+# 4. scale: 缩放因子，实际值 = 原始值 * scale（可选）
+# 5. enum: 枚举名称，用于值到文本的映射（可选）
+# 6. id: 字段标识符，用于repeat_by引用（可选）
+# 7. when: 条件表达式，满足条件时才解析（可选）
+# 8. notes: 备注信息（可选）
+# 9. endian: 字节序，覆盖默认值（可选）
+# 10. repeat_by: 变长循环，按指定字段值循环
+# 11. repeat_const: 固定循环，固定次数循环

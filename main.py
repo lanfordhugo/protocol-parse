@@ -26,18 +26,14 @@ def get_available_protocols() -> Dict[str, Dict[str, str]]:
         if protocol_dir.is_dir():
             yaml_config = protocol_dir / "protocol.yaml"
             
-            # 特殊处理各协议的日志文件名
-            if protocol_dir.name == "sinexcel":
-                log_file = Path("input_logs") / "sincexcel.log"
-            elif protocol_dir.name == "v8":
-                log_file = Path("input_logs") / "v8_com.log"
-            else:
-                log_file = Path("input_logs") / f"{protocol_dir.name}.log"
+            # 统一策略：日志文件名必须与协议目录名一致
+            log_file = Path("input_logs") / f"{protocol_dir.name}.log"
             
-            if yaml_config.exists():
+            # 只有配置文件和日志文件都存在才认为是有效协议
+            if yaml_config.exists() and log_file.exists():
                 protocols[protocol_dir.name] = {
                     'yaml_config': str(yaml_config),
-                    'log_file': str(log_file) if log_file.exists() else f"input_logs/{protocol_dir.name}.log"
+                    'log_file': str(log_file)
                 }
     
     return protocols
@@ -132,16 +128,14 @@ def main():
 支持的协议: {', '.join(protocols.keys()) if protocols else '无'}
 
 使用示例:
-  python main.py v8        # 解析V8协议
-  python main.py xiaoju    # 解析小桔协议
-  python main.py yunwei    # 解析运维协议
-  python main.py sinexcel  # 解析Sinexcel协议
-  python main.py --list    # 列出所有协议
-  python main.py --validate # 验证所有配置
+  python main.py <protocol>  # 解析指定协议
+  python main.py --list      # 列出所有可用协议
+  python main.py --validate  # 验证所有配置
 
-🚀 添加新协议只需2步：
+🚀 添加新协议的统一规则：
 1. 在 configs/<protocol_name>/ 目录下创建 protocol.yaml
-2. 将日志文件放到 input_logs/<protocol_name>.log
+2. 将日志文件命名为 input_logs/<protocol_name>.log
+3. 配置文件和日志文件都存在才会被识别为有效协议
         """
     )
     

@@ -83,6 +83,3 @@ cmds:
   3001:
     - {len: 16, name: 运维数据, type: hex}
 
-filters:
-  include_cmds: []
-  exclude_cmds: []

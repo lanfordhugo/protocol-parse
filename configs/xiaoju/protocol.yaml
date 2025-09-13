@@ -131,6 +131,3 @@ cmds:
   304:
     - {len: 100, name: 数据内容, type: hex}
 
-filters:
-  include_cmds: []
-  exclude_cmds: []

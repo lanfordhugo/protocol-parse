@@ -483,6 +483,3 @@ cmds:
     - {len: 1, name: 并充组网3地址, type: uint8}
     - {len: 1, name: 并充组网4地址, type: uint8}
 
-filters:
-  include_cmds: []
-  exclude_cmds: []

@@ -22,8 +22,28 @@ def load_yaml_config(config_path: str) -> Dict:
         print(f"❌ 加载配置文件失败: {e}")
         return {}
 
+def detect_document_format(content: str) -> str:
+    """检测文档格式类型"""
+    # 检查是否为云快充格式（使用帧类型码）
+    if re.search(r'\|\s*帧类型码\s*\|\s*0x[0-9A-Fa-f]+', content):
+        return 'yunkuaichong'
+    # 检查是否有MD锚点格式的CMD定义
+    elif re.search(r'<a id="cmd-\d+"></a>', content):
+        # 进一步区分盛弘和V8格式
+        if re.search(r'### \d+\.\d+.*\(cmd=\d+\)', content, re.IGNORECASE):
+            return 'shenghong'
+        elif re.search(r'### [^(]+\(cmd=\d+\)', content, re.IGNORECASE):
+            return 'v8'
+        else:
+            return 'anchor_based'
+    # 传统盛弘格式（无锚点）
+    elif re.search(r'### \d+\.\d+.*\(CMD=\d+\)', content, re.IGNORECASE):
+        return 'shenghong_legacy'
+    else:
+        return 'unknown'
+
 def parse_protocol_doc(doc_path: str) -> Dict[int, Dict]:
-    """解析协议文档，提取CMD定义"""
+    """解析协议文档，提取CMD定义 - 支持多种格式"""
     try:
         with open(doc_path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -31,12 +51,160 @@ def parse_protocol_doc(doc_path: str) -> Dict[int, Dict]:
         print(f"❌ 读取协议文档失败: {e}")
         return {}
     
-    protocol_cmds = {}
+    # 检测文档格式
+    doc_format = detect_document_format(content)
+    print(f"🔍 检测到文档格式: {doc_format}")
     
-    # 分段处理，每个段落分别解析
+    # 根据格式选择解析方法
+    if doc_format == 'yunkuaichong':
+        return parse_yunkuaichong_protocol(content)
+    elif doc_format in ['shenghong', 'v8', 'anchor_based']:
+        return parse_anchor_based_protocol(content, doc_format)
+    elif doc_format == 'shenghong_legacy':
+        return parse_shenghong_legacy_protocol(content)
+    else:
+        print(f"⚠️  未知文档格式，尝试使用传统解析方法")
+        return parse_shenghong_legacy_protocol(content)
+
+def parse_anchor_based_protocol(content: str, doc_format: str) -> Dict[int, Dict]:
+    """解析基于MD锚点的协议文档（盛弘和V8）"""
+    protocol_cmds = {}
     lines = content.split('\n')
     
-    # 方法1：查找所有CMD标题行，优先使用正文中的定义（有表格）
+    # 查找所有带有 <a id="cmd-数字"></a> 锚点的CMD定义
+    cmd_anchors = []
+    
+    for i, line in enumerate(lines):
+        # 匹配锚点格式：<a id="cmd-001"></a> 或 <a id="cmd-1"></a>
+        anchor_match = re.search(r'<a id="cmd-(\d+)"></a>', line)
+        if anchor_match:
+            cmd_num_str = anchor_match.group(1)
+            cmd_num = int(cmd_num_str.lstrip('0') or '0')  # 处理前导零
+            
+            # 查找紧接着的标题行
+            title_line_idx = i + 1
+            if title_line_idx < len(lines):
+                title_line = lines[title_line_idx]
+                
+                # 根据文档格式匹配不同的标题模式
+                if doc_format == 'shenghong':
+                    # 盛弘格式：### 3.1.1  (cmd=1)后台服务器下发充电桩整形工作参数
+                    title_match = re.match(r'^\s*### .*\(cmd=\d+\)', title_line, re.IGNORECASE)
+                elif doc_format == 'v8':
+                    # V8格式：### 注册帧(cmd=1) [cmd=001]
+                    title_match = re.match(r'^\s*### .*\(cmd=\d+\)', title_line, re.IGNORECASE)
+                else:
+                    # 通用锚点格式
+                    title_match = re.match(r'^\s*#{1,4}', title_line)
+                
+                if title_match:
+                    cmd_anchors.append((i, cmd_num, title_line.strip(), title_line_idx))
+    
+    print(f"🔍 通过锚点找到 {len(cmd_anchors)} 个CMD定义")
+    
+    # 处理每个CMD段落
+    for i, (anchor_idx, cmd_num, title, title_idx) in enumerate(cmd_anchors):
+        # 确定段落结束位置 - 查找下一个锚点或主要章节
+        end_line_idx = len(lines)
+        
+        # 查找下一个CMD锚点
+        if i + 1 < len(cmd_anchors):
+            next_anchor_idx = cmd_anchors[i + 1][0]
+            end_line_idx = next_anchor_idx
+        else:
+            # 如果是最后一个，查找下一个主要章节
+            for j in range(title_idx + 1, len(lines)):
+                line = lines[j].strip()
+                # 主要章节标题或新的锚点
+                if (re.match(r'^\s*#{1,2}\s+\d+\.\d+', line) or 
+                    re.search(r'<a id="[^"]*"></a>', line)):
+                    end_line_idx = j
+                    break
+        
+        # 提取段落内容
+        cmd_lines = lines[anchor_idx:end_line_idx]
+        cmd_content = '\n'.join(cmd_lines)
+        
+        # 提取字段定义表格
+        fields = extract_fields_from_table(cmd_content)
+        
+        protocol_cmds[cmd_num] = {
+            'name': extract_cmd_name_from_title(title, doc_format),
+            'fields': fields,
+            'raw_content': cmd_content[:200] + '...' if len(cmd_content) > 200 else cmd_content
+        }
+    
+    return protocol_cmds
+
+def parse_yunkuaichong_protocol(content: str) -> Dict[int, Dict]:
+    """解析云快充协议文档（基于帧类型码）"""
+    protocol_cmds = {}
+    lines = content.split('\n')
+    
+    # 查找所有帧类型码定义
+    frame_type_sections = []
+    
+    for i, line in enumerate(lines):
+        # 匹配表格中的帧类型码行：| 帧类型码      | 0x01                          |
+        frame_match = re.search(r'\|\s*帧类型码\s*\|\s*0x([0-9A-Fa-f]+)', line)
+        if frame_match:
+            hex_str = frame_match.group(1)
+            cmd_num = int(hex_str, 16)  # 十六进制转十进制
+            
+            # 向前查找章节标题
+            section_title = "未知功能"
+            for j in range(max(0, i - 10), i):
+                title_line = lines[j].strip()
+                if re.match(r'^\s*#{1,3}\s+.+', title_line):
+                    # 提取标题内容
+                    title_match = re.search(r'#{1,3}\s+(.+)', title_line)
+                    if title_match:
+                        section_title = title_match.group(1).strip()
+                        break
+            
+            frame_type_sections.append((i, cmd_num, section_title, hex_str))
+    
+    print(f"🔍 通过帧类型码找到 {len(frame_type_sections)} 个CMD定义")
+    
+    # 处理每个帧类型码段落
+    for i, (line_idx, cmd_num, title, hex_str) in enumerate(frame_type_sections):
+        # 确定段落结束位置
+        end_line_idx = len(lines)
+        
+        # 查找下一个帧类型码或主要章节
+        if i + 1 < len(frame_type_sections):
+            next_line_idx = frame_type_sections[i + 1][0]
+            end_line_idx = next_line_idx - 10  # 留一些缓冲
+        else:
+            # 查找下一个主要章节
+            for j in range(line_idx + 1, len(lines)):
+                line = lines[j].strip()
+                if re.match(r'^\s*#{1,2}\s+.+', line):
+                    end_line_idx = j
+                    break
+        
+        # 提取段落内容
+        start_idx = max(0, line_idx - 20)  # 向前扩展以包含完整表格
+        cmd_lines = lines[start_idx:end_line_idx]
+        cmd_content = '\n'.join(cmd_lines)
+        
+        # 提取字段定义表格
+        fields = extract_yunkuaichong_fields(cmd_content)
+        
+        protocol_cmds[cmd_num] = {
+            'name': title,
+            'fields': fields,
+            'raw_content': cmd_content[:200] + '...' if len(cmd_content) > 200 else cmd_content
+        }
+    
+    return protocol_cmds
+
+def parse_shenghong_legacy_protocol(content: str) -> Dict[int, Dict]:
+    """解析传统盛弘协议文档（原有解析逻辑）"""
+    protocol_cmds = {}
+    lines = content.split('\n')
+    
+    # 原有的解析逻辑 - 查找所有CMD标题行
     cmd_headers = []
     found_cmds = set()  # 用于去重，避免解析重复的CMD
     
@@ -62,7 +230,7 @@ def parse_protocol_doc(doc_path: str) -> Dict[int, Dict]:
                 found_cmds.add(cmd_num)
                 cmd_headers.append((i, cmd_num, line.strip(), priority))
     
-    # 方法2：处理每个CMD段落，按优先级排序（优先级高的在前）
+    # 处理每个CMD段落，按优先级排序（优先级高的在前）
     cmd_headers.sort(key=lambda x: (x[1], -x[3]))  # 按CMD号排序，然后按优先级降序
     
     for i, (line_idx, cmd_num, header, priority) in enumerate(cmd_headers):
@@ -106,6 +274,70 @@ def extract_cmd_name(content: str) -> str:
             if name_match:
                 return name_match.group(1).strip()
     return "未知命令"
+
+def extract_cmd_name_from_title(title: str, doc_format: str) -> str:
+    """从标题行中提取命令名称"""
+    if doc_format == 'shenghong':
+        # 盛弘格式：### 3.1.1  (cmd=1)后台服务器下发充电桩整形工作参数
+        match = re.search(r'### \d+\.\d+(?:\.\d+)?\s*\(cmd=\d+\)\s*(.+)', title, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+        # 备选模式：提取括号后的内容
+        match = re.search(r'\(cmd=\d+\)\s*(.+)', title, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+    elif doc_format == 'v8':
+        # V8格式：### 注册帧(cmd=1) [cmd=001]
+        match = re.search(r'###\s*([^(]+)\(cmd=\d+\)', title, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+    else:
+        # 通用格式：尝试提取###后的内容
+        match = re.search(r'#{1,4}\s*(.+)', title)
+        if match:
+            # 去除括号内容
+            name = re.sub(r'\([^)]*\)', '', match.group(1)).strip()
+            return name if name else "未知命令"
+    
+    return "未知命令"
+
+def extract_yunkuaichong_fields(content: str) -> List[Dict]:
+    """提取云快充协议的字段定义"""
+    fields = []
+    
+    # 云快充使用不同的表格格式，查找参数定义表格
+    # 格式：| 序号 | 参数名称 | 数据类型 | 长度(Byte) | 备注 |
+    table_pattern = r'\|\s*(\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|'
+    matches = re.findall(table_pattern, content)
+    
+    for match in matches:
+        seq_num_str, field_name, data_type, length_str, description = match
+        try:
+            seq_num = int(seq_num_str)
+            
+            # 处理长度字段
+            length_str = length_str.strip()
+            if length_str.isdigit():
+                length = int(length_str)
+            else:
+                # 尝试从字符串中提取数字
+                length_match = re.search(r'(\d+)', length_str)
+                if length_match:
+                    length = int(length_match.group(1))
+                else:
+                    length = -1  # 未知长度
+            
+            fields.append({
+                'seq': seq_num,
+                'name': field_name.strip(),
+                'length': length,
+                'data_type': data_type.strip(),
+                'description': description.strip()
+            })
+        except ValueError:
+            continue
+    
+    return fields
 
 def parse_cmd_range(cmd_range_str: str) -> Set[int]:
     """解析CMD范围字符串，返回CMD号码集合

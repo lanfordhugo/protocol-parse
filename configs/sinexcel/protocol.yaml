@@ -1,43 +1,659 @@
 meta:
   protocol: sinexcel
-  version: 1
+  version: 5.2B
   default_endian: LE
-  notes: Sinexcel协议配置，支持Sinexcel设备通信数据解析
+  notes: 盛弘充电桩后台服务器通迅协议V5.2B配置，支持充电桩与服务器通信数据解析
 
-# 兼容性配置
+# 兼容性配置（基于协议报文格式）
 compatibility:
-  head_len: 8
-  tail_len: 1
+  head_len: 9  # 起始域(2) + 长度域(2) + 信息域(1) + 序列号(1) + 命令代码(2) + 校验和(1)
+  tail_len: 1  # 校验和域
   frame_head: "AA F5"
   head_fields:
-    - {name: "cmd", offset: 6, length: 2, endian: "little", type: "uint"}
-  cmd_aliases:
-    1103: 1102
-    1108: 1105
+    - {name: "frame_start", offset: 0, length: 2, endian: "big", type: "uint"}     # 起始域 0xAAF5
+    - {name: "frame_length", offset: 2, length: 2, endian: "little", type: "uint"} # 长度域
+    - {name: "info_field", offset: 4, length: 1, endian: "little", type: "uint"}   # 信息域
+    - {name: "sequence", offset: 5, length: 1, endian: "little", type: "uint"}     # 序列号
+    - {name: "cmd", offset: 6, length: 2, endian: "little", type: "uint"}          # 命令代码
 
 types:
   uint8:   { base: uint, bytes: 1, signed: false }
   uint16:  { base: uint, bytes: 2, signed: false }
   uint32:  { base: uint, bytes: 4, signed: false }
+  int16:   { base: int,  bytes: 2, signed: true }
+  int32:   { base: int,  bytes: 4, signed: true }
   ascii:   { base: str,  encoding: ASCII }
   hex:     { base: hex }
+  bcd2:    { base: bcd, bytes: 2 }
+  bcd4:    { base: bcd, bytes: 4 }
+  bcd6:    { base: bcd, bytes: 6 }
+  binary_str_1byte:  { base: binary_str, bytes: 1 }
+  binary_str_2bytes: { base: binary_str, bytes: 2 }
+  binary_str_4bytes: { base: binary_str, bytes: 4 }
+  binary_str_8bytes: { base: binary_str, bytes: 8 }
 
 enums:
-  device_status:
-    0: 离线
-    1: 在线
+  operation_type:
+    0: 查询
+    1: 设置
+  result_code:
+    0: 成功
+    1: 失败
+  charging_mode:
+    0: 即时充电
+    1: 定时启动充电
+    2: 预约充电
+  gun_status:
+    0: 空闲
+    1: 准备
+    2: 充电中
+    3: 故障
+    4: 停止
+  work_status:
+    0: 空闲
+    1: 正准备开始充电
+    2: 充电中
+    3: 正在结束充电
+    4: 故障
+  device_type:
+    1: 交流充电桩
+    2: 直流充电桩
+    3: 交直流一体桩
 
 cmds:
-  # cmd1102 - 设备状态上报
-  1102:
-    - {len: 1, name: 设备状态, type: uint8, enum: device_status}
-    - {len: 4, name: 设备序列号, type: uint32}
-    - {len: 2, name: 软件版本, type: uint16}
-    - {len: 2, name: 硬件版本, type: uint16}
+  # cmd=1 - 后台服务器下发充电桩整形工作参数
+  1:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 1, name: 类型, type: uint8, enum: operation_type, id: op_type}
+    - {len: 4, name: 设置/查询参数起始地址, type: uint32}
+    - {len: 1, name: 设置/查询个数, type: uint8}
+    - {len: 2, name: 设置参数字节数, type: uint16, id: param_len}
+    # 变长字段，当类型为设置时才有
+    - {len: 0, name: 设置数据, type: hex, len_by: param_len, when: "op_type == 1"}
+    # 参数地址表内容（当作为设置数据时的内容）：
+    # 1-签到时间间隔(4字节), 2-充电桩项目类型(4字节), 3-充电枪个数(4字节), 4-通道号(4字节)
+    # 5-最高充电电压(4字节), 6-最大充电电流(4字节), 7-读卡器类型(4字节), 8-读卡器波特率(4字节)
+    # 9-充电卡片协议编号(4字节), 10-后台验证(4字节), 11-车牌验证(4字节), 12-车卡VIN绑定(4字节)
+    # 等等... 共95个参数地址
 
-  # cmd1105 - 参数查询响应
-  1105:
-    - {len: 4, name: 参数地址, type: uint32}
-    - {len: 4, name: 参数值, type: uint32}
-    - {len: 1, name: 查询结果, type: uint8}
+  # cmd=2 - 充电桩参数整形设置/查询应答
+  2:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 类型, type: uint8, enum: operation_type, id: op_type}
+    - {len: 4, name: 设置/查询参数启始地址, type: uint32}
+    - {len: 1, name: 设置/查询个数, type: uint8}
+    - {len: 1, name: 设置/查询结果, type: uint8, enum: result_code}
+    # 变长字段，查询时才有
+    - {len: 0, name: 查询参数信息, type: hex, len_to_end: true, when: "op_type == 0"}
+
+  # cmd=3 - 后台服务器下发充电桩字符型参数
+  3:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 1, name: 类型, type: uint8, enum: operation_type, id: op_type}
+    - {len: 4, name: 设置/查询参数启始地址, type: uint32}
+    - {len: 2, name: 设置参数字节数, type: uint16, id: str_param_len}
+    # 变长设置数据字段（当类型为设置时才有，根据设置参数字节数确定长度）
+    - {len: 0, name: 设置数据, type: ascii, len_by: str_param_len, when: "op_type == 1"}
+    # 字符型参数地址表（共20个参数）：
+    # 1-充电桩编码(32字节), 2-标准时钟时间(8字节), 3-管理员密码(8字节), 4-操作员密码(8字节)
+    # 5-MAC地址(6字节), 6-桩登入服务器密码(16字节), 7-桩主界面二维码(256字节), 8-客户服务热线1(16字节)
+    # 9-客户服务热线2(16字节), 10-用户支付二维码(256字节), 11-桩主界面二维码前缀(128字节)
+    # 12-DLT645-2007电表地址(12字节), 13-云服务器域名(64字节), 14-VIN定时启动充电信息(8字节)
+    # 15-20为1-6枪完整二维码信息(每个256字节)
+
+  # cmd=4 - 充电桩参数字符形设置/查询应答
+  4:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 类型, type: uint8, enum: operation_type}
+    - {len: 4, name: 设置/查询参数启始地址, type: uint32}
+    - {len: 1, name: 设置/查询结果, type: uint8, enum: result_code}
+    # 变长字段，查询时才有
+    # - {len: N, name: 设置参数信息, type: hex}
+
+  # cmd=5 - 后台服务器下发充电桩控制命令
+  5:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 1, name: 充电枪口, type: uint8}
+    - {len: 4, name: 启始命令地址, type: uint32}
+    - {len: 1, name: 命令个数, type: uint8}
+    - {len: 2, name: 命令参数长度, type: uint16, id: cmd_param_len}
+    # 变长命令参数字段（命令个数*4字节）
+    - {len: 0, name: 命令参数, type: hex, len_by: cmd_param_len}
+    # 命令地址表（共26个命令）：
+    # 1-预留, 2-停止充电, 3-预留, 4-充电控制方式, 5-预留, 6-预留
+    # 7-电阻模式输出电压, 8-电阻模式输出电流, 9-充电模式, 10-取消预约充电
+    # 11-设备重启, 12-进入升级模式, 13-进入正常应用模式, 14-立即上报一次签到106报文
+    # 15-立即上报一次桩状态信息104报文, 16-扫描支付成功, 17-实时充电（限制）最大充电功率
+    # 18-负载类型, 19-绝缘检测, 20-模块类型, 21-本地计费, 22-刷卡密码输入流程
+    # 23-充电暂停服务, 24-输出电压较准, 25-离线时默认限功率, 26-充电机限电流
+
+  # cmd=6 - 充电桩对后台控制命令应答
+  6:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 充电枪口, type: uint8}
+    - {len: 4, name: 命令启始标志, type: uint32}
+    - {len: 1, name: 命令个数, type: uint8}
+    - {len: 1, name: 命令执行结果, type: uint8, enum: result_code}
+
+  # cmd=7 - 后台服务器下发充电桩开启充电控制命令
+  7:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 1, name: 充电枪口, type: uint8}
+    - {len: 4, name: 充电生效类型, type: uint32, enum: charging_mode}
+    - {len: 4, name: 界面充电停止密码, type: uint32}
+    - {len: 4, name: 充电策略, type: uint32}
+    - {len: 4, name: 充电策略参数, type: uint32}
+    - {len: 8, name: 预约/定时启动时间, type: hex}
+    - {len: 1, name: 预约超时时间, type: uint8}
+    - {len: 32, name: 用户卡号/用户识别号, type: ascii}
+    - {len: 1, name: 断网充电标志, type: uint8}
+    - {len: 4, name: 离线时本次最大可充电总电量, type: uint32, scale: 0.01}
+    - {len: 32, name: 充电流水号, type: ascii}
+    - {len: 1, name: BMS辅源电压, type: uint8}
+    - {len: 4, name: 用户账号余额, type: uint32, scale: 0.01}
+    - {len: 1, name: 充放电标志, type: uint8}
+
+  # cmd=8 - 充电桩对后台下发的充电桩开启充电控制应答
+  8:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 充电枪口, type: uint8}
+    - {len: 4, name: 命令执行结果, type: uint32}
+    - {len: 32, name: 充电流水号, type: ascii}
+
+  # cmd=9 - 后台服务器应答桩上传命令请求(预留)
+  9:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 1, name: 充电枪号, type: uint8}
+    - {len: 4, name: 执行结果, type: uint32}
+    - {len: 4, name: 命令地址, type: uint32}
+    - {len: 4, name: 数据长度, type: uint32}
+    # 变长字段
+    # - {len: N, name: 数据, type: hex}
+
+  # cmd=10 - 充电桩上传命令请求(预留)
+  10:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 充电枪号, type: uint8}
+    - {len: 4, name: 请求启始地址, type: uint32}
+    # 变长字段，4*n字节
+    # - {len: N, name: 参数, type: hex}
+
+  # cmd=11 - 服务器查询充电桩软件版本(非必实现功能)
+  11:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 2, name: 查询设备类型, type: uint16}
+
+  # cmd=12 - 充电桩应答软件版本(非必实现功能)
+  12:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 2, name: 返回设备类型, type: uint16}
+    - {len: 2, name: 1号软件版本, type: uint16}
+    - {len: 2, name: 2号软件版本, type: uint16}
+    - {len: 2, name: 3号软件版本, type: uint16}
+
+  # cmd=101 - 服务器应答心跳包信息
+  101:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+
+  # cmd=102 - 充电桩上传心跳包信息
+  102:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 4, name: 心跳周期, type: uint32}
+
+  # cmd=103 - 服务器应答充电桩状态信息包
+  103:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+
+  # cmd=104 - 充电桩状态信息包上报  
+  104:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 充电枪数量, type: uint8}
+    - {len: 1, name: 充电口（枪）号, type: uint8}
+    - {len: 1, name: 充电枪类型, type: uint8}
+    - {len: 1, name: 工作状态, type: uint8, enum: work_status}
+    - {len: 1, name: 当前SOC %, type: uint8}
+    - {len: 4, name: 当前最高告警编码, type: uint32}
+    - {len: 1, name: 车连接状态, type: uint8, enum: connection_status}
+    - {len: 4, name: 本次充电累计充电费用, type: uint32, scale: 0.01}
+    - {len: 4, name: 内部变量2, type: uint32}
+    - {len: 4, name: 内部变量3, type: uint32}
+    - {len: 2, name: 直流充电电压, type: uint16}
+    - {len: 2, name: 直流充电电流, type: uint16}
+    - {len: 2, name: BMS需求电压, type: uint16}
+    - {len: 2, name: BMS需求电流, type: uint16}
+    - {len: 1, name: BMS充电模式, type: uint8}
+    - {len: 2, name: 交流A相充电电压, type: uint16}
+    - {len: 2, name: 交流B相充电电压, type: uint16}
+    - {len: 2, name: 交流C相充电电压, type: uint16}
+    - {len: 2, name: 交流A相充电电流, type: uint16}
+    - {len: 2, name: 交流B相充电电流, type: uint16}
+    - {len: 2, name: 交流C相充电电流, type: uint16}
+    - {len: 2, name: 剩余充电时间(min), type: uint16}
+    - {len: 4, name: 充电时长(秒), type: uint32}
+    - {len: 4, name: 本次充电累计充电电量（0.01kwh）, type: uint32, scale: 0.01}
+    - {len: 4, name: 充电前电表读数, type: uint32, scale: 0.01}
+    - {len: 4, name: 当前电表读数, type: uint32, scale: 0.01}
+    - {len: 1, name: 充电启动方式, type: uint8}
+    - {len: 1, name: 充电策略, type: uint8}
+    - {len: 4, name: 充电策略参数, type: uint32}
+    - {len: 1, name: 预约标志, type: uint8}
+    - {len: 32, name: 充电/预约卡号, type: ascii}
+    - {len: 1, name: 预约超时时间, type: uint8}
+    - {len: 8, name: 预约/开始充电开始时间, type: hex}
+    - {len: 4, name: 充电前卡余额, type: uint32}
+    - {len: 4, name: 预留, type: uint32}
+    - {len: 4, name: 充电功率, type: uint32, scale: 0.1}
+    - {len: 4, name: 系统变量3, type: uint32}
+    - {len: 4, name: 系统变量4, type: uint32}
+    - {len: 4, name: 系统变量5, type: uint32}
+    - {len: 1, name: 出风口温度, type: uint8, offset: -50}
+    - {len: 1, name: 环境温度, type: uint8, offset: -50}
+    - {len: 1, name: 充电枪温度, type: uint8, offset: -50}
+    - {len: 18, name: 车辆VIN码, type: ascii}
+    - {len: 1, name: 舱门状态, type: uint8}
+    - {len: 32, name: 充电流水号, type: ascii}
+    - {len: 4, name: 本次充电累计充电电费, type: uint32, scale: 0.01}
+    - {len: 4, name: 本次充电累计充电服务费, type: uint32, scale: 0.01}
+    - {len: 1, name: 枪归位状态, type: uint8}
+    - {len: 1, name: 地锁状态, type: uint8}
+    - {len: 1, name: 千分位电量, type: uint8}
+    - {len: 4, name: 直流桩交流电表电量, type: uint32, scale: 0.001}
+    - {len: 1, name: 当前充电模式, type: uint8}
+    - {len: 1, name: 充放电标志, type: uint8}
+
+  # cmd=105 - 服务器应答充电桩签到命令
+  105:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 4, name: 时间年月日, type: uint32}
+    - {len: 4, name: 时间时分秒, type: uint32}
+    - {len: 4, name: 签到间隔, type: uint32}
+    - {len: 4, name: 心跳周期, type: uint32}
+
+  # cmd=106 - 充电桩签到信息上报
+  106:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 4, name: 主控软件版本, type: uint32}
+    - {len: 4, name: 显示软件版本, type: uint32}
+    - {len: 4, name: 辅控软件版本, type: uint32}
+    - {len: 32, name: 制造商, type: ascii}
+    - {len: 32, name: 设备型号, type: ascii}
+    - {len: 32, name: 硬件版本, type: ascii}
+    - {len: 32, name: 固件版本, type: ascii}
+    - {len: 4, name: 协议版本, type: uint32}
+    - {len: 4, name: 时间年月日, type: uint32}
+    - {len: 4, name: 时间时分秒, type: uint32}
+
+  # cmd=107 - 服务器应答充电桩告警信息
+  107:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+
+  # cmd=108 - 充电桩告警信息上报(预留)
+  108:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 4, name: 全部告警内容, type: binary_str_4bytes}
+
+  # cmd=109 - 服务器应答充电桩启动完成命令
+  109:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+
+  # cmd=110 - 充电桩上报充电启动完成命令(可选项)
+  110:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 充电枪号, type: uint8}
+    - {len: 4, name: 启动成功标志, type: uint32}
+    - {len: 32, name: 本次交易流水号, type: ascii}
+
+  # cmd=111 - 服务器应答充电桩上报模块信息(预留)
+  111:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+
+  # cmd=112 - 充电桩模块信息上报(预留)
+  112:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 模块总数, type: uint8}
+    - {len: 4, name: 模块故障状态, type: binary_str_4bytes}
+
+  # cmd=113 - 服务器查询最近一次充电各时段信息
+  113:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 充电枪号, type: uint8}
+
+  # cmd=114 - 充电桩应答服务器查询最近一次充电各时段信息
+  114:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 充电枪号, type: uint8}
+    - {len: 4, name: 尖时电量, type: uint32, scale: 0.01}
+    - {len: 4, name: 峰时电量, type: uint32, scale: 0.01}
+    - {len: 4, name: 平时电量, type: uint32, scale: 0.01}
+    - {len: 4, name: 谷时电量, type: uint32, scale: 0.01}
+    - {len: 4, name: 尖时电费, type: uint32, scale: 0.01}
+    - {len: 4, name: 峰时电费, type: uint32, scale: 0.01}
+    - {len: 4, name: 平时电费, type: uint32, scale: 0.01}
+    - {len: 4, name: 谷时电费, type: uint32, scale: 0.01}
+
+  # cmd=202 - 充电桩上报充电记录信息（0.01kWh精度）
+  202:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 充电枪位置类型, type: uint8}
+    - {len: 1, name: 充电枪口, type: uint8}
+    - {len: 32, name: 充电卡号, type: ascii}
+    - {len: 8, name: 充电开始时间, type: hex}
+    - {len: 8, name: 充电结束时间, type: hex}
+    - {len: 4, name: 充电时间长度, type: uint32}
+    - {len: 1, name: 开始SOC, type: uint8}
+    - {len: 1, name: 结束SOC, type: uint8}
+    - {len: 4, name: 充电结束原因, type: uint32}
+    - {len: 4, name: 本次充电电量, type: uint32, scale: 0.01}
+    - {len: 4, name: 充电前电表读数, type: uint32, scale: 0.01}
+    - {len: 4, name: 充电后电表读数, type: uint32, scale: 0.01}
+    - {len: 4, name: 本次充电金额, type: uint32}
+    - {len: 4, name: 内部索引号, type: uint32}
+    - {len: 4, name: 充电前卡余额, type: uint32}
+    - {len: 4, name: 当前充电记录索引, type: uint32}
+    - {len: 4, name: 总充电记录条目, type: uint32}
+    - {len: 1, name: 预留, type: uint8}
+    - {len: 1, name: 充电策略, type: uint8}
+    - {len: 4, name: 充电策略参数, type: uint32}
+    - {len: 17, name: 车辆VIN, type: ascii}
+    - {len: 8, name: 车牌号, type: ascii}
+    # 48个时段充电电量（0.01kWh精度，每个时段2字节）
+    - {len: 2, name: 时段1充电电量, type: uint16, scale: 0.01, repeat_const: 48}
+
+  # cmd=203 - 服务器应答帐户查询信息
+  203:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 32, name: 充电卡号, type: ascii}
+    - {len: 4, name: 查询结果, type: uint32, enum: result_code}
+    - {len: 4, name: 账户余额, type: uint32, scale: 0.01}
+    - {len: 4, name: 透支金额, type: uint32, scale: 0.01}
+    - {len: 4, name: 卡状态, type: uint32}
+
+  # cmd=204 - 充电桩充电上传用户帐户查询报文
+  204:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 充电枪号, type: uint8}
+    - {len: 32, name: 充电卡号, type: ascii}
+    - {len: 32, name: 卡物理序号, type: ascii}
+
+  # cmd=205 - 服务器应答充电密码验证报文(预留)
+  205:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 32, name: 充电卡号, type: ascii}
+    - {len: 4, name: 验证结果, type: uint32, enum: result_code}
+
+  # cmd=206 - 充电桩上传用户密码验证报文(预留)
+  206:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 充电枪号, type: uint8}
+    - {len: 32, name: 充电卡号, type: ascii}
+    - {len: 6, name: 卡密码, type: ascii}
+
+  # cmd=207 - 平台回复"即插即充"请求充电结果
+  207:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 17, name: VIN码, type: ascii}
+    - {len: 4, name: 鉴权结果, type: uint32, enum: result_code}
+
+  # cmd=208 - 充电桩上报"即插即充"启动充电请求
+  208:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 充电枪号, type: uint8}
+    - {len: 17, name: VIN码, type: ascii}
+
+  # cmd=209 - 平台回复"即插即充" 启动充电结果(没用)
+  209:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 17, name: VIN码, type: ascii}
+    - {len: 4, name: 启动结果, type: uint32, enum: result_code}
+
+  # cmd=210 - 充电桩上报"即插即充" 启动充电结果(没用)
+  210:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 充电枪号, type: uint8}
+    - {len: 17, name: VIN码, type: ascii}
+    - {len: 4, name: 启动结果, type: uint32, enum: result_code}
+
+  # cmd=301 - 服务器应答充电桩上报BMS信息
+  301:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+
+  # cmd=302 - 充电桩上报BMS信息
+  302:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 报文次序计数, type: uint16}
+    - {len: 2, name: 充电枪号, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 工作状态, type: uint8}
+    - {len: 1, name: 车连接状态, type: uint8}
+    - {len: 3, name: BRM-BMS通讯协议版本号, type: hex}
+    - {len: 1, name: BRM-电池类型, type: uint8}
+    - {len: 4, name: BRM-整车动力蓄电池系统额定容量/Ah, type: uint32, scale: 0.1}
+    - {len: 4, name: BRM-整车动力蓄电池系统额定总电压/V, type: uint32, scale: 0.1}
+    - {len: 4, name: BRM-电池生产厂商, type: uint32}
+    - {len: 4, name: BRM-电池组序号, type: uint32}
+    - {len: 2, name: BRM-电池组生厂日期：年, type: uint16}
+    - {len: 1, name: BRM-电池组生厂日期：月, type: uint8}
+    - {len: 1, name: BRM-电池组生厂日期：日, type: uint8}
+    - {len: 4, name: BRM-电池组充电次数, type: uint32}
+    - {len: 1, name: BRM-电池组产权标识, type: uint8}
+    - {len: 1, name: 预留, type: uint8}
+    - {len: 17, name: BRM-车辆识别码vin, type: ascii}
+    - {len: 8, name: BRM-BMS软件版本号, type: hex}
+    - {len: 1, name: BMS电池组产权标识, type: uint8}
+    - {len: 17, name: BMS车辆识别码VIN, type: ascii}
+    - {len: 8, name: BMS软件版本号, type: ascii}
+    - {len: 2, name: 单体动力蓄电池最高允许充电电压, type: uint16, scale: 0.01}
+    - {len: 2, name: 最高允许充电电流, type: uint16, scale: 0.1}
+    - {len: 2, name: 动力蓄电池标称总能量, type: uint16, scale: 0.1}
+    - {len: 2, name: 最高允许充电总电压, type: uint16, scale: 0.1}
+    - {len: 1, name: 最高允许温度, type: uint8, scale: 1, notes: "偏移-50"}
+    - {len: 2, name: 整车动力蓄电池荷电状态, type: uint16, scale: 0.1}
+    - {len: 2, name: 整车动力蓄电池当前电池电压, type: uint16, scale: 0.1}
+
+  # cmd=303 - 服务器应答充电桩上报BMS信息
+  303:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+
+  # cmd=304 - 充电桩上报BMS信息(预留-暂时不用)
+  304:
+    - {len: 2, name: 预留1, type: uint16}
+    - {len: 2, name: 预留2, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 充电枪号, type: uint8}
+    - {len: 2, name: BMS测量电压, type: uint16, scale: 0.1}
+    - {len: 2, name: BMS测量电流, type: uint16, scale: 0.1}
+    - {len: 2, name: 最高单体电压, type: uint16, scale: 0.01}
+    - {len: 1, name: 最高单体电压编号, type: uint8}
+    - {len: 1, name: 当前车辆SOC, type: uint8}
+    - {len: 2, name: 剩余充电时间, type: uint16}
+
+  # cmd=222 - 充电桩上报充电记录信息(三位小数精度版本)
+  222:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 充电枪位置类型, type: uint8}
+    - {len: 1, name: 充电枪口, type: uint8}
+    - {len: 32, name: 充电卡号, type: ascii}
+    - {len: 8, name: 充电开始时间, type: hex}
+    - {len: 8, name: 充电结束时间, type: hex}
+    - {len: 4, name: 充电时间长度, type: uint32}
+    - {len: 1, name: 开始SOC, type: uint8}
+    - {len: 1, name: 结束SOC, type: uint8}
+    - {len: 4, name: 充电结束原因, type: uint32}
+    - {len: 4, name: 本次充电电量, type: uint32, scale: 0.001}
+    - {len: 4, name: 充电前电表读数, type: uint32, scale: 0.001}
+    - {len: 4, name: 充电后电表读数, type: uint32, scale: 0.001}
+    - {len: 4, name: 本次充电金额, type: uint32, scale: 0.01}
+    - {len: 4, name: 内部索引号, type: uint32}
+    - {len: 4, name: 充电前卡余额, type: uint32, scale: 0.01}
+    - {len: 4, name: 当前充电记录索引, type: uint32}
+    - {len: 4, name: 总充电记录条目, type: uint32}
+    - {len: 1, name: 预留, type: uint8}
+    - {len: 1, name: 充电策略, type: uint8}
+    - {len: 4, name: 充电策略参数, type: uint32}
+    - {len: 17, name: 车辆VIN, type: ascii}
+    - {len: 8, name: 车牌号, type: ascii}
+    # 48个时段的充电电量，每个4字节，scale: 0.001
+    - repeat_const: 48
+      fields:
+        - {len: 4, name: 时段充电电量, type: uint32, scale: 0.001}
+
+  # 升级相关命令
+  # cmd=1001 - 服务器下发擦除指令
+  1001:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 擦除标志, type: uint8}
+
+  # cmd=1002 - 充电桩回复服务器下发擦除指令
+  1002:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 擦除结果, type: uint8}
+
+  # cmd=1003 - 服务器下发升级文件名指令
+  1003:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 128, name: 升级文件名, type: ascii}
+
+  # cmd=1004 - 充电桩应答服务器下发升级文件名指令
+  1004:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 应答结果, type: uint8}
+
+  # cmd=1005 - 服务器下发升级文件大小
+  1005:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 4, name: 升级文件大小, type: uint32}
+
+  # cmd=1006 - 充电桩应答服务器下发升级文件大小指令
+  1006:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 应答结果, type: uint8}
+
+  # cmd=1007 - 服务器下发升级文件数据
+  1007:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 4, name: 数据包序号, type: uint32}
+    - {len: 4, name: 数据包长度, type: uint32}
+    - {len: 1024, name: 升级文件数据, type: hex}
+
+  # cmd=1008 - 充电桩应答服务器下发升级文件数据指令
+  1008:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 4, name: 数据包序号, type: uint32}
+    - {len: 1, name: 应答结果, type: uint8}
+
+  # cmd=1009 - 服务器下发升级文件数据结束指令
+  1009:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 数据结束标志, type: uint8}
+
+  # cmd=1010 - 充电桩应答服务器下发升级文件数据结束指令
+  1010:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 应答结果, type: uint8}
+
+  # cmd=1011 - 服务器下发重启指令
+  1011:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 重启标志, type: uint8}
+
+  # cmd=1012 - 充电桩应答服务器下发重启指令
+  1012:
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 2, name: 预留, type: uint16}
+    - {len: 32, name: 充电桩编码, type: ascii}
+    - {len: 1, name: 应答结果, type: uint8}
 

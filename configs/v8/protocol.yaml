@@ -4,7 +4,6 @@ meta:
   default_endian: LE
   notes: V8协议配置，支持充电桩通信数据解析
 
-# 兼容性配置（保持与原protocol_configs.py一致）
 compatibility:
   head_len: 11
   tail_len: 2
@@ -140,31 +139,31 @@ cmds:
   8:
     - {len: 4, name: 响应命令序号, type: uint32}
     - {len: 1, name: 命令执行结果, type: uint8}
-    - {len: 2, name: 执行失败原因, type: uint16}
+    - {len: 1, name: 执行失败原因, type: uint8}
 
   # cmd9 - 充电握手阶段数据上报
   9:
     - {len: 4, name: 命令序号, type: uint32}
     - {len: 2, name: 启动结果, type: uint16}
     - {len: 2, name: BMS协议类型, type: uint16}
-    - {len: 3, name: 充电桩与BMS通信协议版本号, type: binary_str_3bytes}
-    - {len: 3, name: BMS与充电桩通信协议版本号, type: binary_str_3bytes}
+    - {len: 3, name: 充电桩与 BMS 通信协议版本号, type: binary_str_3bytes}
+    - {len: 3, name: BMS 与充电桩通信协议版本号, type: binary_str_3bytes}
     - {len: 2, name: 充电机最高输出电压, type: uint16, scale: 0.1}
     - {len: 2, name: 充电机最低输出电压, type: uint16, scale: 0.1}
     - {len: 2, name: 充电机最大输出电流, type: uint16, scale: 0.1}
     - {len: 2, name: BHM-绝缘电压, type: uint16, scale: 0.1}
     - {len: 1, name: BRM-电池类型, type: uint8}
-    - {len: 2, name: BRM-整车动力蓄电池系统额定容量, type: uint16}
-    - {len: 2, name: BRM-整车动力蓄电池系统额定总电压, type: uint16, scale: 0.1}
+    - {len: 2, name: BRM-整车动力蓄电池系统额定容量/Ah, type: uint16}
+    - {len: 2, name: BRM-整车动力蓄电池系统额定总电压/V, type: uint16, scale: 0.1}
     - {len: 4, name: BRM-电池生产厂商, type: bcd4}
     - {len: 4, name: BRM-电池组序号, type: bcd4}
-    - {len: 2, name: BRM-电池组生厂日期年, type: uint16}
-    - {len: 1, name: BRM-电池组生厂日期月, type: uint8}
-    - {len: 1, name: BRM-电池组生厂日期日, type: uint8}
+    - {len: 2, name: BRM-电池组生厂日期：年, type: uint16}
+    - {len: 1, name: BRM-电池组生厂日期：月, type: uint8}
+    - {len: 1, name: BRM-电池组生厂日期：日, type: uint8}
     - {len: 4, name: BRM-电池组充电次数, type: uint32}
     - {len: 1, name: BRM-电池组产权标识, type: uint8}
     - {len: 1, name: 预留, type: uint8}
-    - {len: 17, name: BRM-车辆识别码VIN, type: ascii}
+    - {len: 17, name: BRM-车辆识别码vin, type: ascii}
     - {len: 8, name: BRM-BMS软件版本号, type: ascii}
     - {len: 2, name: BCP-单体动力蓄电池最高允许充电电压, type: uint16, scale: 0.01}
     - {len: 2, name: BCP-最高允许充电电流, type: uint16, scale: 0.1}
@@ -176,14 +175,14 @@ cmds:
     - {len: 1, name: BRO-BMS是否充电准备好, type: uint8}
     - {len: 2, name: 绝缘电压异常时模块电压值, type: uint16, scale: 0.1}
     - {len: 2, name: 主枪绝缘设置电压, type: uint16, scale: 0.1}
-    - {len: 2, name: 主枪绝缘正电阻, type: uint16}
-    - {len: 2, name: 主枪绝缘负电阻, type: uint16}
+    - {len: 2, name: 主枪绝缘正电阻(无符号), type: uint16}
+    - {len: 2, name: 主枪绝缘负电阻(无符号), type: uint16}
     - {len: 2, name: 主枪第一次绝缘正电压, type: uint16, scale: 0.1}
     - {len: 2, name: 主枪第一次绝缘负电压, type: uint16, scale: 0.1}
     - {len: 2, name: 主枪第二次绝缘正电压, type: uint16, scale: 0.1}
     - {len: 2, name: 主枪第二次绝缘负电压, type: uint16, scale: 0.1}
     - {len: 2, name: 主枪预启动枪头电压, type: uint16, scale: 0.1}
-    - {len: 2, name: 主枪预启动模电压, type: uint16, scale: 0.1}
+    - {len: 2, name: 主枪预启动模块电压, type: uint16, scale: 0.1}
     - {len: 2, name: BCP异常电压1, type: uint16, scale: 0.1}
     - {len: 2, name: BCP异常电压2, type: uint16, scale: 0.1}
 
@@ -560,9 +559,10 @@ cmds:
 
   # cmd121 - M2广播液冷水泵及系统风扇信息
   121:
-    - {len: 1, name: 液冷泵状态, type: uint8, notes: "低4位泵1状态，高4位泵2状态"}
-    - {len: 1, name: 液冷泵1_PWM, type: uint8}
-    - {len: 1, name: 液冷泵2_PWM, type: uint8}
+    - {len: 4, name: 液冷泵1状态, type: uint32}
+    - {len: 4, name: 液冷泵2状态, type: uint32}
+    - {len: 1, name: 液冷泵1 PWM, type: uint8}
+    - {len: 1, name: 液冷泵2 PWM, type: uint8}
     - {len: 1, name: 液冷泵1压力, type: uint8}
     - {len: 1, name: 液冷泵2压力, type: uint8}
     - {len: 1, name: 换热器1出水口温度, type: uint8}
@@ -576,37 +576,37 @@ cmds:
     - {len: 1, name: 系统风扇5转速, type: uint8}
     - {len: 4, name: M2软件版本号, type: uint32}
     - {len: 4, name: U1软件版本号, type: uint32}
-    - {len: 4, name: U2_1号板软件版本号, type: uint32}
-    - {len: 4, name: U2_2号板软件版本号, type: uint32}
-    - {len: 4, name: U2_3号板软件版本号, type: uint32}
-    - {len: 4, name: U2_4号板软件版本号, type: uint32}
+    - {len: 4, name: U2-1号板软件版本号, type: uint32}
+    - {len: 4, name: U2-2号板软件版本号, type: uint32}
+    - {len: 4, name: U2-3号板软件版本号, type: uint32}
+    - {len: 4, name: U2-4号板软件版本号, type: uint32}
 
   # cmd201 - 终端充电状态上报
   201:
     - {len: 1, name: 工作状态, type: uint8}
     - {len: 32, name: 枪故障状态, type: hex}
-    - {len: 1, name: 并充主枪的号, type: uint8}
+    - {len: 1, name: 并充主枪的枪号, type: uint8}
     - {len: 4, name: 当前电表读数, type: uint32, scale: 0.01}
     - {len: 4, name: 本次充电累计充电电量, type: uint32, scale: 0.01}
     - {len: 2, name: 当前充电功率, type: uint16, scale: 0.1}
-    - {len: 2, name: 终端充电状态, type: binary_str_2bytes}
-    - {len: 2, name: 枪需要输出的电压, type: uint16, scale: 0.1}
-    - {len: 2, name: 枪需要输出的电流, type: uint16, scale: 0.1}
+    - {len: 2, name: 终端充电状态(发给主机), type: binary_str_2bytes}
+    - {len: 2, name: 枪需要输出的电压(发给主机), type: uint16, scale: 0.1}
+    - {len: 2, name: 枪需要输出的电流(发给主机), type: uint16, scale: 0.1}
     - {len: 1, name: 充电模式, type: uint8}
     - {len: 2, name: BMS需求电压, type: uint16, scale: 0.1}
     - {len: 2, name: BMS需求电流, type: uint16, scale: 0.1}
     - {len: 2, name: 枪采样的模块电压, type: uint16, scale: 0.1}
     - {len: 2, name: 枪采样电池电压, type: uint16, scale: 0.1}
     - {len: 2, name: 单枪实际输出电流, type: uint16, scale: 0.1}
-    - {len: 2, name: 总直流充电电流, type: uint16, scale: 0.1}
+    - {len: 2, name: 总直流充电电流(并充), type: uint16, scale: 0.1}
     - {len: 4, name: 启动充电订单识别码, type: uint32}
     - {len: 2, name: 液冷2枪模块电压采样, type: uint16, scale: 0.1}
     - {len: 1, name: 并充组网状态, type: uint8}
     - {len: 1, name: 组网枪数量, type: uint8}
-    - {len: 1, name: 并充组网1地址, type: uint8}
-    - {len: 1, name: 并充组网2地址, type: uint8}
-    - {len: 1, name: 并充组网3地址, type: uint8}
-    - {len: 1, name: 并充组网4地址, type: uint8}
+    - {len: 1, name: 并充组网枪1地址, type: uint8}
+    - {len: 1, name: 并充组网枪2地址, type: uint8}
+    - {len: 1, name: 并充组网枪3地址, type: uint8}
+    - {len: 1, name: 并充组网枪4地址, type: uint8}
 
   # cmd202 - CCU-V8当前充电枪的液冷实时状态
   202:
@@ -621,8 +621,8 @@ cmds:
 
   # cmd203 - CCU-V8状态需求短报文
   203:
-    - {len: 2, name: 终端充电状态, type: binary_str_2bytes}
-    - {len: 2, name: 枪需要输出的电流, type: uint16, scale: 0.1}
+    - {len: 2, name: 终端充电状态(发给主机), type: binary_str_2bytes}
+    - {len: 2, name: 枪需要输出的电流(发给主机), type: uint16, scale: 0.1}
 
   # cmd221 - CCU广播当前所有模块的状态信息数据
   221:
@@ -774,7 +774,7 @@ cmds:
   411:
     - {len: 4, name: 事务号, type: uint32}
     - {len: 2, name: 设备类型, type: uint16}
-    - {len: 128, name: 升级文件路径, type: ascii}
+    - {len: 64, name: 升级文件路径, type: ascii}
     - {len: 32, name: 升级文件MD5, type: ascii}
     - {len: 4, name: 升级文件大小, type: uint32}
 

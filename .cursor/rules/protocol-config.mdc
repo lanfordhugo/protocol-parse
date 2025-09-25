@@ -72,8 +72,18 @@ cmds:       # CMD定义
 ### 执行分析
 
 ```bash
+# 完整分析
 python tools/cmd_analysis.py -c configs/<协议>/protocol.yaml -d protocoltxt/<文档>.txt
+
+# CMD范围过滤分析
+python tools/cmd_analysis.py -c configs/<协议>/protocol.yaml -d protocoltxt/<文档>.txt --cmd-range <范围>
 ```
+
+**CMD范围过滤功能**:
+- 支持范围格式: `1-99`, `100-299`, `500+`
+- 支持列表格式: `1,5,10,20`
+- 用于模块化分析和问题定位
+- 适合渐进式修复策略
 
 ### 解读结果
 

@@ -380,6 +380,12 @@ def parse_cmd_range(cmd_range_str: str) -> Set[int]:
     
     return cmd_set
 
+def normalize_repeated_field_name(field_name: str) -> str:
+    """归一化重复字段名称：将'开始时间1'、'开始时间n'等归一化为'开始时间'"""
+    # 移除结尾的数字或字母n
+    normalized = re.sub(r'[1-9n]$', '', field_name)
+    return normalized if normalized != field_name else field_name
+
 def extract_fields_from_table(content: str) -> List[Dict]:
     """从协议文档表格中提取字段定义"""
     fields = []
@@ -413,16 +419,27 @@ def extract_fields_from_table(content: str) -> List[Dict]:
                     # 无法解析长度，跳过
                     continue
             
+            # 归一化字段名（处理重复结构）
+            normalized_name = normalize_repeated_field_name(field_name.strip())
+            
             fields.append({
                 'seq': seq_num,
-                'name': field_name.strip(),
+                'name': normalized_name,
                 'length': length,
                 'description': description.strip()
             })
         except ValueError:
             continue
     
-    return fields
+    # 去重：如果有多个相同的归一化字段名，只保留第一个（重复结构的模板）
+    seen_names = set()
+    unique_fields = []
+    for field in fields:
+        if field['name'] not in seen_names:
+            seen_names.add(field['name'])
+            unique_fields.append(field)
+    
+    return unique_fields
 
 def compare_cmd_config(cmd_num: int, yaml_config: Dict, protocol_def: Dict) -> Dict:
     """对比单个CMD的配置与协议定义"""
@@ -444,19 +461,33 @@ def compare_cmd_config(cmd_num: int, yaml_config: Dict, protocol_def: Dict) -> D
     
     yaml_cmd = yaml_config['cmds'][cmd_num]
     
-    # 解析YAML字段
+    # 解析YAML字段 - 增强版，支持repeat_by和变长字段
     yaml_fields = []
     if isinstance(yaml_cmd, list):
         for field in yaml_cmd:
-            if isinstance(field, dict) and 'name' in field:
-                yaml_fields.append({
-                    'name': field.get('name', ''),
-                    'length': field.get('len', 0),
-                    'type': field.get('type', ''),
-                    'scale': field.get('scale'),
-                    'enum': field.get('enum'),
-                    'notes': field.get('notes')
-                })
+            if isinstance(field, dict):
+                if 'name' in field:
+                    # 处理普通字段
+                    yaml_fields.append({
+                        'name': field.get('name', ''),
+                        'length': field.get('len', 0),
+                        'type': field.get('type', ''),
+                        'scale': field.get('scale'),
+                        'enum': field.get('enum'),
+                        'notes': field.get('notes')
+                    })
+                elif 'repeat_by' in field and 'fields' in field:
+                    # 处理repeat_by结构中的字段
+                    for repeat_field in field['fields']:
+                        if isinstance(repeat_field, dict) and 'name' in repeat_field:
+                            yaml_fields.append({
+                                'name': repeat_field.get('name', ''),
+                                'length': repeat_field.get('len', 0),
+                                'type': repeat_field.get('type', ''),
+                                'scale': repeat_field.get('scale'),
+                                'enum': repeat_field.get('enum'),
+                                'notes': repeat_field.get('notes', '') + ' [重复结构]'
+                            })
     
     result['yaml_fields'] = yaml_fields
     
@@ -493,19 +524,27 @@ def compare_cmd_config(cmd_num: int, yaml_config: Dict, protocol_def: Dict) -> D
         extra_display = '\n      '.join(['- ' + field for field in extra_ordered])
         result['issues'].append(f"多余字段:\n      {extra_display}")
     
-    # 对比字段长度
+    # 对比字段长度 - 增强版，支持变长字段
     for yaml_field in yaml_fields:
         for protocol_field in protocol_def.get('fields', []):
             if yaml_field['name'] == protocol_field['name']:
-                if yaml_field['length'] != protocol_field['length']:
+                yaml_len = yaml_field['length']
+                protocol_len = protocol_field['length']
+                
+                # 处理变长字段：如果协议长度为-1（变长）而配置使用变长标识符，则认为匹配
+                is_varlen_match = (protocol_len == -1 and 
+                                 isinstance(yaml_len, str) and 
+                                 yaml_len not in ['0', '1', '2', '4', '8'])
+                
+                if yaml_len != protocol_len and not is_varlen_match:
                     result['length_mismatches'].append({
                         'field': yaml_field['name'],
-                        'yaml_length': yaml_field['length'],
-                        'protocol_length': protocol_field['length']
+                        'yaml_length': yaml_len,
+                        'protocol_length': protocol_len
                     })
                     result['issues'].append(
                         f"字段长度不匹配 '{yaml_field['name']}': "
-                        f"配置={yaml_field['length']}, 协议={protocol_field['length']}"
+                        f"配置={yaml_len}, 协议={protocol_len}"
                     )
     
     if result['issues']:

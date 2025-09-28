@@ -22,13 +22,24 @@ class Meta:
 
 
 @dataclass
+class BitfieldGroup:
+    """位段组定义"""
+    name: str  # 位段名称
+    start_bit: int  # 起始位
+    width: int  # 位宽
+    enum: Optional[str] = None  # 枚举名称
+
+
+@dataclass
 class TypeDef:
     """类型定义"""
-    base: str  # uint, int, str, hex, bcd, time.cp56time2a, bitset
+    base: str  # uint, int, str, hex, bcd, time.cp56time2a, bitset, bitfield
     bytes: Optional[int] = None  # 字节长度
     signed: Optional[bool] = None  # 是否有符号
     encoding: Optional[str] = None  # 字符编码
-    bits: Optional[List[Dict[str, str]]] = None  # 位段定义
+    bits: Optional[List[Dict[str, str]]] = None  # 位段定义(bitset用)
+    groups: Optional[List[Dict[str, Any]]] = None  # 位段组定义(bitfield用)
+    order: str = "lsb0"  # 位序：lsb0(默认) 或 msb0
     
     def __post_init__(self):
         """类型定义后处理"""
@@ -36,6 +47,43 @@ class TypeDef:
             raise ValueError(f"Type {self.base} requires 'bytes' parameter")
         if self.base == 'bitset' and self.bits is None:
             raise ValueError("Bitset type requires 'bits' parameter")
+        if self.base == 'bitfield':
+            if self.bytes is None:
+                raise ValueError("Bitfield type requires 'bytes' parameter")
+            # groups参数可选，可以在字段级别定义
+            if self.groups is not None:
+                self._validate_bitfield_groups()
+    
+    def _validate_bitfield_groups(self):
+        """验证bitfield组定义的有效性"""
+        if not self.groups:
+            return
+            
+        total_bits = self.bytes * 8
+        used_bits = set()
+        
+        for group_data in self.groups:
+            group = BitfieldGroup(**group_data)
+            
+            # 验证位段范围
+            if group.start_bit < 0:
+                raise ValueError(f"Bitfield group '{group.name}': start_bit cannot be negative")
+            if group.width <= 0:
+                raise ValueError(f"Bitfield group '{group.name}': width must be positive")
+            if group.start_bit + group.width > total_bits:
+                raise ValueError(f"Bitfield group '{group.name}': exceeds total bits ({total_bits})")
+            
+            # 验证位段不重叠
+            group_bits = set(range(group.start_bit, group.start_bit + group.width))
+            if used_bits & group_bits:
+                raise ValueError(f"Bitfield group '{group.name}': overlaps with previous groups")
+            used_bits.update(group_bits)
+    
+    def get_bitfield_groups(self) -> List[BitfieldGroup]:
+        """获取解析后的位段组列表"""
+        if self.base != 'bitfield' or not self.groups:
+            return []
+        return [BitfieldGroup(**group_data) for group_data in self.groups]
 
 
 @dataclass
@@ -57,7 +105,20 @@ class Field:
     when: Optional[str] = None  # 条件表达式
     len_by: Optional[str] = None  # 按字段值确定长度
     size_by: Optional[str] = None  # 按字段值确定大小
+    len_to_end: bool = False  # 是否读取到数据末尾
+    offset: Optional[Union[int, float]] = None  # 偏移量
+    length: Optional[int] = None  # 字段长度（用于head_fields）
+    unit: Optional[str] = None  # 单位（仅显示用）
+    const_value: Optional[int] = None  # 常量值
+    bit_groups: Optional[List[Dict[str, Any]]] = None  # 字段级位段定义
     notes: Optional[str] = None  # 备注信息
+    flatten: bool = False  # 是否展平bitfield结果
+    
+    def get_bitfield_groups(self) -> List[BitfieldGroup]:
+        """获取字段级位段组列表"""
+        if not self.bit_groups:
+            return []
+        return [BitfieldGroup(**group_data) for group_data in self.bit_groups]
 
 
 @dataclass

@@ -32,6 +32,7 @@ types:
   binary_str_3bytes: { base: binary_str, bytes: 3 }
   binary_str_4bytes: { base: binary_str, bytes: 4 }
   binary_str_8bytes: { base: binary_str, bytes: 8 }
+  # 保持向后兼容的bitset类型（基于bitfield实现）
   bitset8:
     base: bitset
     bits:
@@ -54,6 +55,11 @@ types:
       - {name: "动力蓄电池组输出连接器连接状态"}
       - {name: "允许充电"}
       - {name: "预留"}
+  
+  # 通用位段类型（仅描述存储形态）
+  bitfield8:  { base: bitfield, bytes: 1, order: lsb0 }
+  bitfield16: { base: bitfield, bytes: 2, order: lsb0 }
+  bitfield32: { base: bitfield, bytes: 4, order: lsb0 }
 
 enums:
   login_result:
@@ -68,6 +74,10 @@ enums:
     1: 准备
     2: 充电
     3: 故障
+  pump_status:
+    0: 正常
+    1: 故障
+    2: 手动
 
 cmds:
   # cmd1 - 设备信息上报
@@ -77,7 +87,10 @@ cmds:
     - {len: 1, name: 充电枪路数, type: uint8}
     - {len: 2, name: 项目号, type: uint16}
     - {len: 2, name: 软件版本号, type: uint16}
-    - {len: 1, name: 需要更新参数表, type: uint8}
+    - {len: 1, name: 需要更新参数, type: uint8}
+    - {len: 32, name: 软件编译时间, type: ascii}
+    - {len: 2, name: 硬件版本, type: uint16}
+    - {len: 2, name: 协议版本号, type: uint16}
 
   # cmd2 - 登录响应
   2:
@@ -191,27 +204,10 @@ cmds:
     - {len: 4, name: 响应命令序号, type: uint32}
     - {len: 1, name: 确认结果, type: uint8}
 
-  # cmd11 - 充电过程数据上报
+  # cmd11 - 充电中BMS报文
   11:
-    - {len: 2, name: BCS-BMS测量电压, type: uint16, scale: 0.1}
-    - {len: 2, name: BCS-BMS测量电流, type: uint16, scale: 0.1}
-    - {len: 2, name: BCS-最高单体电压及其组号, type: uint16}
-    - {len: 1, name: BCS-当前车辆SOC, type: uint8}
-    - {len: 2, name: BCS-剩余充电时间, type: uint16}
-    - {len: 7, name: BCS-保留, type: hex}
-    - {len: 1, name: BSM-最高单体动力蓄电池电压所在编号, type: uint8}
-    - {len: 1, name: 最高电池包温度, type: uint8, scale: 1, notes: "偏移-50"}
-    - {len: 1, name: BSM-最高温度检测点编号, type: uint8}
-    - {len: 1, name: 最低电池包温度, type: uint8, scale: 1, notes: "偏移-50"}
-    - {len: 1, name: BSM-最低动力蓄电池温度检测点编号, type: uint8}
-    - {len: 2, name: BSM-单体动力蓄电池电压过高或过低, type: bitset16}
-    - {len: 2, name: BSM-整车动力蓄电池荷电状态SOC过高或过低, type: bitset16}
-    - {len: 2, name: BSM-动力蓄电池充电过电流, type: bitset16}
-    - {len: 2, name: BSM-动力蓄电池温度过高, type: bitset16}
-    - {len: 2, name: BSM-动力蓄电池绝缘状态, type: bitset16}
-    - {len: 2, name: BSM-动力蓄电池组输出连接器连接状态, type: bitset16}
-    - {len: 2, name: BSM-允许充电, type: bitset16}
-    - {len: 2, name: BSM-预留, type: bitset16}
+    - {len: 16, name: BCS报文, type: binary_str_8bytes, notes: "遵循27930最新协议标准"}
+    - {len: 8, name: BSM报文, type: binary_str_8bytes, notes: "遵循27930最新协议标准"}
 
   # cmd13 - 充电结束数据上报
   13:
@@ -230,13 +226,8 @@ cmds:
     - {len: 2, name: 停止参数6, type: uint16}
     - {len: 2, name: 停止参数7, type: uint16}
     - {len: 2, name: 停止参数8, type: uint16}
-    - {len: 8, name: BST报文, type: binary_str_8bytes}
-    - {len: 1, name: 中止荷电状态SOC, type: uint8}
-    - {len: 2, name: 动力蓄电池单体最低电压, type: uint16, scale: 0.01}
-    - {len: 2, name: 动力蓄电池单体最高电压, type: uint16, scale: 0.01}
-    - {len: 1, name: 动力蓄电池最低温度, type: uint8}
-    - {len: 1, name: 动力蓄电池最高温度, type: uint8}
-    - {len: 1, name: 预留, type: uint8}
+    - {len: 8, name: BST报文, type: binary_str_8bytes, notes: "遵循27930最新协议标准"}
+    - {len: 8, name: BSD报文, type: binary_str_8bytes, notes: "遵循27930最新协议标准"}
     - {len: 8, name: BEM报文, type: binary_str_8bytes}
     - {len: 1, name: 充放电标志, type: uint8}
     - {len: 1, name: 瑞银电表标志, type: uint8}
@@ -244,6 +235,11 @@ cmds:
     - {len: 6, name: 电表表号, type: bcd6}
     - {len: 2, name: 电表协议版本, type: uint16}
     - {len: 1, name: 加密方式, type: uint8}
+
+  # cmd14 - 充电结束报文应答
+  14:
+    - {len: 4, name: 响应命令序号, type: uint32}
+    - {len: 1, name: 确认结果, type: uint8}
 
   # cmd15 - 日志上传请求
   15:
@@ -261,19 +257,15 @@ cmds:
     - {len: 4, name: 包序列号, type: uint32}
     - {len: 1, name: 处理结果, type: uint8}
 
-  # cmd21 - 参数设置命令
+  # cmd21 - 整形参数设置
   21:
     - {len: 4, name: 命令序号, type: uint32}
-    - {len: 1, name: 参数接收对象, type: uint8}
-    - {len: 1, name: 参数接收枪号, type: uint8}
     - {len: 2, name: 参数地址, type: uint16}
     - {len: 4, name: 参数值, type: uint32}
 
-  # cmd22 - 参数设置响应
+  # cmd22 - 整形参数设置应答
   22:
     - {len: 4, name: 响应命令序号, type: uint32}
-    - {len: 1, name: 参数接收对象, type: uint8}
-    - {len: 1, name: 参数接收枪号, type: uint8}
     - {len: 2, name: 参数地址, type: uint16}
     - {len: 4, name: 参数值, type: uint32}
     - {len: 2, name: 参数设置结果, type: uint16}
@@ -283,21 +275,21 @@ cmds:
     - {len: 4, name: 参数开始地址, type: uint32}
     - {len: 4, name: 参数个数, type: uint32}
 
-  # cmd24 - 参数查询响应（带循环）
+  # cmd24 - 整形参数表查询应答
   24:
     - {len: 4, name: 参数开始地址, type: uint32}
-    - {len: 4, name: 参数个数, type: uint32, id: param_count}
+    - {len: 4, name: 参数个数(n), type: uint32, id: param_count}
     - repeat_by: param_count
       fields:
-        - {len: 4, name: 参数, type: uint32}
+        - {len: 4, name: 整数参数内容, type: uint32}
 
-  # cmd25 - 参数批量设置
+  # cmd25 - CCU主动推送参数信息
   25:
     - {len: 4, name: 参数开始地址, type: uint32}
-    - {len: 4, name: 参数个数, type: uint32, id: param_count}
+    - {len: 4, name: 参数个数(n), type: uint32, id: param_count}
     - repeat_by: param_count
       fields:
-        - {len: 4, name: 参数, type: uint32}
+        - {len: 4, name: 整数参数内容, type: uint32}
 
   # cmd26 - MCU应答CCU推送参数信息
   26:
@@ -308,7 +300,7 @@ cmds:
   # cmd27 - MCU主动推送参数信息
   27:
     - {len: 4, name: 参数开始地址, type: uint32}
-    - {len: 4, name: 参数个数, type: uint32, id: param_count}
+    - {len: 4, name: 参数个数(n), type: uint32, id: param_count}
     - repeat_by: param_count
       fields:
         - {len: 4, name: 整数参数内容, type: uint32}
@@ -319,13 +311,12 @@ cmds:
     - {len: 4, name: 参数个数, type: uint32}
     - {len: 2, name: 参数设置结果, type: uint16}
 
-  # cmd29 - 参数批量查询响应
+  # cmd29 - 字符参数设置
   29:
-    - {len: 4, name: 参数开始地址, type: uint32}
-    - {len: 4, name: 参数个数, type: uint32, id: param_count}
-    - repeat_by: param_count
-      fields:
-        - {len: 4, name: 参数, type: uint32}
+    - {len: 4, name: 命令序号, type: uint32}
+    - {len: 2, name: 参数地址, type: uint16}
+    - {len: 4, name: 参数长度, type: uint32, id: param_len}
+    - {len: param_len, name: 参数值, type: hex}
 
   # cmd30 - 参数设置结果
   30:
@@ -333,17 +324,17 @@ cmds:
     - {len: 2, name: 参数地址, type: uint16}
     - {len: 2, name: 参数设置结果, type: uint16}
 
-  # cmd31 - 电价时段设置（变长循环）
+  # cmd31 - MCU下发计费模型
   31:
     - {len: 4, name: 命令序号, type: uint32}
-    - {len: 1, name: 时段数量, type: uint8, id: period_count}
+    - {len: 1, name: 有效时段数量, type: uint8, id: period_count}
     - repeat_by: period_count
       fields:
         - {len: 2, name: 开始时间, type: uint16}
         - {len: 2, name: 结束时间, type: uint16}
-        - {len: 4, name: 电费, type: uint32, scale: 0.001}
-        - {len: 4, name: 服务费, type: uint32, scale: 0.001}
-        - {len: 1, name: 尖峰平谷标志段, type: uint8}
+        - {len: 4, name: 电费, type: uint32, scale: 0.00001}
+        - {len: 4, name: 服务费, type: uint32, scale: 0.00001}
+        - {len: 1, name: 尖峰平谷标志, type: uint8}
 
   # cmd32 - CCU费率模型应答
   32:
@@ -424,40 +415,56 @@ cmds:
   # cmd111 - 主机状态上报（复杂循环结构）
   111:
     - {len: 1, name: 主机工作状态, type: uint8}
-    - {len: 1, name: 热电偶1反馈, type: bitset8}
-    - {len: 1, name: 热电偶2反馈, type: bitset8}
-    - {len: 1, name: 热电偶3反馈, type: bitset8}
-    - {len: 1, name: 热电偶4反馈, type: bitset8}
-    - {len: 1, name: 预留隔离反馈1, type: bitset8}
-    - {len: 1, name: 预留隔离反馈2, type: bitset8}
-    - {len: 1, name: 倾斜, type: bitset8}
-    - {len: 1, name: 水浸, type: bitset8}
-    - {len: 1, name: 防雷1, type: bitset8}
-    - {len: 1, name: 防雷2, type: bitset8}
-    - {len: 1, name: 断路器1, type: bitset8}
-    - {len: 1, name: 断路器2, type: bitset8}
-    - {len: 1, name: 预留非隔离反馈1, type: bitset8}
-    - {len: 1, name: 预留非隔离反馈2, type: bitset8}
-    - {len: 1, name: 门禁1, type: bitset8}
-    - {len: 1, name: 门禁2, type: bitset8}
-    - {len: 1, name: 门禁3, type: bitset8}
-    - {len: 1, name: 预留输入干接点1, type: bitset8}
-    - {len: 1, name: 预留输入干接点2, type: bitset8}
-    - {len: 1, name: 主机掉电保护, type: bitset8}
-    - {len: 1, name: 硬件版本1, type: bitset8}
-    - {len: 1, name: 硬件版本2, type: bitset8}
-    - {len: 2, name: LED状态, type: bitset16}
+    - len: 1
+      name: 热电偶1反馈
+      type: bitfield8
+      bit_groups:
+        - {name: "热电偶1反馈", start_bit: 0, width: 1}
+    - len: 1
+      name: 热电偶2反馈
+      type: bitfield8
+      bit_groups:
+        - {name: "热电偶2反馈", start_bit: 0, width: 1}
+    - len: 1
+      name: 热电偶3反馈
+      type: bitfield8
+      bit_groups:
+        - {name: "热电偶3反馈", start_bit: 0, width: 1}
+    - len: 1
+      name: 热电偶4反馈
+      type: bitfield8
+      bit_groups:
+        - {name: "热电偶4反馈", start_bit: 0, width: 1}
+    - {len: 1, name: 预留隔离反馈1, type: bitfield8, bit_groups: [{name: "预留隔离反馈1", start_bit: 0, width: 1}]}
+    - {len: 1, name: 预留隔离反馈2, type: bitfield8, bit_groups: [{name: "预留隔离反馈2", start_bit: 0, width: 1}]}
+    - {len: 1, name: 倾斜, type: bitfield8, bit_groups: [{name: "倾斜", start_bit: 0, width: 1}]}
+    - {len: 1, name: 水浸, type: bitfield8, bit_groups: [{name: "水浸", start_bit: 0, width: 1}]}
+    - {len: 1, name: 防雷1, type: bitfield8, bit_groups: [{name: "防雷1", start_bit: 0, width: 1}]}
+    - {len: 1, name: 防雷2, type: bitfield8, bit_groups: [{name: "防雷2", start_bit: 0, width: 1}]}
+    - {len: 1, name: 断路器1, type: bitfield8, bit_groups: [{name: "断路器1", start_bit: 0, width: 1}]}
+    - {len: 1, name: 断路器2, type: bitfield8, bit_groups: [{name: "断路器2", start_bit: 0, width: 1}]}
+    - {len: 1, name: 预留非隔离反馈1, type: bitfield8, bit_groups: [{name: "预留非隔离反馈1", start_bit: 0, width: 1}]}
+    - {len: 1, name: 预留非隔离反馈2, type: bitfield8, bit_groups: [{name: "预留非隔离反馈2", start_bit: 0, width: 1}]}
+    - {len: 1, name: 门禁1, type: bitfield8, bit_groups: [{name: "门禁1", start_bit: 0, width: 1}]}
+    - {len: 1, name: 门禁2, type: bitfield8, bit_groups: [{name: "门禁2", start_bit: 0, width: 1}]}
+    - {len: 1, name: 门禁3, type: bitfield8, bit_groups: [{name: "门禁3", start_bit: 0, width: 1}]}
+    - {len: 1, name: 预留输入干接点1, type: bitfield8, bit_groups: [{name: "预留输入干接点1", start_bit: 0, width: 1}]}
+    - {len: 1, name: 预留输入干接点2, type: bitfield8, bit_groups: [{name: "预留输入干接点2", start_bit: 0, width: 1}]}
+    - {len: 1, name: 主机掉电保护, type: bitfield8, bit_groups: [{name: "主机掉电保护", start_bit: 0, width: 1}]}
+    - {len: 1, name: 硬件版本1, type: bitfield8, bit_groups: [{name: "硬件版本1", start_bit: 0, width: 1}]}
+    - {len: 1, name: 硬件版本2, type: bitfield8, bit_groups: [{name: "硬件版本2", start_bit: 0, width: 1}]}
+    - {len: 2, name: LED状态, type: bitfield16, bit_groups: [{name: "LED状态", start_bit: 0, width: 1}]}
     - {len: 1, name: 风扇1调速, type: uint8}
-    - {len: 1, name: 门禁4, type: bitset8}
-    - {len: 1, name: 门禁5, type: bitset8}
-    - {len: 1, name: 门禁6, type: bitset8}
-    - {len: 1, name: C2掉电保护, type: bitset8}
-    - {len: 1, name: 断路器3, type: bitset8}
-    - {len: 1, name: 断路器4, type: bitset8}
-    - {len: 1, name: 防雷3, type: bitset8}
-    - {len: 1, name: 防雷4, type: bitset8}
-    - {len: 1, name: 断上级开关, type: bitset8}
-    - {len: 1, name: 急停状态, type: bitset8}
+    - {len: 1, name: 门禁4, type: bitfield8, bit_groups: [{name: "门禁4", start_bit: 0, width: 1}]}
+    - {len: 1, name: 门禁5, type: bitfield8, bit_groups: [{name: "门禁5", start_bit: 0, width: 1}]}
+    - {len: 1, name: 门禁6, type: bitfield8, bit_groups: [{name: "门禁6", start_bit: 0, width: 1}]}
+    - {len: 1, name: C2掉电保护, type: bitfield8, bit_groups: [{name: "C2掉电保护", start_bit: 0, width: 1}]}
+    - {len: 1, name: 断路器3, type: bitfield8, bit_groups: [{name: "断路器3", start_bit: 0, width: 1}]}
+    - {len: 1, name: 断路器4, type: bitfield8, bit_groups: [{name: "断路器4", start_bit: 0, width: 1}]}
+    - {len: 1, name: 防雷3, type: bitfield8, bit_groups: [{name: "防雷3", start_bit: 0, width: 1}]}
+    - {len: 1, name: 防雷4, type: bitfield8, bit_groups: [{name: "防雷4", start_bit: 0, width: 1}]}
+    - {len: 1, name: 断上级开关, type: bitfield8, bit_groups: [{name: "断上级开关", start_bit: 0, width: 1}]}
+    - {len: 1, name: 急停状态, type: bitfield8, bit_groups: [{name: "急停状态", start_bit: 0, width: 1}]}
     - {len: 6, name: 预留状态, type: hex}
     - {len: 1, name: 预留状态2, type: uint8}
     - {len: 1, name: 风扇2速度, type: uint8}
@@ -559,8 +566,13 @@ cmds:
 
   # cmd121 - M2广播液冷水泵及系统风扇信息
   121:
-    - {len: 4, name: 液冷泵1状态, type: uint32}
-    - {len: 4, name: 液冷泵2状态, type: uint32}
+    - len: 1
+      name: 液冷泵状态
+      type: bitfield8
+      flatten: true
+      bit_groups:
+        - {name: 液冷泵1状态, start_bit: 0, width: 4, enum: pump_status}
+        - {name: 液冷泵2状态, start_bit: 4, width: 4, enum: pump_status}
     - {len: 1, name: 液冷泵1 PWM, type: uint8}
     - {len: 1, name: 液冷泵2 PWM, type: uint8}
     - {len: 1, name: 液冷泵1压力, type: uint8}

@@ -32,6 +32,7 @@ class YamlFieldParser:
             'time.cp56time2a': self._parse_cp56time2a,
             'binary_str': self._parse_binary_str,
             'bitset': self._parse_bitset,
+            'bitfield': self._parse_bitfield,
         }
     
     def parse_fields(self, data: bytes, fields: List[Union[Field, Group]], 
@@ -47,7 +48,12 @@ class YamlFieldParser:
             if isinstance(field_item, Field):
                 # 解析普通字段
                 field_result, consumed = self._parse_field(data[offset:], field_item, context)
-                result[field_item.name] = field_result
+                
+                # 检查是否需要展平bitfield结果
+                if hasattr(field_item, 'flatten') and field_item.flatten and isinstance(field_result, dict):
+                    result.update(field_result)
+                else:
+                    result[field_item.name] = field_result
                 
                 # 保存字段值到上下文（如果有ID）
                 if field_item.id:
@@ -273,6 +279,63 @@ class YamlFieldParser:
                 result[bit_def['name']] = bool(bit_value)
         
         return result
+    
+    def _parse_bitfield(self, data: bytes, type_def: TypeDef, field: Field) -> Dict[str, Any]:
+        """解析位段字段"""
+        # 优先使用字段级位段定义，回退到类型级定义（向后兼容）
+        groups = field.get_bitfield_groups() if field.bit_groups else type_def.get_bitfield_groups()
+        
+        if not groups:
+            return {"raw": binascii.hexlify(data).decode('ascii').upper()}
+        
+        # 将字节数据转换为整数（支持多字节）
+        endian = field.endian or self.config.meta.default_endian
+        value = self._bytes_to_int(data, endian)
+        
+        result = {}
+        
+        # 获取位序信息（优先从type_def，默认lsb0）
+        bit_order = getattr(type_def, 'order', 'lsb0')
+        
+        for group in groups:
+            # 提取位段值
+            if bit_order == "msb0":
+                # MSB0: 最高位为第0位
+                total_bits = len(data) * 8
+                actual_start = total_bits - group.start_bit - group.width
+            else:
+                # LSB0: 最低位为第0位 (默认)
+                actual_start = group.start_bit
+            
+            # 创建掩码并提取值
+            mask = (1 << group.width) - 1
+            group_value = (value >> actual_start) & mask
+            
+            # 应用枚举映射
+            if group.enum and group.enum in self.config.enums:
+                enum_def = self.config.enums[group.enum]
+                if group_value in enum_def.values:
+                    result[group.name] = enum_def.values[group_value]
+                else:
+                    result[group.name] = f"Unknown({group_value})"
+            else:
+                result[group.name] = group_value
+        
+        return result
+    
+    def _bytes_to_int(self, data: bytes, endian: str) -> int:
+        """将字节数据转换为整数"""
+        if endian == 'LE':
+            # 小端序
+            value = 0
+            for i, byte in enumerate(data):
+                value |= byte << (i * 8)
+        else:
+            # 大端序
+            value = 0
+            for byte in data:
+                value = (value << 8) | byte
+        return value
     
     def _post_process_value(self, raw_value: Any, field: Field) -> Any:
         """后处理字段值（缩放、枚举映射等）"""

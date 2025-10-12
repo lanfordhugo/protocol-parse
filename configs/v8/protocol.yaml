@@ -411,6 +411,7 @@ cmds:
     - {len: 4, name: 运营后台连接情况, type: uint32}
     - {len: 1, name: 是否需要M2签到, type: uint8}
     - {len: 1, name: MCU掉电紧急停机, type: uint8}
+    - {len: 4, name: 组网带宽, type: uint32}
 
   # cmd111 - 主机状态上报（复杂循环结构）
   111:
@@ -723,7 +724,7 @@ cmds:
   # cmd54 - 参数请求同步应答
   54:
     - {len: 4, name: 参数开始地址, type: uint32}
-    - {len: 4, name: 参数个数, type: uint32, id: param_count}
+    - {len: 4, name: 参数个数(n), type: uint32, id: param_count}
     - repeat_by: param_count
       fields:
         - {len: 4, name: 整数参数内容, type: uint32}

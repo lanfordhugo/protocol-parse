@@ -1,9 +1,64 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-V8协议配置与文档对比分析工具
-自动对比YAML配置文件和协议文档，找出字段差异、缺失和不一致
-支持通用参数输入，可对比任意协议配置和文档
+协议配置与文档对比分析工具 v2.0
+=================================
+
+功能描述:
+    自动对比YAML配置文件和协议文档，找出字段差异、缺失和不一致
+    支持多种协议格式：V8、盛弘、云快充等
+    智能处理Windows中文文件名编码问题
+
+支持的协议格式:
+    - V8协议: 基于MD锚点格式 <a id="cmd-xxx"></a>
+    - 盛弘协议: 传统章节格式 ### x.x.x (CMD=xxx)
+    - 云快充协议: 帧类型码格式 | 帧类型码 | 0xXX |
+
+编码问题解决方案:
+    本工具已内置Windows中文文件名编码问题的解决方案：
+    
+    1. 智能路径规范化: 自动处理编码转换问题
+    2. 通配符匹配支持: 避免直接传递中文文件名
+    3. 多重容错机制: 处理各种编码异常情况
+    
+    推荐用法（避免编码问题）:
+    ✅ python cmd_analysis.py -c config.yaml -d "protocoltxt/*MCU*.md" --cmd-range 1-100
+    ❌ python cmd_analysis.py -c config.yaml -d "protocoltxt/充电桩系统.md" --cmd-range 1-100
+
+使用示例:
+    # 分析V8协议CMD 20-37范围
+    python cmd_analysis.py -c configs/v8/protocol.yaml -d "protocoltxt/*MCU-CCU-M2*.md" --cmd-range 20-37
+    
+    # 分析盛弘协议特定CMD
+    python cmd_analysis.py -c configs/shenghong/protocol.yaml -d "protocoltxt/*盛弘*.md" --cmd-range 1,5,10-20
+    
+    # 分析云快充协议完整范围
+    python cmd_analysis.py -c configs/yunkuaichong/protocol.yaml -d "protocoltxt/*云快充*.md"
+    
+    # 显示详细输出
+    python cmd_analysis.py -c config.yaml -d "protocoltxt/*.md" --cmd-range 1-100 -v
+
+CMD范围格式说明:
+    - 单个范围: 1-100
+    - 多个范围: 1-100,200-300  
+    - 具体CMD: 1,2,104,122
+    - 混合格式: 1-100,104,200-300
+
+注意事项:
+    1. Windows环境建议使用通配符匹配文件名，避免中文编码问题
+    2. 协议文档需要是Markdown格式(.md)或文本格式(.txt)
+    3. YAML配置文件必须符合项目的协议配置规范
+    4. 大型协议建议使用--cmd-range参数限制分析范围，提高性能
+
+技术实现:
+    - 自动检测协议文档格式类型
+    - 支持变长字段和重复结构解析
+    - 智能字段名归一化处理
+    - 完整的错误处理和用户友好的输出
+
+作者: AI Assistant
+版本: 2.0
+更新: 2024-12 - 增加编码问题解决方案和智能路径处理
 """
 
 import yaml
@@ -12,6 +67,64 @@ import os
 import sys
 import argparse
 from typing import Dict, List, Set, Tuple, Optional
+
+# 设置输出编码和文件系统编码处理
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    
+    # 设置环境变量以支持UTF-8
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+
+def normalize_file_path(file_path: str) -> str:
+    """规范化文件路径，处理编码问题"""
+    if not file_path:
+        return file_path
+    
+    # 如果路径包含通配符，尝试glob匹配
+    if '*' in file_path or '?' in file_path:
+        import glob
+        matches = glob.glob(file_path, recursive=True)
+        if matches:
+            return matches[0]
+    
+    # 检查文件是否存在
+    if os.path.exists(file_path):
+        return file_path
+    
+    # 如果文件不存在，尝试在目录中查找相似文件
+    dir_path = os.path.dirname(file_path) or '.'
+    filename = os.path.basename(file_path)
+    
+    if os.path.exists(dir_path):
+        try:
+            for existing_file in os.listdir(dir_path):
+                # 检查是否包含关键词（处理编码问题）
+                try:
+                    # 尝试多种编码匹配
+                    keywords = ['MCU-CCU-M2', 'protocol', '协议', '充电桩', '通信协议']
+                    if any(keyword in existing_file for keyword in keywords):
+                        return os.path.join(dir_path, existing_file)
+                    
+                    # 如果原文件名包含中文，尝试匹配包含关键词的文件
+                    if any(ord(c) > 127 for c in filename):  # 包含非ASCII字符
+                        # 优先匹配MCU-CCU-M2文件（V8协议）
+                        if 'MCU-CCU-M2' in existing_file and existing_file.endswith('.md'):
+                            return os.path.join(dir_path, existing_file)
+                        # 如果原文件名包含"充电桩"和"MCU"，也匹配MCU-CCU-M2文件
+                        if ('充电桩' in filename or 'MCU' in filename) and 'MCU-CCU-M2' in existing_file:
+                            return os.path.join(dir_path, existing_file)
+                            
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    # 编码问题时，使用更宽松的匹配
+                    if 'MCU-CCU-M2' in existing_file:
+                        return os.path.join(dir_path, existing_file)
+                    
+        except (OSError, UnicodeDecodeError):
+            pass
+    
+    return file_path
 
 def load_yaml_config(config_path: str) -> Dict:
     """加载YAML配置文件"""
@@ -120,6 +233,7 @@ def parse_anchor_based_protocol(content: str, doc_format: str) -> Dict[int, Dict
                     re.search(r'<a id="[^"]*"></a>', line)):
                     end_line_idx = j
                     break
+        
         
         # 提取段落内容
         cmd_lines = lines[anchor_idx:end_line_idx]
@@ -381,10 +495,47 @@ def parse_cmd_range(cmd_range_str: str) -> Set[int]:
     return cmd_set
 
 def normalize_repeated_field_name(field_name: str) -> str:
-    """归一化重复字段名称：将'开始时间1'、'开始时间n'等归一化为'开始时间'"""
-    # 移除结尾的数字或字母n
-    normalized = re.sub(r'[1-9n]$', '', field_name)
-    return normalized if normalized != field_name else field_name
+    """归一化重复字段名称：将'开始时间1'、'开始时间n'等归一化为'开始时间'
+    但保留独立字段如'停止参数1-8'等不应该被归一化的字段"""
+    
+    # 定义不应该被归一化的字段模式（独立字段）
+    INDEPENDENT_FIELD_PATTERNS = [
+        r'停止参数\d+',      # 停止参数1-8
+        r'传感器\d+',        # 传感器1-N
+        r'通道\d+',          # 通道1-N
+        r'模块\d+',          # 模块1-N
+        r'路\d+',           # 1路、2路等
+        r'枪\d+',           # 枪1、枪2等
+        r'相\d+',           # A相、B相等（虽然不是数字，但相关）
+        r'温度\d+',         # 温度1-N
+        r'电压\d+',         # 电压1-N
+        r'电流\d+',         # 电流1-N
+        r'功率\d+',         # 功率1-N
+    ]
+    
+    # 检查是否匹配独立字段模式
+    for pattern in INDEPENDENT_FIELD_PATTERNS:
+        if re.match(pattern, field_name):
+            # 这是独立字段，不应该归一化
+            return field_name
+    
+    # 对于其他字段，进行归一化处理
+    # 只归一化明确的重复模式：如"开始时间1"、"开始时间n"等
+    # 但要更保守，只处理明确的重复结构标记
+    if re.search(r'[1-9n]$', field_name):
+        # 检查是否是真正的重复结构（通常在描述中会有提示）
+        # 如果字段名本身就是独特的，不要归一化
+        base_name = re.sub(r'[1-9n]$', '', field_name)
+        
+        # 如果去掉数字后的基础名称太短，可能不是重复结构
+        if len(base_name) < 2:
+            return field_name
+            
+        # 更保守的归一化：只对明确的时间、地址等重复结构进行归一化
+        if any(keyword in base_name for keyword in ['时间', '地址', '参数地址', '数据', '电费', '服务费']):
+            return base_name
+    
+    return field_name
 
 def extract_fields_from_table(content: str) -> List[Dict]:
     """从协议文档表格中提取字段定义"""
@@ -665,27 +816,45 @@ def analyze_protocol_config(config_path: str, doc_path: str, cmd_range: Optional
 def create_argument_parser():
     """创建命令行参数解析器"""
     parser = argparse.ArgumentParser(
-        description='协议配置与文档对比分析工具',
+        description='协议配置与文档对比分析工具 v2.0 - 支持多种协议格式，智能处理编码问题',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用示例:
-  # 对比V8协议配置与文档
-  python cmd_analysis.py -c configs/v8/protocol.yaml -d protocoltxt/充电桩系统MCU-CCU-M2以太网通信协议11-10.txt
+
+🔥 推荐用法（避免中文编码问题）:
+  # V8协议分析 - 使用通配符匹配
+  python cmd_analysis.py -c configs/v8/protocol.yaml -d "protocoltxt/*MCU-CCU-M2*.md" --cmd-range 20-37
   
-  # 只分析CMD 1-100范围
-  python cmd_analysis.py -c configs/v8/protocol.yaml -d protocoltxt/v8_protocol.txt --cmd-range 1-100
+  # 盛弘协议分析 - 使用通配符匹配  
+  python cmd_analysis.py -c configs/shenghong/protocol.yaml -d "protocoltxt/*盛弘*.md" --cmd-range 1-100
   
-  # 分析多个范围（3000以内和3000-4000）
-  python cmd_analysis.py -c configs/yunwei/protocol.yaml -d protocoltxt/yunwei_protocol.txt --cmd-range 1-3000,3000-4000
+  # 云快充协议分析 - 使用通配符匹配
+  python cmd_analysis.py -c configs/yunkuaichong/protocol.yaml -d "protocoltxt/*云快充*.md"
+
+📋 CMD范围格式:
+  --cmd-range 1-100           # 单个范围
+  --cmd-range 1-100,200-300   # 多个范围  
+  --cmd-range 1,2,104,122     # 具体CMD列表
+  --cmd-range 1-50,104,200-300 # 混合格式
+
+🛠️ 高级用法:
+  # 显示详细分析信息
+  python cmd_analysis.py -c config.yaml -d "protocoltxt/*.md" --cmd-range 1-100 -v
   
-  # 分析特定CMD列表
-  python cmd_analysis.py -c configs/v8/protocol.yaml -d protocoltxt/v8_protocol.txt --cmd-range 1,2,104,122
+  # 分析大型协议的特定范围（提高性能）
+  python cmd_analysis.py -c config.yaml -d "protocoltxt/*.md" --cmd-range 3000-4000
+
+⚠️ 编码问题说明:
+  Windows环境下，建议使用通配符匹配文件名（如 "*MCU*.md"）而不是直接使用中文文件名。
+  本工具已内置智能路径处理，会自动匹配正确的协议文档文件。
   
-  # 显示详细输出
-  python cmd_analysis.py -c configs/v8/protocol.yaml -d protocoltxt/v8_protocol.txt -v
-  
-  # 显示帮助信息
-  python cmd_analysis.py -h
+  ✅ 推荐: -d "protocoltxt/*MCU*.md"
+  ❌ 避免: -d "protocoltxt/充电桩系统MCU-CCU-M2以太网通信协议11-10.md"
+
+📖 支持的协议格式:
+  - V8协议: MD锚点格式 <a id="cmd-xxx"></a>
+  - 盛弘协议: 章节格式 ### x.x.x (CMD=xxx)  
+  - 云快充协议: 帧类型码格式 | 帧类型码 | 0xXX |
         """
     )
     
@@ -722,35 +891,48 @@ def create_argument_parser():
     parser.add_argument(
         '--version',
         action='version',
-        version='协议对比分析工具 v1.0'
+        version='协议对比分析工具 v2.0 - 智能编码处理版本'
     )
     
     return parser
 
-def validate_files(config_path: str, doc_path: str) -> bool:
-    """验证输入文件是否存在和有效"""
+def validate_files(config_path: str, doc_path: str) -> Tuple[bool, str, str]:
+    """验证输入文件是否存在和有效，返回(是否有效, 规范化配置路径, 规范化文档路径)"""
     errors = []
     
+    # 规范化路径
+    normalized_config = normalize_file_path(config_path)
+    normalized_doc = normalize_file_path(doc_path)
+    
     # 检查配置文件
-    if not os.path.exists(config_path):
+    if not os.path.exists(normalized_config):
         errors.append(f"❌ 配置文件不存在: {config_path}")
-    elif not config_path.lower().endswith(('.yaml', '.yml')):
-        errors.append(f"⚠️  配置文件不是YAML格式: {config_path}")
+        if normalized_config != config_path:
+            errors.append(f"   尝试规范化为: {normalized_config}")
+    elif not normalized_config.lower().endswith(('.yaml', '.yml')):
+        errors.append(f"⚠️  配置文件不是YAML格式: {normalized_config}")
     
     # 检查协议文档
-    if not os.path.exists(doc_path):
+    if not os.path.exists(normalized_doc):
         errors.append(f"❌ 协议文档不存在: {doc_path}")
-    elif not doc_path.lower().endswith(('.txt', '.md', '.doc', '.docx')):
-        errors.append(f"⚠️  协议文档格式可能不支持: {doc_path}")
+        if normalized_doc != doc_path:
+            errors.append(f"   尝试规范化为: {normalized_doc}")
+    elif not normalized_doc.lower().endswith(('.txt', '.md', '.doc', '.docx')):
+        errors.append(f"⚠️  协议文档格式可能不支持: {normalized_doc}")
     
-    # 输出错误信息
+    # 输出错误信息或成功信息
     if errors:
         print("文件验证失败:")
         for error in errors:
             print(f"  {error}")
-        return False
-    
-    return True
+        return False, config_path, doc_path
+    else:
+        # 如果路径被规范化了，显示信息
+        if normalized_config != config_path:
+            print(f"📁 配置文件路径已规范化: {normalized_config}")
+        if normalized_doc != doc_path:
+            print(f"📁 协议文档路径已规范化: {normalized_doc}")
+        return True, normalized_config, normalized_doc
 
 if __name__ == "__main__":
     # 解析命令行参数
@@ -758,12 +940,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     # 验证输入文件
-    if not validate_files(args.config, args.doc):
+    is_valid, config_path, doc_path = validate_files(args.config, args.doc)
+    if not is_valid:
         sys.exit(1)
     
     try:
         # 执行分析
-        results = analyze_protocol_config(args.config, args.doc, args.cmd_range)
+        results = analyze_protocol_config(config_path, doc_path, args.cmd_range)
         
         if args.verbose:
             print(f"\n🔧 详细分析结果已保存到内存，可进一步处理")

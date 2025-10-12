@@ -12,6 +12,19 @@ import binascii
 from src.yaml_config import ProtocolConfig, Field, Group, TypeDef
 
 logger = logging.getLogger(__name__)
+MISSING_FIELD_PLACEHOLDER = "无数据，未解析"
+
+
+class FieldDataMissing(ValueError):
+    """字段数据不足异常"""
+    pass
+
+
+__all__ = [
+    "YamlFieldParser",
+    "MISSING_FIELD_PLACEHOLDER",
+    "FieldDataMissing",
+]
 
 
 class YamlFieldParser:
@@ -34,6 +47,8 @@ class YamlFieldParser:
             'bitset': self._parse_bitset,
             'bitfield': self._parse_bitfield,
         }
+
+    # TODO: 支持按配置动态扩展解析器
     
     def parse_fields(self, data: bytes, fields: List[Union[Field, Group]], 
                     context: Dict[str, Any] = None) -> Dict[str, Any]:
@@ -46,9 +61,14 @@ class YamlFieldParser:
         
         for field_item in fields:
             if isinstance(field_item, Field):
-                # 解析普通字段
-                field_result, consumed = self._parse_field(data[offset:], field_item, context)
-                
+                try:
+                    # 解析普通字段
+                    field_result, consumed = self._parse_field(data[offset:], field_item, context)
+                except FieldDataMissing as missing_error:
+                    logger.info(f"字段 '{field_item.name}' 数据不足，使用占位信息: {missing_error}")
+                    result[field_item.name] = MISSING_FIELD_PLACEHOLDER
+                    offset += field_item.len
+                    continue
                 # 检查是否需要展平bitfield结果
                 if hasattr(field_item, 'flatten') and field_item.flatten and isinstance(field_result, dict):
                     result.update(field_result)
@@ -72,7 +92,9 @@ class YamlFieldParser:
     def _parse_field(self, data: bytes, field: Field, context: Dict[str, Any]) -> tuple:
         """解析单个字段"""
         if len(data) < field.len:
-            raise ValueError(f"Not enough data for field '{field.name}', need {field.len} bytes, got {len(data)}")
+            raise FieldDataMissing(
+                f"Not enough data for field '{field.name}', need {field.len} bytes, got {len(data)}"
+            )
         
         # 获取类型定义
         if field.type not in self.config.types:
@@ -87,6 +109,9 @@ class YamlFieldParser:
             # 应用后处理（缩放、枚举映射等）
             processed_value = self._post_process_value(raw_value, field)
             return processed_value, field.len
+        except FieldDataMissing:
+            logger.info(f"字段 '{field.name}' 数据不足，使用占位信息")
+            return MISSING_FIELD_PLACEHOLDER, len(data)
         except Exception as e:
             logger.warning(f"Failed to parse field '{field.name}': {e}")
             return field_data.hex().upper(), field.len

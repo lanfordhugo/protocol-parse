@@ -9,9 +9,24 @@ V8Parse - 基于YAML配置的协议解析框架
 import sys
 import argparse
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Dict, Any
 
 from src.yaml_unified_protocol import YamlUnifiedProtocol
+
+
+LOGS_DIR = Path("input_logs")
+
+
+def ensure_log_file(protocol_name: str) -> Path:
+    """确保协议的日志文件存在，不存在时创建空文件并提醒用户"""
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    log_file = LOGS_DIR / f"{protocol_name}.log"
+
+    if not log_file.exists():
+        log_file.touch()
+        print(f"提示: 已在 {log_file} 创建空文件，请拷贝协议日志内容到此文件后重试。")
+
+    return log_file
 
 
 def get_available_protocols() -> Dict[str, Dict[str, str]]:
@@ -27,10 +42,10 @@ def get_available_protocols() -> Dict[str, Dict[str, str]]:
             yaml_config = protocol_dir / "protocol.yaml"
             
             # 统一策略：日志文件名必须与协议目录名一致
-            log_file = Path("input_logs") / f"{protocol_dir.name}.log"
+            log_file = ensure_log_file(protocol_dir.name)
             
-            # 只有配置文件和日志文件都存在才认为是有效协议
-            if yaml_config.exists() and log_file.exists():
+            # 只有配置文件存在才认为是有效协议
+            if yaml_config.exists():
                 protocols[protocol_dir.name] = {
                     'yaml_config': str(yaml_config),
                     'log_file': str(log_file)
@@ -53,11 +68,17 @@ def run_protocol(protocol_name: str) -> bool:
         
         print(f"协议名称: {protocol_name}")
         print(f"YAML配置: {protocol_info['yaml_config']}")
-        print(f"日志文件: {protocol_info['log_file']}")
-        
+        log_path = ensure_log_file(protocol_name)
+        print(f"日志文件: {log_path}")
+        print(f"提示: 请先将日志内容拷贝到上述文件中再执行解析。")
+
         # 检查配置文件是否存在
         if not Path(protocol_info['yaml_config']).exists():
             print(f"错误: 配置文件不存在: {protocol_info['yaml_config']}")
+            return False
+
+        if log_path.stat().st_size == 0:
+            print(f"提示: 日志文件 {log_path} 当前为空，请拷贝协议日志内容到该文件后重试。")
             return False
         
         # 创建并运行协议解析器

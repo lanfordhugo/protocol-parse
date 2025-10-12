@@ -1,6 +1,7 @@
 # 输入日志文件
 v8com.log
 client_tcu_net.log
+input_logs/
 
 # 解析结果文件 - 不受版本控制
 parsed_log/

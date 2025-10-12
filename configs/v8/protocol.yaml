@@ -20,6 +20,8 @@ types:
   uint16:  { base: uint, bytes: 2, signed: false }
   uint32:  { base: uint, bytes: 4, signed: false }
   int16:   { base: int,  bytes: 2, signed: true }
+  int8:    { base: int,  bytes: 1, signed: true }
+  int32:   { base: int,  bytes: 4, signed: true }
   ascii:   { base: str,  encoding: ASCII }
   hex:     { base: hex }
   bcd2:    { base: bcd, bytes: 2 }
@@ -60,11 +62,25 @@ types:
   bitfield8:  { base: bitfield, bytes: 1, order: lsb0 }
   bitfield16: { base: bitfield, bytes: 2, order: lsb0 }
   bitfield32: { base: bitfield, bytes: 4, order: lsb0 }
+  bitfield64: { base: bitfield, bytes: 8, order: lsb0 }
 
 enums:
   login_result:
     0: 失败
     1: 成功
+  charge_mode:
+    1: 恒压充电
+    2: 恒流充电
+  work_status:
+    0: 空闲
+    1: 握手阶段
+    2: 配置阶段
+    3: 充电中
+    4: 充电结束阶段
+    5: 故障
+    6: 副枪并充状态
+    7: 维护模式
+    8: 作为副枪并充中
   device_type:
     1: MCU
     2: M2
@@ -78,6 +94,42 @@ enums:
     0: 正常
     1: 故障
     2: 手动
+  upgrade_device_type:
+    2: CCU/控制器
+    3: 模块AC
+    4: 模块DC
+    6: 分体机主机控制器
+    8: C2或C3板
+    11: D1板
+    12: 液冷M2板
+    13: 液冷U1板
+    14: 液冷U2板
+  workshop_mode_cmd601:
+    0: 退出所有工装流程
+    1: 终端半自动工装模式
+    2: 终端全自动工装模式
+  workshop_mode_cmd607:
+    0: 退出所有工装流程
+    3: 主机半自动工装模式
+  workshop_mode_cmd609:
+    0: 退出所有工装流程
+    4: 主机全自动工装模式
+  workshop_result:
+    170: 响应
+    187: 拒绝响应
+  workshop_refuse_reason:
+    0: None
+    1: 无效的设备类型
+    2: 正在充电
+    3: 已经处于工装模式
+    4: 无效的工装模式参数
+  terminal_type_auto:
+    1: 单枪250A
+    2: 双枪250A
+    3: 单枪400A
+    4: 双枪400A
+    5: 液冷单枪
+    6: 液冷双枪
 
 cmds:
   # cmd1 - 设备信息上报
@@ -532,7 +584,7 @@ cmds:
     - {len: 1, name: 共享模块下层接触器个数, type: uint8}
     - repeat_const: 72
       fields:
-        - {len: 2, name: 接触器状态, type: binary_str_2bytes}
+        - {len: 2, name: 接触器状态, type: bitfield16, bit_groups: [{name: 存在, start_bit: 0, width: 1}, {name: 控制闭合, start_bit: 1, width: 1}, {name: 正极接触器反馈, start_bit: 2, width: 1}, {name: 负极接触器反馈, start_bit: 3, width: 1}, {name: 禁用, start_bit: 4, width: 1}, {name: 故障次数, start_bit: 5, width: 4}, {name: 预留, start_bit: 9, width: 7}], notes: "每组对应一个正负极接触器，1-36为A面，37-72为B面"}
 
   # cmd114 - 模块版本信息
   114:
@@ -543,45 +595,56 @@ cmds:
 
   # cmd115 - 接触器状态
   115:
-    - {len: 4, name: 接触器有效个数, type: uint32}
-    - {len: 8, name: A面控制信号, type: hex}
-    - {len: 8, name: A面反馈信号+, type: hex}
-    - {len: 8, name: A面反馈信号-, type: hex}
-    - {len: 8, name: B面控制信号, type: hex}
-    - {len: 8, name: B面反馈信号+, type: hex}
-    - {len: 8, name: B面反馈信号-, type: hex}
+    - {len: 1, name: 共享模块上层接触器个数, type: uint8}
+    - {len: 1, name: 共享模块下层接触器个数, type: uint8}
+    - {len: 4, name: A面控制信号up, type: bitfield32, notes: "Bit0~Bit31 依次表示A面上层接触器的控制状态，0-断开，1-闭合"}
+    - {len: 4, name: A面控制信号down, type: bitfield32, notes: "Bit0~Bit31 依次表示A面下层接触器的控制状态，0-断开，1-闭合"}
+    - {len: 4, name: A面反馈信号up+, type: bitfield32, notes: "上层正极反馈，0-断开，1-闭合"}
+    - {len: 4, name: A面反馈信号down+, type: bitfield32, notes: "下层正极反馈，0-断开，1-闭合"}
+    - {len: 4, name: A面反馈信号up-, type: bitfield32, notes: "上层负极反馈，0-断开，1-闭合"}
+    - {len: 4, name: A面反馈信号down-, type: bitfield32, notes: "下层负极反馈，0-断开，1-闭合"}
+    - {len: 4, name: B面控制信号up, type: bitfield32, notes: "Bit0~Bit31 依次表示B面上层接触器的控制状态，0-断开，1-闭合"}
+    - {len: 4, name: B面控制信号dwon, type: bitfield32, notes: "Bit0~Bit31 依次表示B面下层接触器的控制状态，0-断开，1-闭合"}
+    - {len: 4, name: B面反馈信号up+, type: bitfield32, notes: "B面上层正极反馈"}
+    - {len: 4, name: B面反馈信号down+, type: bitfield32, notes: "B面下层正极反馈"}
+    - {len: 4, name: B面反馈信号up-, type: bitfield32, notes: "B面上层负极反馈"}
+    - {len: 4, name: B面反馈信号down-, type: bitfield32, notes: "B面下层负极反馈"}
 
   # cmd120 - 液冷M2广播U2板接触器状态
   120:
-    - {len: 4, name: 1U2板状态, type: binary_str_4bytes}
-    - {len: 4, name: 2U2板状态, type: binary_str_4bytes}
-    - {len: 4, name: 3U2板状态, type: binary_str_4bytes}
-    - {len: 4, name: 4U2板状态, type: binary_str_4bytes}
-    - {len: 1, name: A正接触器数量, type: uint8}
-    - {len: 1, name: A负接触器数量, type: uint8}
-    - {len: 1, name: B正接触器数量, type: uint8}
-    - {len: 1, name: B负接触器数量, type: uint8}
-    - repeat_const: 80
+    - {len: 4, name: "1U2", type: bitfield32, bit_groups: [{name: 接触器反馈状态, start_bit: 0, width: 21}, {name: 通信超时, start_bit: 21, width: 1}, {name: 地址重复, start_bit: 22, width: 1}, {name: 预留, start_bit: 23, width: 9}], notes: "Bit0~Bit20反馈断开/闭合，Bit21通信超时，Bit22地址重复"}
+    - {len: 4, name: "2U2", type: bitfield32, bit_groups: [{name: 接触器反馈状态, start_bit: 0, width: 21}, {name: 通信超时, start_bit: 21, width: 1}, {name: 地址重复, start_bit: 22, width: 1}, {name: 预留, start_bit: 23, width: 9}], notes: "同1U2"}
+    - {len: 4, name: "3U2", type: bitfield32, bit_groups: [{name: 接触器反馈状态, start_bit: 0, width: 21}, {name: 通信超时, start_bit: 21, width: 1}, {name: 地址重复, start_bit: 22, width: 1}, {name: 预留, start_bit: 23, width: 9}], notes: "同1U2"}
+    - {len: 4, name: "4U2", type: bitfield32, bit_groups: [{name: 接触器反馈状态, start_bit: 0, width: 21}, {name: 通信超时, start_bit: 21, width: 1}, {name: 地址重复, start_bit: 22, width: 1}, {name: 预留, start_bit: 23, width: 9}], notes: "同1U2"}
+    - {len: 1, name: "A+ 接触器数量", type: uint8, notes: "1-20"}
+    - {len: 1, name: "A- 接触器数量", type: uint8, notes: "1-20"}
+    - {len: 1, name: "B+ 接触器数量", type: uint8, notes: "1-20"}
+    - {len: 1, name: "B- 接触器数量", type: uint8, notes: "1-20"}
+    - repeat_const: 20
       fields:
-        - {len: 2, name: 接触器状态, type: binary_str_2bytes}
+        - {len: 2, name: A正接触器状态, type: bitfield16, bit_groups: [{name: 存在, start_bit: 0, width: 1}, {name: 控制闭合, start_bit: 1, width: 1}, {name: 拒动, start_bit: 2, width: 1}, {name: 粘连, start_bit: 3, width: 1}, {name: 禁用, start_bit: 4, width: 1}, {name: 故障次数, start_bit: 5, width: 4}, {name: 预留, start_bit: 9, width: 7}], notes: "对应1~20号A正接触器"}
+    - repeat_const: 20
+      fields:
+        - {len: 2, name: A负接触器状态, type: bitfield16, bit_groups: [{name: 存在, start_bit: 0, width: 1}, {name: 控制闭合, start_bit: 1, width: 1}, {name: 拒动, start_bit: 2, width: 1}, {name: 粘连, start_bit: 3, width: 1}, {name: 禁用, start_bit: 4, width: 1}, {name: 故障次数, start_bit: 5, width: 4}, {name: 预留, start_bit: 9, width: 7}], notes: "对应1~20号A负接触器"}
+    - repeat_const: 20
+      fields:
+        - {len: 2, name: B正接触器状态, type: bitfield16, bit_groups: [{name: 存在, start_bit: 0, width: 1}, {name: 控制闭合, start_bit: 1, width: 1}, {name: 拒动, start_bit: 2, width: 1}, {name: 粘连, start_bit: 3, width: 1}, {name: 禁用, start_bit: 4, width: 1}, {name: 故障次数, start_bit: 5, width: 4}, {name: 预留, start_bit: 9, width: 7}], notes: "对应1~20号B正接触器"}
+    - repeat_const: 20
+      fields:
+        - {len: 2, name: B负接触器状态, type: bitfield16, bit_groups: [{name: 存在, start_bit: 0, width: 1}, {name: 控制闭合, start_bit: 1, width: 1}, {name: 拒动, start_bit: 2, width: 1}, {name: 粘连, start_bit: 3, width: 1}, {name: 禁用, start_bit: 4, width: 1}, {name: 故障次数, start_bit: 5, width: 4}, {name: 预留, start_bit: 9, width: 7}], notes: "对应1~20号B负接触器"}
 
   # cmd121 - M2广播液冷水泵及系统风扇信息
   121:
-    - len: 1
-      name: 液冷泵状态
-      type: bitfield8
-      flatten: true
-      bit_groups:
-        - {name: 液冷泵1状态, start_bit: 0, width: 4, enum: pump_status}
-        - {name: 液冷泵2状态, start_bit: 4, width: 4, enum: pump_status}
+    - {len: 1, name: 液冷泵1状态, type: uint8, enum: pump_status}
+    - {len: 1, name: 液冷泵2状态, type: uint8, enum: pump_status}
     - {len: 1, name: 液冷泵1 PWM, type: uint8}
     - {len: 1, name: 液冷泵2 PWM, type: uint8}
     - {len: 1, name: 液冷泵1压力, type: uint8}
     - {len: 1, name: 液冷泵2压力, type: uint8}
     - {len: 1, name: 换热器1出水口温度, type: uint8}
-    - {len: 1, name: 进水口1温度, type: uint8, scale: 1, notes: "偏移-50"}
+    - {len: 1, name: 进水口1温度, type: uint8, notes: "偏移-50"}
     - {len: 1, name: 换热器2出水口温度, type: uint8}
-    - {len: 1, name: 进水口2温度, type: uint8, scale: 1, notes: "偏移-50"}
+    - {len: 1, name: 进水口2温度, type: uint8, notes: "偏移-50"}
     - {len: 1, name: 系统风扇1转速, type: uint8}
     - {len: 1, name: 系统风扇2转速, type: uint8}
     - {len: 1, name: 系统风扇3转速, type: uint8}
@@ -596,16 +659,16 @@ cmds:
 
   # cmd201 - 终端充电状态上报
   201:
-    - {len: 1, name: 工作状态, type: uint8}
+    - {len: 1, name: 工作状态, type: uint8, enum: work_status}
     - {len: 32, name: 枪故障状态, type: hex}
     - {len: 1, name: 并充主枪的枪号, type: uint8}
     - {len: 4, name: 当前电表读数, type: uint32, scale: 0.01}
     - {len: 4, name: 本次充电累计充电电量, type: uint32, scale: 0.01}
     - {len: 2, name: 当前充电功率, type: uint16, scale: 0.1}
-    - {len: 2, name: 终端充电状态(发给主机), type: binary_str_2bytes}
+    - {len: 2, name: 终端充电状态(发给主机), type: bitfield16, bit_groups: [{name: 插枪信号, start_bit: 0, width: 1}, {name: 系统启动状态, start_bit: 1, width: 1}, {name: 模块启动状态, start_bit: 2, width: 1}, {name: 模块挡位, start_bit: 3, width: 1}, {name: 预留1, start_bit: 4, width: 1}, {name: 双枪单枪, start_bit: 5, width: 1}, {name: 风扇状态, start_bit: 6, width: 1}, {name: 并充状态, start_bit: 7, width: 1}, {name: 预留2, start_bit: 8, width: 1}, {name: 超充机型, start_bit: 9, width: 1}, {name: 绝缘状态, start_bit: 10, width: 1}, {name: 中间接触器状态, start_bit: 11, width: 1}, {name: 预充信号, start_bit: 12, width: 1}]}
     - {len: 2, name: 枪需要输出的电压(发给主机), type: uint16, scale: 0.1}
     - {len: 2, name: 枪需要输出的电流(发给主机), type: uint16, scale: 0.1}
-    - {len: 1, name: 充电模式, type: uint8}
+    - {len: 1, name: 充电模式, type: uint8, enum: charge_mode}
     - {len: 2, name: BMS需求电压, type: uint16, scale: 0.1}
     - {len: 2, name: BMS需求电流, type: uint16, scale: 0.1}
     - {len: 2, name: 枪采样的模块电压, type: uint16, scale: 0.1}
@@ -620,6 +683,13 @@ cmds:
     - {len: 1, name: 并充组网枪2地址, type: uint8}
     - {len: 1, name: 并充组网枪3地址, type: uint8}
     - {len: 1, name: 并充组网枪4地址, type: uint8}
+    - {len: 4, name: 1 路电压(最高位符号位), type: int32, scale: 0.0001}
+    - {len: 4, name: 1 路电流(最高位符号位), type: int32, scale: 0.0001}
+    - {len: 4, name: 1 路功率(最高位符号位), type: int32, scale: 0.0001}
+    - {len: 4, name: 1 
+    路总电量(最高位符号位), type: int32, scale: 0.001}
+    
+
 
   # cmd202 - CCU-V8当前充电枪的液冷实时状态
   202:
@@ -639,15 +709,23 @@ cmds:
 
   # cmd221 - CCU广播当前所有模块的状态信息数据
   221:
-    - {len: 1, name: 最大模块数量, type: uint8}
-    - {len: 1, name: 实际模块数量, type: uint8, id: module_count}
-    - repeat_by: module_count
+    - {len: 1, name: 最大模块数量, type: uint8, notes: "一体机支持的最大模块号"}
+    - {len: 1, name: 实际模块数量, type: uint8, notes: "实际有效模块数量"}
+    - repeat_by: 最大模块数量
       fields:
         - {len: 2, name: 模块电压, type: uint16, scale: 0.1}
         - {len: 2, name: 模块电流, type: uint16, scale: 0.1}
         - {len: 1, name: 模块当前设置分组号, type: uint8}
-        - {len: 1, name: 模块故障码, type: uint8}
-        - {len: 2, name: 模块状态码, type: binary_str_2bytes}
+        - {len: 1, name: 模块故障码, type: uint8, notes: "参见附录模块告警定义"}
+        - {len: 2, name: 模块状态码, type: bitfield16, bit_groups: [{name: 离线在线, start_bit: 0, width: 1}, {name: 正常故障, start_bit: 1, width: 1}, {name: 未就绪就绪, start_bit: 2, width: 1}, {name: 低压档高压档, start_bit: 3, width: 1}, {name: 关机开机, start_bit: 4, width: 1}, {name: EPO, start_bit: 5, width: 1}, {name: 下电上电, start_bit: 6, width: 1}, {name: 空槽状态, start_bit: 7, width: 1}, {name: 正常损坏, start_bit: 8, width: 1}, {name: 正常禁用, start_bit: 9, width: 1}]}
+    - {len: 2, name: A相电压, type: uint16, scale: 0.1}
+    - {len: 2, name: B相电压, type: uint16, scale: 0.1}
+    - {len: 2, name: C相电压, type: uint16, scale: 0.1}
+    - {len: 2, name: A相电流, type: uint16, scale: 0.1}
+    - {len: 2, name: B相电流, type: uint16, scale: 0.1}
+    - {len: 2, name: C相电流, type: uint16, scale: 0.1}
+    - {len: 1, name: 电网频率, type: uint8}
+    - {len: 4, name: 交流电表值, type: uint32, scale: 0.001}
 
   # cmd222 - CCU广播模块版本信息
   222:
@@ -785,11 +863,13 @@ cmds:
 
   # cmd411 - 在线升级指令下发
   411:
-    - {len: 4, name: 事务号, type: uint32}
-    - {len: 2, name: 设备类型, type: uint16}
+    - {len: 4, name: 命令序号, type: uint32}
+    - {len: 2, name: 设备类型, type: uint16, enum: upgrade_device_type}
+    - {len: 8, name: 设备范围, type: bitfield64, notes: "按位表示64个设备是否选中"}
+    - {len: 2, name: 升级执行动作指示, type: bitfield16, bit_groups: [{name: 控制器控制复位升级逻辑, start_bit: 0, width: 1}, {name: MCU控制复位重启逻辑, start_bit: 1, width: 1}]}
+    - {len: 2, name: 升级软件版本, type: uint16}
     - {len: 64, name: 升级文件路径, type: ascii}
-    - {len: 32, name: 升级文件MD5, type: ascii}
-    - {len: 4, name: 升级文件大小, type: uint32}
+    - {len: 4, name: 升级文件数据长度, type: uint32}
 
   # cmd412 - 在线升级指令应答
   412:
@@ -814,3 +894,141 @@ cmds:
     - {len: 1, name: 结果, type: uint8}
     - {len: 2, name: 拒绝原因, type: uint16}
 
+# cmd601 - 终端启动或者退出工装流程
+  601:
+    - {len: 4, name: 事务号, type: uint32}
+    - {len: 1, name: 工装模式, type: uint8, enum: workshop_mode_cmd601}
+    - {len: 2, name: CCU全自动工装使能, type: bitfield16, bit_groups: [{name: 干接点测试使能, start_bit: 0, width: 1}, {name: 辅助电源测试使能, start_bit: 1, width: 1}, {name: 电压采样测试使能, start_bit: 2, width: 1}, {name: 绝缘测试使能, start_bit: 3, width: 1}, {name: 电表计量测试使能, start_bit: 4, width: 1}, {name: 33008加测使能, start_bit: 5, width: 1}]}
+
+# cmd602 - 设备响应工装控制指令
+  602:
+    - {len: 4, name: 事务号, type: uint32}
+    - {len: 1, name: 结果, type: uint8, enum: workshop_result}
+    - {len: 2, name: 拒绝原因, type: uint16, enum: workshop_refuse_reason}
+
+# cmd603 - 终端半自动化工装控制指令
+  603:
+    - {len: 1, name: YL风扇调速调节, type: uint8}
+    - {len: 1, name: YL泵转速调节, type: uint8}
+    - {len: 2, name: A枪干接点驱动测试, type: bitfield16, bit_groups: [{name: 灯带R红, start_bit: 0, width: 1}, {name: 灯带G绿, start_bit: 1, width: 1}, {name: 灯带B蓝, start_bit: 2, width: 1}, {name: 枪CC2电阻开关, start_bit: 3, width: 1}, {name: 辅助电源12V24V切换测试, start_bit: 4, width: 1}, {name: 枪锁, start_bit: 5, width: 1}, {name: 枪CC1电阻投切, start_bit: 6, width: 1}, {name: 辅助电源开关, start_bit: 7, width: 1}, {name: DC正接触器开关, start_bit: 8, width: 1}, {name: DC负接触器开关, start_bit: 9, width: 1}]}
+    - {len: 2, name: B枪干接点驱动测试, type: bitfield16, bit_groups: [{name: 灯带R红, start_bit: 0, width: 1}, {name: 灯带G绿, start_bit: 1, width: 1}, {name: 灯带B蓝, start_bit: 2, width: 1}, {name: 枪CC2电阻开关, start_bit: 3, width: 1}, {name: 辅助电源12V24V切换测试, start_bit: 4, width: 1}, {name: 枪锁, start_bit: 5, width: 1}, {name: 枪CC1电阻投切, start_bit: 6, width: 1}, {name: 辅助电源开关, start_bit: 7, width: 1}, {name: DC接触器开关, start_bit: 8, width: 1}, {name: ABMS电阻投切控制, start_bit: 9, width: 1}]}
+    - {len: 2, name: 终端干接点驱动测试, type: bitfield16, bit_groups: [{name: 终端风扇, start_bit: 0, width: 1}, {name: 中间接触器正开关, start_bit: 1, width: 1}, {name: 中间接触器负开关, start_bit: 2, width: 1}]}
+
+  # cmd605 - 终端全自动工装模式下的实时状态数据
+  605:
+    - {len: 1, name: 终端类型, type: uint8, enum: terminal_type_auto}
+    - {len: 2, name: 硬件版本, type: uint16}
+    - {len: 2, name: 软件版本号, type: uint16}
+    - {len: 1, name: 执行阶段, type: uint8}
+    - {len: 4, name: 全自动工装结果, type: uint32}
+    - {len: 2, name: 700V枪电压采数据, type: uint16, scale: 0.1}
+    - {len: 2, name: 700V模块电压采数据, type: uint16, scale: 0.1}
+    - {len: 2, name: 700V BMS工装电压数据, type: uint16, scale: 0.1}
+    - {len: 2, name: 辅源测量电压, type: uint16, scale: 0.1}
+    - {len: 4, name: 绝缘正阻值, type: uint32}
+    - {len: 4, name: 绝缘负阻值, type: uint32}
+    - {len: 2, name: 正桥臂电压X0, type: uint16, scale: 0.1}
+    - {len: 2, name: 正桥臂电压X1, type: uint16, scale: 0.1}
+    - {len: 2, name: 负桥臂电压Y0, type: uint16, scale: 0.1}
+    - {len: 2, name: 负桥臂电压Y1, type: uint16, scale: 0.1}
+    - {len: 4, name: 充电前桩电表电量, type: uint32, scale: 0.001}
+    - {len: 4, name: 充电后桩电表电量, type: uint32, scale: 0.001}
+    - {len: 4, name: 桩充电电量, type: uint32, scale: 0.001}
+    - {len: 4, name: 充电前工装电表电量, type: uint32, scale: 0.001}
+    - {len: 4, name: 充电后工装电表电量, type: uint32, scale: 0.001}
+    - {len: 4, name: 工装测量充电电量, type: uint32, scale: 0.001}
+    - {len: 1, name: 枪锁测试结果, type: uint8}
+    - {len: 1, name: 直流接触器+结果, type: uint8}
+    - {len: 1, name: 直流接触器-结果, type: uint8}
+    - {len: 1, name: 中间接触器+结果, type: uint8}
+    - {len: 1, name: 中间接触器-结果, type: uint8}
+    - {len: 1, name: 倾斜结果, type: uint8}
+
+  # cmd606 - 终端全自动工装模式下的实时状态数据回复
+  606:
+    - {len: 4, name: 预留, type: hex}
+
+  # cmd607 - 主机半自动化工装控制指令
+  607:
+    - {len: 4, name: 事务号, type: uint32}
+    - {len: 1, name: 工装模式, type: uint8, enum: workshop_mode_cmd607}
+    - {len: 1, name: 主机风扇PWM1调节, type: uint8}
+    - {len: 1, name: 主机风扇PWM2调节, type: uint8}
+    - {len: 4, name: A面主机地址N模块点亮和关闭, type: bitfield32}
+    - {len: 4, name: B面主机地址N模块点亮和关闭, type: bitfield32}
+    - {len: 4, name: A面主机接触器下层控制, type: bitfield32}
+    - {len: 4, name: A面主机接触器上层控制, type: bitfield32}
+    - {len: 4, name: B面主机接触器下层控制, type: bitfield32}
+    - {len: 4, name: B面主机接触器上层控制, type: bitfield32}
+    - {len: 2, name: M2半自动干接点驱动测试, type: bitfield16, bit_groups: [{name: R红灯, start_bit: 0, width: 1}, {name: G绿灯, start_bit: 1, width: 1}, {name: B蓝灯, start_bit: 2, width: 1}, {name: 断上级开关, start_bit: 3, width: 1}]}
+    - {len: 1, name: 主机风扇PWM3调节, type: uint8}
+    - {len: 1, name: 主机水泵PWM1调节, type: uint8}
+    - {len: 1, name: 主机水泵PWM2调节, type: uint8}
+
+  # cmd608 - 主机半自动化工装控制指令应答
+  608:
+    - {len: 4, name: 事务号, type: uint32}
+    - {len: 1, name: 结果, type: uint8, enum: workshop_result}
+    - {len: 2, name: 拒绝原因, type: uint16, enum: workshop_refuse_reason}
+
+  # cmd609 - 主机全自动化工装控制指令
+  609:
+    - {len: 4, name: 事务号, type: uint32}
+    - {len: 1, name: 工装模式, type: uint8, enum: workshop_mode_cmd609}
+    - {len: 2, name: M2全自动干接点驱动测试, type: bitfield16}
+
+  # cmd610 - 主机响应全自动工装控制指令
+  610:
+    - {len: 4, name: 事务号, type: uint32}
+    - {len: 1, name: 结果, type: uint8, enum: workshop_result}
+    - {len: 2, name: 拒绝原因, type: uint16, enum: workshop_refuse_reason}
+
+  # cmd611 - 主机全自动工装模式下的实时回复数据
+  611:
+    - {len: 2, name: M2全自动工装执行阶段, type: uint16}
+    - {len: 4, name: M2全自动工装结果, type: uint32}
+    - {len: 1, name: 终端数量, type: uint8}
+    - {len: 1, name: 模块数量, type: uint8}
+    - {len: 2, name: 前置条件终端通讯状态, type: bitfield16}
+    - {len: 2, name: 前置条件驱动板通讯状态, type: bitfield16}
+    - {len: 4, name: 前置条件A模块通讯状态, type: bitfield32}
+    - {len: 4, name: 前置条件B模块通讯状态, type: bitfield32}
+    - {len: 8, name: A接触器驱动反馈测试正, type: bitfield64}
+    - {len: 8, name: A接触器驱动反馈测试负, type: bitfield64}
+    - {len: 8, name: B接触器驱动反馈测试正, type: bitfield64}
+    - {len: 8, name: B接触器驱动反馈测试负, type: bitfield64}
+    - {len: 8, name: 模块地址测试结果, type: bitfield64}
+    - {len: 4, name: 主机终端线缆测试结果, type: bitfield32}
+    - {len: 8, name: A面接触器驱动位置测试结果, type: bitfield64}
+    - {len: 8, name: B面接触器驱动位置测试结果, type: bitfield64}
+    - {len: 2, name: 干节点测试结果, type: bitfield16}
+    - {len: 8, name: 模块输出线缆测试结果, type: bitfield64}
+    - {len: 4, name: 已发送的数据帧, type: uint32}
+    - {len: 4, name: CAN1已接收的数据帧, type: uint32}
+    - {len: 4, name: CAN2已接收的数据帧, type: uint32}
+    - {len: 4, name: CAN3已接收的数据帧, type: uint32}
+    - {len: 4, name: CAN4已接收的数据帧, type: uint32}
+
+  # cmd612 - 全自动工装模式下的实时状态数据回复
+  612:
+    - {len: 4, name: 预留, type: hex}
+
+  # cmd613 - 终端全自动工装模式下的33008实时状态数据
+  613:
+    - {len: 4, name: 33008测试结果, type: uint32}
+    - {len: 1, name: 车辆插头锁止试验绝缘状态下枪锁驱动, type: uint8}
+    - {len: 1, name: 绝缘状态下枪锁反馈, type: uint8}
+    - {len: 2, name: 预充电试验电池BCP电压, type: uint16, scale: 0.1}
+    - {len: 2, name: 直流接触器闭合前枪口电压, type: uint16, scale: 0.1}
+    - {len: 2, name: 直流接触器闭合前模块电压, type: uint16, scale: 0.1}
+    - {len: 2, name: K1K2闭合时刻两端电压压差, type: uint16, scale: 0.1}
+    - {len: 2, name: 输入电流过冲试验最大电流, type: uint16, scale: 0.1}
+    - {len: 2, name: 输出设定误差试验系统电流, type: uint16, scale: 0.1}
+    - {len: 2, name: 输出设定误差试验系统电压, type: uint16, scale: 0.1}
+    - {len: 2, name: 输出设定误差试验电表电流, type: uint16, scale: 0.1}
+    - {len: 2, name: 输出设定误差试验电表电压, type: uint16, scale: 0.1}
+    - {len: 2, name: 充电控制状态试验插枪前枪锁CC1电压, type: uint16, scale: 0.1}
+    - {len: 2, name: 充电控制状态试验插枪前未按下CC1电压, type: uint16, scale: 0.1}
+    - {len: 2, name: 充电控制状态试验插枪后CC1电压, type: uint16, scale: 0.1}
+    - {len: 1, name: 动力电源输入失电试验枪锁反馈, type: uint8}
+    - {len: 2, name: 动力电源输入失电试验DC电压, type: uint16, scale: 0.1}

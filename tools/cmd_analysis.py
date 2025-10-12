@@ -224,13 +224,26 @@ def parse_anchor_based_protocol(content: str, doc_format: str) -> Dict[int, Dict
         if i + 1 < len(cmd_anchors):
             next_anchor_idx = cmd_anchors[i + 1][0]
             end_line_idx = next_anchor_idx
+            # 在当前标题与下一个锚点之间查找新的标题，提前截断
+            for j in range(title_idx + 1, next_anchor_idx):
+                line = lines[j].strip()
+                if (
+                    re.match(r'^\s*#{1,2}\s+\d+\.\d+', line)
+                    or (re.match(r'^\s*#{2,4}\s+.+', line) and j != title_idx)
+                ):
+                    end_line_idx = j
+                    break
         else:
             # 如果是最后一个，查找下一个主要章节
             for j in range(title_idx + 1, len(lines)):
                 line = lines[j].strip()
                 # 主要章节标题或新的锚点
-                if (re.match(r'^\s*#{1,2}\s+\d+\.\d+', line) or 
-                    re.search(r'<a id="[^"]*"></a>', line)):
+                if (
+                    re.match(r'^\s*#{1,2}\s+\d+\.\d+', line)
+                    or re.search(r'<a id="[^"]*"></a>', line)
+                    # 普通的markdown标题（如### 标题），遇到下一个标题也结束
+                    or (re.match(r'^\s*#{2,4}\s+.+', line) and j != title_idx)
+                ):
                     end_line_idx = j
                     break
         
@@ -631,13 +644,32 @@ def compare_cmd_config(cmd_num: int, yaml_config: Dict, protocol_def: Dict) -> D
                     # 处理repeat_by结构中的字段
                     for repeat_field in field['fields']:
                         if isinstance(repeat_field, dict) and 'name' in repeat_field:
+                            notes = repeat_field.get('notes', '')
+                            if notes:
+                                notes = notes + ' '
+                            notes += '[重复结构]'
                             yaml_fields.append({
                                 'name': repeat_field.get('name', ''),
                                 'length': repeat_field.get('len', 0),
                                 'type': repeat_field.get('type', ''),
                                 'scale': repeat_field.get('scale'),
                                 'enum': repeat_field.get('enum'),
-                                'notes': repeat_field.get('notes', '') + ' [重复结构]'
+                                'notes': notes
+                            })
+                elif 'repeat_const' in field and 'fields' in field:
+                    for repeat_field in field['fields']:
+                        if isinstance(repeat_field, dict) and 'name' in repeat_field:
+                            notes = repeat_field.get('notes', '')
+                            if notes:
+                                notes = notes + ' '
+                            notes += '[重复结构]'
+                            yaml_fields.append({
+                                'name': repeat_field.get('name', ''),
+                                'length': repeat_field.get('len', 0),
+                                'type': repeat_field.get('type', ''),
+                                'scale': repeat_field.get('scale'),
+                                'enum': repeat_field.get('enum'),
+                                'notes': notes
                             })
     
     result['yaml_fields'] = yaml_fields
@@ -700,8 +732,82 @@ def compare_cmd_config(cmd_num: int, yaml_config: Dict, protocol_def: Dict) -> D
     
     if result['issues']:
         result['status'] = 'MISMATCH'
+
+    # 检测是否属于位域拆分等需人工核查的场景
+    manual_review_message = detect_manual_review_case(result)
+    if manual_review_message:
+        result['status'] = 'MANUAL_REVIEW'
+        result['issues'].append(manual_review_message)
     
     return result
+
+
+def detect_manual_review_case(result: Dict) -> Optional[str]:
+    """识别无法由自动比对覆盖的特殊场景，提示人工核查。
+
+    当前支持的识别场景：
+    - 协议字段为汇总位图，但配置里拆解成大量单独位字段
+    """
+
+    missing_fields = result.get('missing_fields', []) or []
+    extra_fields = result.get('extra_fields', []) or []
+    yaml_fields = result.get('yaml_fields', []) or []
+
+    if missing_fields and extra_fields:
+        # 统计额外字段中可能代表单个位或拆分字段的类型
+        extra_field_details = [field for field in yaml_fields if field['name'] in extra_fields]
+        if extra_field_details:
+            bitfield_like = [
+                field for field in extra_field_details
+                if (
+                    isinstance(field.get('type'), str) and 'bitfield' in field['type']
+                )
+                or (
+                    isinstance(field.get('length'), int)
+                    and field['length'] == 1
+                    and field.get('type') in {'uint8', 'hex', 'binary_str_1byte'}
+                )
+            ]
+
+            # 如果大多数多余字段是位字段，且缺失字段疑似汇总字段，则提示人工处理
+            if bitfield_like and len(bitfield_like) >= max(4, int(len(extra_field_details) * 0.6)):
+                if any(re.search(r'(状态|反馈|告警|位|位图)', name) for name in missing_fields):
+                    base_names = {
+                        re.sub(r'[0-9一二三四五六七八九十]+$', '', name).strip()
+                        for name in missing_fields
+                    }
+                    base_names = {name for name in base_names if name}
+
+                    if not base_names:
+                        base_summary = '协议字段'
+                    else:
+                        base_summary = '、'.join(sorted(base_names))
+
+                    return (
+                        f"检测到{base_summary}等协议字段在配置中被拆分为多个位/子字段，"
+                        f"自动比对无法准确匹配，请参考协议附录人工核对对应位定义。"
+                    )
+
+    # 处理协议按编号展开而配置使用重复结构的场景
+    repeat_fields = [
+        field for field in yaml_fields
+        if isinstance(field.get('notes'), str) and '重复结构' in field['notes']
+    ]
+
+    if repeat_fields and missing_fields:
+        numeric_missing = [name for name in missing_fields if re.search(r'\d', name)]
+        if numeric_missing:
+            sample_missing = '、'.join(numeric_missing[:3])
+            repeat_names = sorted({field['name'] for field in repeat_fields})
+            sample_repeat = '、'.join(repeat_names[:3]) if repeat_names else '循环字段'
+
+            return (
+                f"检测到协议按编号列出字段（如 {sample_missing}），"
+                f"而配置使用循环结构字段（{sample_repeat} 等）。"
+                f"自动比对无法直接映射，请人工核对循环项字段含义与顺序。"
+            )
+
+    return None
 
 def analyze_protocol_config(config_path: str, doc_path: str, cmd_range: Optional[str] = None) -> Dict:
     """分析协议配置与文档的一致性"""
@@ -782,12 +888,15 @@ def analyze_protocol_config(config_path: str, doc_path: str, cmd_range: Optional
     
     # 详细对比每个CMD
     mismatch_count = 0
+    manual_review_cmds = []
     for cmd_num in sorted(protocol_cmds_set):
         result = compare_cmd_config(cmd_num, yaml_config, protocol_cmds[cmd_num])
         results[cmd_num] = result
         
         if result['status'] == 'MISMATCH':
             mismatch_count += 1
+        elif result['status'] == 'MANUAL_REVIEW':
+            manual_review_cmds.append(cmd_num)
     
     # 输出问题汇总
     print("🚨 问题汇总:")
@@ -807,6 +916,14 @@ def analyze_protocol_config(config_path: str, doc_path: str, cmd_range: Optional
                 for issue in result['issues']:
                     print(f"     {issue}")
                 print()  # 添加空行分隔不同CMD
+    if manual_review_cmds:
+        print(f"📝  需人工核查的CMD ({len(manual_review_cmds)}个):")
+        for cmd_num in manual_review_cmds:
+            result = results[cmd_num]
+            print(f"   CMD {cmd_num}:")
+            for issue in result['issues']:
+                print(f"     {issue}")
+            print()
     
     if not missing_cmds and not extra_cmds and mismatch_count == 0:
         print("✅ 配置与协议文档完全一致！")

@@ -27,6 +27,7 @@ V8Parse是一个专业的多协议通信报文解析工具，采用现代化的Y
 ### YAML配置驱动架构
 
 采用现代化的配置驱动模式：
+
 - **yaml_unified_protocol.py**: YAML驱动的统一协议解析器
 - **yaml_config.py**: YAML配置加载器和验证器  
 - **yaml_field_parser.py**: YAML驱动的字段解析器
@@ -46,7 +47,8 @@ V8Parse是一个专业的多协议通信报文解析工具，采用现代化的Y
 | V8 | AA F5 | 11字节 | 2字节 | ✅ `configs/v8/protocol.yaml` | 🟢 完整支持 | `v8_com.log` |
 | 小桔(XIAOJU) | 7D D0 | 14字节 | 1字节 | ✅ `configs/xiaoju/protocol.yaml` | 🟢 完整支持 | `xiaoju.log` |
 | 运维(YUNWEI) | AA F5 | 11字节 | 2字节 | ✅ `configs/yunwei/protocol.yaml` | 🟢 完整支持 | `yunwei.log` |
-| Sinexcel | AA F5 | 8字节 | 1字节 | ✅ `configs/sinexcel/protocol.yaml` | 🟢 完整支持 | `sincexcel.log` |
+| Sinexcel | AA F5 | 8字节 | 1字节 | ✅ `configs/sinexcel/protocol.yaml` | 🟢 完整支持 | `sinexcel.log` |
+| 云快充(Yunkuaichong) | 68 | 6字节 | 2字节 | ✅ `configs/yunkuaichong/protocol.yaml` | 🟢 完整支持 | `yunkuaichong.log` |
 
 ## 📁 项目结构
 
@@ -57,7 +59,8 @@ v8parse/
 │   ├── v8/protocol.yaml       # V8协议YAML配置
 │   ├── xiaoju/protocol.yaml   # 小桔协议YAML配置
 │   ├── yunwei/protocol.yaml   # 运维协议YAML配置
-│   └── sinexcel/protocol.yaml # Sinexcel协议YAML配置
+│   ├── sinexcel/protocol.yaml # Sinexcel协议YAML配置
+│   └── yunkuaichong/protocol.yaml # 云快充协议YAML配置
 ├── src/                       # 📦 核心源码目录
 │   ├── yaml_config.py         # YAML配置加载器
 │   ├── yaml_unified_protocol.py # YAML统一协议解析器
@@ -72,7 +75,8 @@ v8parse/
 │   ├── v8.log                  # V8协议日志文件
 │   ├── xiaoju.log             # 小桔协议日志文件
 │   ├── yunwei.log             # 运维协议日志文件
-│   └── sinexcel.log            # Sinexcel协议日志文件
+│   ├── sinexcel.log            # Sinexcel协议日志文件
+│   └── yunkuaichong.log        # 云快充协议日志文件
 ├── parsed_log/                # 📤 解析结果输出目录（按协议+时间戳）
 ├── protocol_template.yaml     # 📋 协议配置模板文件
 ├── README.md                  # 📖 项目说明文档
@@ -119,6 +123,7 @@ python main.py v8        # 解析V8协议
 python main.py xiaoju    # 解析小桔协议
 python main.py yunwei    # 解析运维协议
 python main.py sinexcel  # 解析Sinexcel协议
+python main.py yunkuaichong # 解析云快充协议
 
 # 列出所有可用协议
 python main.py --list
@@ -137,6 +142,7 @@ python main.py --validate
 | 小桔 | `input_logs/xiaoju.log` | 文本格式，时间戳 + 十六进制数据 |
 | 运维 | `input_logs/yunwei.log` | 文本格式，时间戳 + 十六进制数据 |
 | Sinexcel | `input_logs/sinexcel.log` | 文本格式，时间戳 + 十六进制数据 |
+| 云快充 | `input_logs/yunkuaichong.log` | 文本格式，时间戳 + 十六进制数据 |
 
 ## 💡 添加新协议（零代码）
 
@@ -266,7 +272,6 @@ filters:                       # 过滤器
 - {len: 1, name: 状态, type: uint8, enum: device_status}
 ```
 
-
 ## 🛠️ 配置验证
 
 使用内置的配置验证工具：
@@ -283,6 +288,7 @@ python main.py --validate
 ```
 
 验证内容包括：
+
 - ✅ YAML语法检查
 - ✅ 配置结构验证
 - ✅ 类型定义一致性
@@ -298,6 +304,7 @@ parsed_<protocol>_log_YYYY-MM-DD HH-MM-SS.txt
 ```
 
 输出内容包括：
+
 - 时间戳和方向（Send/Recv）
 - 命令码和设备信息
 - 解析后的结构化数据
@@ -378,4 +385,4 @@ parsed_<protocol>_log_YYYY-MM-DD HH-MM-SS.txt
 
 **V8Parse** - 现代化的多协议通信报文解析工具 🚀
 
-*最后更新时间: 2025-09-13*
+*最后更新时间: 2025-12-15*

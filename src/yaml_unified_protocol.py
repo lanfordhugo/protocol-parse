@@ -8,6 +8,8 @@ import logging
 from pathlib import Path
 import re
 from datetime import datetime
+from time import perf_counter
+from collections import defaultdict
 
 from src.yaml_cmdformat import YamlCmdFormat
 from src.yaml_field_parser import YamlFieldParser
@@ -32,6 +34,52 @@ class YamlUnifiedProtocol:
         self.field_parser = YamlFieldParser(self.yaml_format.config)
         
         logger.info(f"Initialized YAML protocol: {self.yaml_config.meta.protocol}")
+
+        self._reset_perf_stats()
+
+    def _reset_perf_stats(self):
+        """重置性能统计数据"""
+        self.perf_stats = {
+            "extract": [],
+            "parse": [],
+            "screen": [],
+            "total": [],
+            "cmd_counts": defaultdict(int),
+            "errors": 0,
+        }
+
+    def _record_phase(self, phase: str, duration: float) -> None:
+        """记录阶段耗时"""
+        if phase in self.perf_stats:
+            self.perf_stats[phase].append(duration)
+
+    def _print_perf_summary(self) -> None:
+        """打印性能统计摘要"""
+        if not self.perf_stats["total"]:
+            return
+
+        def _format_stats(values: List[float]) -> str:
+            if not values:
+                return "N/A"
+            return (
+                f"{len(values)} 次 | 平均 {sum(values)/len(values)*1000:.2f} ms | "
+                f"最大 {max(values)*1000:.2f} ms | 最小 {min(values)*1000:.2f} ms"
+            )
+
+        log.printf("\n=== 性能统计摘要 ===")
+        log.printf(f"总耗时: {_format_stats(self.perf_stats['total'])}")
+        log.printf(f"提取:   {_format_stats(self.perf_stats['extract'])}")
+        log.printf(f"解析:   {_format_stats(self.perf_stats['parse'])}")
+        log.printf(f"输出:   {_format_stats(self.perf_stats['screen'])}")
+
+        if self.perf_stats["cmd_counts"]:
+            log.printf("命令处理统计:")
+            for cmd_id, count in sorted(self.perf_stats["cmd_counts"].items()):
+                log.printf(f"  CMD {cmd_id}: {count} 条")
+
+        if self.perf_stats["errors"]:
+            log.printf(f"解析失败: {self.perf_stats['errors']} 次")
+        log.printf("====================\n")
 
     def parse_data_content(self, data_groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """使用YAML配置解析数据内容"""
@@ -71,6 +119,7 @@ class YamlUnifiedProtocol:
                     parsed_content = self.yaml_format.parse_cmd_data(cmd_id, content_data)
                     
                     # 构建结果
+                    self.perf_stats["cmd_counts"][cmd_id] += 1
                     result = {
                         'timestamp': group.get('time', ''),  # 使用'time'而不是'timestamp'
                         'direction': group.get('direction', ''),
@@ -84,6 +133,8 @@ class YamlUnifiedProtocol:
                     
                 except Exception as e:
                     log.d_print(f"解析命令{cmd_id}数据失败: {e}")
+                    self.perf_stats["errors"] += 1
+                    self.perf_stats["cmd_counts"][cmd_id] += 1
                     # 添加原始数据作为备用
                     result = {
                         'timestamp': group.get('time', ''),  # 使用'time'而不是'timestamp'
@@ -351,19 +402,35 @@ class YamlUnifiedProtocol:
     def run(self):
         """运行协议解析"""
         try:
+            self._reset_perf_stats()
+            total_start = perf_counter()
             # 提取数据
+            extract_start = perf_counter()
             data_groups = self.extract_data_from_file(self.log_file_name)
+            extract_duration = perf_counter() - extract_start
+            self._record_phase("extract", extract_duration)
             if not data_groups:
                 log.d_print("没有提取到数据")
+                self._record_phase("total", perf_counter() - total_start)
+                self._print_perf_summary()
                 return
             
             log.i_print(f"提取到 {len(data_groups)} 组数据")
             
             # 解析数据
+            parse_start = perf_counter()
             parsed_data = self.parse_data_content(data_groups)
+            parse_duration = perf_counter() - parse_start
+            self._record_phase("parse", parse_duration)
             
             # 筛选并打印结果
+            screen_start = perf_counter()
             self.screen_parse_data(parsed_data)
+            screen_duration = perf_counter() - screen_start
+            self._record_phase("screen", screen_duration)
+            self._record_phase("total", perf_counter() - total_start)
+
+            self._print_perf_summary()
             
         except Exception as e:
             log.e_print(f"协议解析失败: {e}")

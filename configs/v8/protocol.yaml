@@ -179,7 +179,7 @@ cmds:
     - {len: 4, name: 命令序号, type: uint32}
     - {len: 1, name: 启动方式, type: uint8}
     - {len: 1, name: 限制SOC, type: uint8}
-    - {len: 2, name: 限制充电电量, type: uint16, scale: 0.01}
+    - {len: 2, name: 限制充电电量, type: uint16, scale: 0.001}
     - {len: 2, name: 限功率大小, type: uint16, scale: 0.1}
     - {len: 1, name: BMS辅源电压, type: uint8, scale: 0.1}
     - {len: 32, name: 订单流水号, type: ascii}
@@ -258,16 +258,16 @@ cmds:
 
   # cmd11 - 充电中BMS报文
   11:
-    - {len: 16, name: BCS报文, type: binary_str_8bytes, notes: "遵循27930最新协议标准"}
+    - {len: 16, name: BCS报文, type: hex, notes: "遵循27930最新协议标准"}
     - {len: 8, name: BSM报文, type: binary_str_8bytes, notes: "遵循27930最新协议标准"}
 
   # cmd13 - 充电结束数据上报
   13:
     - {len: 4, name: 命令序号, type: uint32}
     - {len: 2, name: 停止充电原因, type: uint16}
-    - {len: 4, name: 充电电量, type: uint32, scale: 0.01}
-    - {len: 4, name: 开始电表电量, type: uint32, scale: 0.01}
-    - {len: 4, name: 结束电表电量, type: uint32, scale: 0.01}
+    - {len: 4, name: 充电电量, type: uint32, scale: 0.001}
+    - {len: 4, name: 开始电表电量, type: uint32, scale: 0.001}
+    - {len: 4, name: 结束电表电量, type: uint32, scale: 0.001}
     - {len: 1, name: 开始SOC, type: uint8}
     - {len: 1, name: 结束SOC, type: uint8}
     - {len: 2, name: 停止参数1, type: uint16}
@@ -396,14 +396,14 @@ cmds:
   33:
     - {len: 4, name: 命令序号, type: uint32}
     - {len: 2, name: 停止充电原因, type: uint16}
-    - {len: 4, name: 开始充电电量, type: uint32, scale: 0.01}
-    - {len: 4, name: 充电电量, type: uint32, scale: 0.01}
+    - {len: 4, name: 开始充电电量, type: uint32, scale: 0.001}
+    - {len: 4, name: 充电电量, type: uint32, scale: 0.001}
     - {len: 1, name: 开始SOC, type: uint8}
     - {len: 1, name: 结束SOC, type: uint8}
     - {len: 4, name: 开始充电时间, type: uint32}
     - {len: 4, name: 充电时长, type: uint32}
-    - {len: 4, name: 电费, type: uint32, scale: 0.001}
-    - {len: 4, name: 服务费, type: uint32, scale: 0.001}
+    - {len: 4, name: 电费, type: uint32, scale: 0.0001}
+    - {len: 4, name: 服务费, type: uint32, scale: 0.0001}
 
   # cmd34 - CCU应答结算信息
   34:
@@ -530,7 +530,7 @@ cmds:
     - {len: 2, name: B相电流, type: uint16, scale: 0.1}
     - {len: 2, name: C相电流, type: uint16, scale: 0.1}
     - {len: 1, name: 电网频率, type: uint8, scale: 0.1}
-    - {len: 4, name: 交流电表值, type: uint32, scale: 0.01}
+    - {len: 4, name: 交流电表值, type: uint32, scale: 0.001}
     - {len: 1, name: 模块环境温度最高值, type: uint8}
     - {len: 1, name: 模块环境温度最低值, type: uint8}
     - {len: 4, name: 主机当前总需求功率, type: uint32, scale: 0.1}
@@ -568,15 +568,11 @@ cmds:
         - {len: 1, name: 子节点3模块, type: uint8}
         - {len: 1, name: 子节点4模块, type: uint8}
         - {len: 1, name: 子节点5模块, type: uint8}
-        - {len: 1, name: 子节点6模块, type: uint8}
-        - {len: 1, name: 子节点7模块, type: uint8}
-        - {len: 1, name: 子节点8模块, type: uint8}
-        - {len: 1, name: 子节点9模块, type: uint8}
-        - {len: 1, name: 子节点10模块, type: uint8}
-        - {len: 1, name: 子节点11模块, type: uint8}
-        - {len: 1, name: 子节点12模块, type: uint8}
         - {len: 1, name: 模块故障码, type: uint8}
         - {len: 2, name: 模块状态码, type: binary_str_2bytes}
+    - repeat_const: 40
+      fields:
+        - {len: 1, name: 模块删除原因, type: bitfield8, bit_groups: [{name: 主机共享模块接触器粘连, start_bit: 0, width: 1}, {name: 主机判定中间接触器粘连, start_bit: 1, width: 1}, {name: 终端判定中间接触器DC+粘连, start_bit: 2, width: 1}, {name: 终端判定中间接触器DC-粘连, start_bit: 3, width: 1}, {name: 终端通讯故障, start_bit: 4, width: 1}, {name: 终端门禁故障, start_bit: 5, width: 1}, {name: 终端急停故障, start_bit: 6, width: 1}, {name: 预留, start_bit: 7, width: 1}], notes: "0正常 1故障，Bit0显示优先级最高"}
 
   # cmd113 - M2广播C3板接触器共享模块状态
   113:
@@ -662,8 +658,8 @@ cmds:
     - {len: 1, name: 工作状态, type: uint8, enum: work_status}
     - {len: 32, name: 枪故障状态, type: hex}
     - {len: 1, name: 并充主枪的枪号, type: uint8}
-    - {len: 4, name: 当前电表读数, type: uint32, scale: 0.01}
-    - {len: 4, name: 本次充电累计充电电量, type: uint32, scale: 0.01}
+    - {len: 4, name: 当前电表读数, type: uint32, scale: 0.001}
+    - {len: 4, name: 本次充电累计充电电量, type: uint32, scale: 0.001}
     - {len: 2, name: 当前充电功率, type: uint16, scale: 0.1}
     - {len: 2, name: 终端充电状态(发给主机), type: bitfield16, bit_groups: [{name: 插枪信号, start_bit: 0, width: 1}, {name: 系统启动状态, start_bit: 1, width: 1}, {name: 模块启动状态, start_bit: 2, width: 1}, {name: 模块挡位, start_bit: 3, width: 1}, {name: 预留1, start_bit: 4, width: 1}, {name: 双枪单枪, start_bit: 5, width: 1}, {name: 风扇状态, start_bit: 6, width: 1}, {name: 并充状态, start_bit: 7, width: 1}, {name: 预留2, start_bit: 8, width: 1}, {name: 超充机型, start_bit: 9, width: 1}, {name: 绝缘状态, start_bit: 10, width: 1}, {name: 中间接触器状态, start_bit: 11, width: 1}, {name: 预充信号, start_bit: 12, width: 1}]}
     - {len: 2, name: 枪需要输出的电压(发给主机), type: uint16, scale: 0.1}
@@ -683,12 +679,10 @@ cmds:
     - {len: 1, name: 并充组网枪2地址, type: uint8}
     - {len: 1, name: 并充组网枪3地址, type: uint8}
     - {len: 1, name: 并充组网枪4地址, type: uint8}
-    - {len: 4, name: 1 路电压(最高位符号位), type: int32, scale: 0.0001}
-    - {len: 4, name: 1 路电流(最高位符号位), type: int32, scale: 0.0001}
-    - {len: 4, name: 1 路功率(最高位符号位), type: int32, scale: 0.0001}
-    - {len: 4, name: 1 
-    路总电量(最高位符号位), type: int32, scale: 0.001}
-    
+    - {len: 4, name: 1路电压, type: int32, scale: 0.0001, notes: "最高位符号位"}
+    - {len: 4, name: 1路电流, type: int32, scale: 0.0001, notes: "最高位符号位"}
+    - {len: 4, name: 1路功率, type: int32, scale: 0.0001, notes: "最高位符号位"}
+    - {len: 4, name: 1路总电量, type: int32, scale: 0.001, notes: "最高位符号位"}
 
 
   # cmd202 - CCU-V8当前充电枪的液冷实时状态
@@ -709,9 +703,9 @@ cmds:
 
   # cmd221 - CCU广播当前所有模块的状态信息数据
   221:
-    - {len: 1, name: 最大模块数量, type: uint8, notes: "一体机支持的最大模块号"}
+    - {len: 1, name: 最大模块数量, type: uint8, id: max_module_count, notes: "一体机支持的最大模块号"}
     - {len: 1, name: 实际模块数量, type: uint8, notes: "实际有效模块数量"}
-    - repeat_by: 最大模块数量
+    - repeat_by: max_module_count
       fields:
         - {len: 2, name: 模块电压, type: uint16, scale: 0.1}
         - {len: 2, name: 模块电流, type: uint16, scale: 0.1}
@@ -753,8 +747,8 @@ cmds:
     - {len: 1, name: 并充状态, type: uint8}
     - {len: 1, name: 并充主机拨码地址, type: uint8}
     - {len: 1, name: 并充主机拨码枪号, type: uint8}
-    - {len: 4, name: 初始电表度, type: uint32, scale: 0.01}
-    - {len: 4, name: 当前电表度, type: uint32, scale: 0.01}
+    - {len: 4, name: 初始电表度, type: uint32, scale: 0.001}
+    - {len: 4, name: 当前电表度, type: uint32, scale: 0.001}
     - {len: 2, name: 当前充电电流, type: uint16, scale: 0.1}
 
   # cmd303 - CCU-V8并充订单信息
@@ -765,8 +759,8 @@ cmds:
     - repeat_const: 8
       fields:
         - {len: 1, name: 副枪地址, type: uint8}
-        - {len: 4, name: 副枪起始电表值, type: uint32, scale: 0.01}
-        - {len: 4, name: 副枪当前电表值, type: uint32, scale: 0.01}
+        - {len: 4, name: 副枪起始电表值, type: uint32, scale: 0.001}
+        - {len: 4, name: 副枪当前电表值, type: uint32, scale: 0.001}
 
   # cmd51 - M2注册帧
   51:
@@ -931,12 +925,12 @@ cmds:
     - {len: 2, name: 正桥臂电压X1, type: uint16, scale: 0.1}
     - {len: 2, name: 负桥臂电压Y0, type: uint16, scale: 0.1}
     - {len: 2, name: 负桥臂电压Y1, type: uint16, scale: 0.1}
-    - {len: 4, name: 充电前桩电表电量, type: uint32, scale: 0.001}
-    - {len: 4, name: 充电后桩电表电量, type: uint32, scale: 0.001}
-    - {len: 4, name: 桩充电电量, type: uint32, scale: 0.001}
-    - {len: 4, name: 充电前工装电表电量, type: uint32, scale: 0.001}
-    - {len: 4, name: 充电后工装电表电量, type: uint32, scale: 0.001}
-    - {len: 4, name: 工装测量充电电量, type: uint32, scale: 0.001}
+    - {len: 4, name: 充电前桩电表电量, type: uint32, scale: 0.001, notes: "0.001kWh/bit"}
+    - {len: 4, name: 充电后桩电表电量, type: uint32, scale: 0.001, notes: "0.001kWh/bit"}
+    - {len: 4, name: 桩充电电量, type: uint32, scale: 0.001, notes: "0.001kWh/bit"}
+    - {len: 4, name: 充电前工装电表电量, type: uint32, scale: 0.001, notes: "0.001kWh/bit"}
+    - {len: 4, name: 充电后工装电表电量, type: uint32, scale: 0.001, notes: "0.001kWh/bit"}
+    - {len: 4, name: 工装测量充电电量, type: uint32, scale: 0.001, notes: "0.001kWh/bit"}
     - {len: 1, name: 枪锁测试结果, type: uint8}
     - {len: 1, name: 直流接触器+结果, type: uint8}
     - {len: 1, name: 直流接触器-结果, type: uint8}

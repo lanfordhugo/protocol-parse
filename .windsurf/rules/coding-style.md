@@ -1,3 +1,7 @@
+---
+trigger: always_on
+---
+
 # Python 编码规范
 
 ## 通用原则

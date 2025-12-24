@@ -59,6 +59,10 @@ enums:
     1: 交流充电桩
     2: 直流充电桩
     3: 交直流一体桩
+  connection_status:
+    0: 断开
+    1: 半连接
+    2: 连接
 
 cmds:
   # cmd=1 - 后台服务器下发充电桩整形工作参数
@@ -499,7 +503,9 @@ cmds:
     - {len: 17, name: 车辆VIN, type: ascii}
     - {len: 8, name: 车牌号, type: ascii}
     # 48个时段充电电量（0.01kWh精度，每个时段2字节）
-    - {len: 2, name: 时段1充电电量, type: uint16, scale: 0.01, repeat_const: 48}
+    - repeat_const: 48
+      fields:
+        - {len: 2, name: 时段充电电量, type: uint16, scale: 0.01}
 
   # cmd=203 - 服务器应答帐户查询信息
   203:
@@ -817,7 +823,10 @@ cmds:
     - {len: 4, name: 充电策略参数, type: uint32}
     - {len: 17, name: 车辆VIN, type: ascii}
     - {len: 8, name: 车牌号, type: ascii}
-    - {len: 2, name: 时段1充电电量, type: uint16, scale: 0.01, repeat_const: 48}
+    # 48个时段充电电量
+    - repeat_const: 48
+      fields:
+        - {len: 2, name: 时段充电电量, type: uint16, scale: 0.01}
 
   # cmd=421 - 服务器查询充电桩历史充电记录(三位小数)
   421:
@@ -878,7 +887,8 @@ cmds:
 
   # cmd=1101 - 后台服务器查询24时电费计价策略信息
   1101:
-    # 报文体为空
+    # 报文体为空，使用空字段列表
+    []
 
   # cmd=1102 - 充电桩应答后台服务器查询24时电费计价策略信息
   1102:
@@ -917,7 +927,8 @@ cmds:
 
   # cmd=1107 - 后台服务器查询分时电费计价策略信息
   1107:
-    # 报文体为空
+    # 报文体为空，使用空字段列表
+    []
 
   # cmd=1108 - 充电桩回复分时电费计价策略信息
   1108:

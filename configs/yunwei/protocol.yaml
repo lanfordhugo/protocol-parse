@@ -22,7 +22,6 @@ types:
   uint64:  { base: uint, bytes: 8, signed: false }
   ascii:   { base: str,  encoding: ASCII }
   hex:     { base: hex }
-  bcd:     { base: bcd }
   binary_str_3bytes: { base: binary_str, bytes: 3 }
   binary_str_1byte:  { base: binary_str, bytes: 1 }
   ieee754_double: { base: float, bytes: 8 }

@@ -22,7 +22,6 @@ types:
   uint32:  { base: uint, bytes: 4, signed: false }
   ascii:   { base: str,  encoding: ASCII }
   hex:     { base: hex }
-  bcd:     { base: bcd }
   cp56time2a: { base: time.cp56time2a, bytes: 7 }
   binary_str_4bytes: { base: binary_str, bytes: 4 }
   binary_str_2bytes: { base: binary_str, bytes: 2 }

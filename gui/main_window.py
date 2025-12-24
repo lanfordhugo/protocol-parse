@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QMenuBar, QMenu, QFileDialog
 )
 from PySide6.QtCore import Qt, Signal, Slot, QThread, QObject, QSettings
-from PySide6.QtGui import QCloseEvent, QAction, QActionGroup
+from PySide6.QtGui import QCloseEvent, QAction, QActionGroup, QDragEnterEvent, QDropEvent, QShortcut, QKeySequence
 
 from .protocol_panel import ProtocolPanel
 from .detail_panel import DetailPanel
@@ -87,7 +87,7 @@ class ParseWorker(QObject):
     log_success = Signal(str)
     log_warning = Signal(str)
     log_error = Signal(str)
-    finished = Signal(bool, str)  # success, message
+    finished = Signal(bool, str, str)  # success, message, output_path
     
     def __init__(
         self,
@@ -150,16 +150,67 @@ class ParseWorker(QObject):
             if time_range:
                 protocol.set_time_range(time_range[0], time_range[1])
             
-            # 执行解析
-            protocol.run()
+            # 统计文件行数用于进度显示
+            total_lines = 0
+            try:
+                with open(self.log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    total_lines = sum(1 for _ in f)
+                self.log_info.emit(f"日志文件共 {total_lines} 行")
+            except Exception:
+                pass
             
-            self.log_success.emit("解析完成，结果已保存到 parsed_log/")
-            self.progress.emit(100, 100)
-            self.finished.emit(True, "解析完成")
+            # 模拟进度（由于核心解析器不支持回调，这里分阶段报告）
+            self.progress.emit(10, 100)
+            self.log_info.emit("正在提取数据...")
+            
+            # 执行解析
+            output_path = protocol.run()
+            
+            self.progress.emit(90, 100)
+            
+            if output_path:
+                self.log_success.emit(f"解析完成，结果已保存到: {output_path}")
+                self.progress.emit(100, 100)
+                self.finished.emit(True, "解析完成", output_path)
+            else:
+                self.log_warning.emit("解析完成，但没有生成输出文件（可能没有匹配的数据）")
+                self.progress.emit(100, 100)
+                self.finished.emit(True, "解析完成（无数据）", "")
                 
         except Exception as e:
-            self.log_error.emit(f"解析失败: {e}")
-            self.finished.emit(False, str(e))
+            # 友好化错误信息
+            error_msg = self._friendly_error_message(str(e))
+            self.log_error.emit(f"解析失败: {error_msg}")
+            self.finished.emit(False, error_msg, "")
+    
+    def _friendly_error_message(self, error: str) -> str:
+        """将技术错误信息转换为友好的中文提示"""
+        error_lower = error.lower()
+        
+        # 文件相关错误
+        if "no such file" in error_lower or "找不到" in error_lower:
+            return "日志文件不存在，请检查文件路径是否正确"
+        if "permission denied" in error_lower or "拒绝访问" in error_lower:
+            return "无法访问文件，请检查文件权限或关闭占用该文件的程序"
+        if "encoding" in error_lower or "codec" in error_lower:
+            return "文件编码错误，请确保日志文件为 UTF-8 或 GBK 编码"
+        
+        # 协议相关错误
+        if "protocol" in error_lower and "not found" in error_lower:
+            return "协议配置未找到，请检查 configs 目录下是否存在对应的 protocol.yaml"
+        if "yaml" in error_lower:
+            return "协议配置文件格式错误，请检查 YAML 语法是否正确"
+        if "head" in error_lower or "header" in error_lower:
+            return "日志格式不匹配，请确认选择了正确的协议"
+        
+        # 数据相关错误
+        if "no data" in error_lower or "没有数据" in error_lower:
+            return "日志文件中没有找到有效的报文数据"
+        if "parse" in error_lower or "解析" in error_lower:
+            return f"报文解析错误: {error}。请检查日志格式是否与协议匹配"
+        
+        # 默认返回原始错误
+        return error
 
 
 def get_app_dir() -> Path:
@@ -197,17 +248,25 @@ class MainWindow(QMainWindow):
         self._load_protocols()
         self._apply_theme(self._current_theme)
         
+        # 启用拖拽支持
+        self.setAcceptDrops(True)
+        
         # 默认选择 sinexcel 协议
         self._select_default_protocol("sinexcel")
+        
+        # 设置快捷键
+        self._setup_shortcuts()
+        
+        # 显示欢迎提示
+        self._show_welcome_tips()
     
     def _setup_ui(self):
         """初始化UI"""
         self.setWindowTitle("V8Parse - 多协议通信报文解析工具")
         self.setMinimumSize(1100, 1000)
-        self.resize(1100, 800)
         
-        # 窗口居中显示
-        self._center_on_screen()
+        # 恢复窗口状态或使用默认值
+        self._restore_window_state()
         
         # 中央部件
         central = QWidget()
@@ -325,6 +384,20 @@ class MainWindow(QMainWindow):
             "<p>支持零代码扩展新协议</p>"
         )
     
+    def _setup_shortcuts(self):
+        """设置快捷键"""
+        # Ctrl+O: 选择日志文件
+        shortcut_open = QShortcut(QKeySequence("Ctrl+O"), self)
+        shortcut_open.activated.connect(self._on_select_log_clicked)
+        
+        # F5: 开始解析
+        shortcut_parse = QShortcut(QKeySequence("F5"), self)
+        shortcut_parse.activated.connect(self._on_parse_clicked)
+        
+        # Ctrl+E: 打开输出目录
+        shortcut_output = QShortcut(QKeySequence("Ctrl+E"), self)
+        shortcut_output.activated.connect(self._open_output_dir)
+    
     def _connect_signals(self):
         """连接信号"""
         # 协议选择变化
@@ -381,12 +454,18 @@ class MainWindow(QMainWindow):
                 self.log_panel.log_warning(
                     f"协议 {protocol_name} 校验通过（{len(warnings)} 个警告）"
                 )
+                # 输出每条警告的详细信息
+                for warning in warnings:
+                    self.log_panel.log_warning(f"  ↳ {warning}")
             else:
                 self.log_panel.log_success(f"协议 {protocol_name} 校验通过")
         else:
             self.log_panel.log_error(
                 f"协议 {protocol_name} 校验失败（{len(errors)} 个错误）"
             )
+            # 输出每条错误的详细信息
+            for error in errors:
+                self.log_panel.log_error(f"  ↳ {error}")
     
     @Slot()
     def _on_validation_finished(self):
@@ -430,12 +509,18 @@ class MainWindow(QMainWindow):
                     self.log_panel.log_warning(
                         f"协议 {protocol_name} 校验通过（{len(validator.warnings)} 个警告）"
                     )
+                    # 输出每条警告的详细信息
+                    for warning in validator.warnings:
+                        self.log_panel.log_warning(f"  ↳ {warning}")
                 else:
                     self.log_panel.log_success(f"协议 {protocol_name} 校验通过")
             else:
                 self.log_panel.log_error(
                     f"协议 {protocol_name} 校验失败（{len(validator.errors)} 个错误）"
                 )
+                # 输出每条错误的详细信息
+                for error in validator.errors:
+                    self.log_panel.log_error(f"  ↳ {error}")
             return is_valid
         except Exception as e:
             self.log_panel.log_warning(f"校验失败: {e}")
@@ -446,6 +531,14 @@ class MainWindow(QMainWindow):
         info = self.protocol_panel.get_protocol_info(protocol_name)
         if not info:
             return
+        
+        # 尝试恢复上次使用的日志文件路径
+        if not info['log_path']:
+            last_log = self._settings.value(f"last_log/{protocol_name}", "")
+            if last_log and Path(last_log).exists():
+                self.protocol_panel.set_log_path(protocol_name, last_log)
+                info = self.protocol_panel.get_protocol_info(protocol_name)
+                self.log_panel.log_info(f"已恢复上次使用的日志文件: {last_log}")
         
         # 校验当前选中的协议
         self._validate_single_protocol(protocol_name, info['config_path'])
@@ -539,8 +632,8 @@ class MainWindow(QMainWindow):
         # 启动线程
         self._parse_thread.start()
     
-    @Slot(bool, str)
-    def _on_parse_finished(self, success: bool, message: str):
+    @Slot(bool, str, str)
+    def _on_parse_finished(self, success: bool, message: str, output_path: str):
         """解析完成"""
         self.detail_panel.set_parsing(False)
         
@@ -556,6 +649,17 @@ class MainWindow(QMainWindow):
                 f"✅ 解析完成 | {protocol_name} | "
                 f"{datetime.now().strftime('%Y-%m-%d %H:%M')}"
             )
+            # 如果有输出文件，询问是否立即打开
+            if output_path:
+                reply = QMessageBox.question(
+                    self,
+                    "解析完成",
+                    f"解析结果已保存到:\n{output_path}\n\n是否立即打开查看？",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+                if reply == QMessageBox.Yes:
+                    self._open_file(output_path)
         else:
             self._update_status(f"❌ 解析失败 | {protocol_name}")
     
@@ -616,6 +720,8 @@ class MainWindow(QMainWindow):
         if file_path:
             # 保存目录
             self._settings.setValue("last_log_dir", str(Path(file_path).parent))
+            # 保存该协议的日志文件路径（用于下次恢复）
+            self._settings.setValue(f"last_log/{protocol_name}", file_path)
             
             # 更新协议面板
             self.protocol_panel.set_log_path(protocol_name, file_path)
@@ -641,9 +747,66 @@ class MainWindow(QMainWindow):
         else:
             subprocess.run(['xdg-open', str(path)])
     
+    def _open_file(self, file_path: str):
+        """打开文件（跨平台）"""
+        if sys.platform == 'win32':
+            os.startfile(file_path)
+        elif sys.platform == 'darwin':
+            subprocess.run(['open', file_path])
+        else:
+            subprocess.run(['xdg-open', file_path])
+    
+    def _show_welcome_tips(self):
+        """显示欢迎提示"""
+        # 检查是否首次使用
+        first_run = self._settings.value("first_run", True, type=bool)
+        
+        # 在日志面板显示操作提示
+        self.log_panel.log_info("欢迎使用 V8Parse 多协议通信报文解析工具")
+        self.log_panel.log_info("📋 操作步骤: 1.选择协议 → 2.选择/拖入日志文件 → 3.点击解析")
+        self.log_panel.log_info("💡 提示: 支持直接拖拽 .log/.txt 文件到窗口")
+        
+        # 首次使用显示欢迎对话框
+        if first_run:
+            QMessageBox.information(
+                self,
+                "欢迎使用 V8Parse",
+                "<h3>欢迎使用 V8Parse 多协议通信报文解析工具</h3>"
+                "<p><b>快速开始：</b></p>"
+                "<ol>"
+                "<li>在左侧列表<b>选择协议</b></li>"
+                "<li><b>选择或拖入</b>日志文件（.log/.txt）</li>"
+                "<li>点击<b>「开始解析」</b>按钮</li>"
+                "</ol>"
+                "<p><b>快捷操作：</b></p>"
+                "<ul>"
+                "<li><b>Ctrl+O</b> - 选择日志文件</li>"
+                "<li><b>F5</b> - 开始解析</li>"
+                "<li><b>Ctrl+E</b> - 打开输出目录</li>"
+                "</ul>"
+                "<p>支持直接<b>拖拽日志文件</b>到窗口！</p>"
+            )
+            # 标记已不是首次使用
+            self._settings.setValue("first_run", False)
+    
     def _update_status(self, message: str):
         """更新状态栏"""
         self.status_bar.showMessage(message)
+    
+    def _restore_window_state(self):
+        """恢复窗口状态"""
+        # 尝试恢复窗口几何信息
+        geometry = self._settings.value("window/geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
+        else:
+            # 默认大小和居中
+            self.resize(1100, 800)
+            self._center_on_screen()
+    
+    def _save_window_state(self):
+        """保存窗口状态"""
+        self._settings.setValue("window/geometry", self.saveGeometry())
     
     def _center_on_screen(self):
         """将窗口居中显示在屏幕中央"""
@@ -653,8 +816,40 @@ class MainWindow(QMainWindow):
         y = (screen.height() - window_size.height()) // 2
         self.move(x, y)
     
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """拖拽进入事件"""
+        if event.mimeData().hasUrls():
+            # 检查是否有日志文件
+            for url in event.mimeData().urls():
+                file_path = url.toLocalFile()
+                if file_path.endswith(('.log', '.txt')):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+    
+    def dropEvent(self, event: QDropEvent):
+        """拖拽放下事件"""
+        protocol_name = self.protocol_panel.get_selected_protocol()
+        if not protocol_name:
+            QMessageBox.warning(self, "提示", "请先选择一个协议，再拖入日志文件")
+            return
+        
+        for url in event.mimeData().urls():
+            file_path = url.toLocalFile()
+            if file_path.endswith(('.log', '.txt')):
+                # 设置日志路径
+                self.protocol_panel.set_log_path(protocol_name, file_path)
+                # 保存该协议的日志文件路径（用于下次恢复）
+                self._settings.setValue(f"last_log/{protocol_name}", file_path)
+                self._on_protocol_selected(protocol_name)
+                self.log_panel.log_info(f"已通过拖拽加载日志文件: {file_path}")
+                break
+    
     def closeEvent(self, event: QCloseEvent):
         """窗口关闭事件"""
+        # 保存窗口状态
+        self._save_window_state()
+        
         # 停止校验线程
         if self._validate_worker:
             self._validate_worker.stop()

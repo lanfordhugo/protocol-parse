@@ -215,14 +215,18 @@ class YamlUnifiedProtocol:
         else:
             raise ValueError(f"Unsupported uint size: {len(data)}")
 
-    def screen_parse_data(self, parse_data: List[Dict[str, Any]]):
-        """筛选并打印解析结果，同时输出到特定的解析文件"""
+    def screen_parse_data(self, parse_data: List[Dict[str, Any]]) -> Optional[str]:
+        """筛选并打印解析结果，同时输出到特定的解析文件
+        
+        Returns:
+            输出文件的绝对路径，如果没有数据则返回 None
+        """
         # 记录日志信息（带时间戳）
         log.i_print("筛选解析报文并打印")
         
         if not parse_data:
             log.printf("没有解析到有效数据")
-            return
+            return None
         
         # 创建解析结果输出文件
         protocol_info = self.yaml_format.get_protocol_info()
@@ -282,8 +286,11 @@ class YamlUnifiedProtocol:
                 for line in output_lines:
                     f.write(line + '\n')
             log.i_print(f"解析结果已保存到: {output_path}")
+            # 返回绝对路径
+            return os.path.abspath(output_path)
         except Exception as e:
             log.e_print(f"保存解析结果失败: {e}")
+            return None
 
     def _print_content(self, content: Dict[str, Any], indent: int = 0):
         """递归打印内容"""
@@ -346,9 +353,13 @@ class YamlUnifiedProtocol:
         """
         import re
         
-        info_line_re = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:|\.]\d{3}")
+        # 兼容多种时间格式：
+        # 格式1: 2024-01-01 12:00:00:123 或 2024-01-01 12:00:00.123 (毫秒3位)
+        # 格式2: 2023-07-26 14:05:11.67 (毫秒2位，如VIN码充电流程报文样例)
+        info_line_re = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:|\.]\d{2,3}")
         byte_sequence_re = re.compile(self.yaml_config.frame_head)
-        direction_re = re.compile(r"(Send|Recv)")  # 提取发送/接收方向
+        # 兼容多种方向标识：Send/Recv 或 TX/RX
+        direction_re = re.compile(r"(Send|Recv|TX|RX)", re.IGNORECASE)
 
         data_groups = []
         current_group = None
@@ -359,6 +370,10 @@ class YamlUnifiedProtocol:
                 for line in file:
                     line = line.strip()
                     if line == "":
+                        continue
+                    
+                    # 跳过注释行（以 // 开头）
+                    if line.startswith("//"):
                         continue
 
                     info_line_match = info_line_re.search(line)
@@ -399,8 +414,12 @@ class YamlUnifiedProtocol:
             log.e_print(f"无法打开文件 {file_path}: {str(e)}")
             raise IOError(f"无法打开文件 {file_path}: {str(e)}")
 
-    def run(self):
-        """运行协议解析"""
+    def run(self) -> Optional[str]:
+        """运行协议解析
+        
+        Returns:
+            解析结果文件的绝对路径，如果解析失败或无数据则返回 None
+        """
         try:
             self._reset_perf_stats()
             total_start = perf_counter()
@@ -413,7 +432,7 @@ class YamlUnifiedProtocol:
                 log.d_print("没有提取到数据")
                 self._record_phase("total", perf_counter() - total_start)
                 self._print_perf_summary()
-                return
+                return None
             
             log.i_print(f"提取到 {len(data_groups)} 组数据")
             
@@ -425,12 +444,13 @@ class YamlUnifiedProtocol:
             
             # 筛选并打印结果
             screen_start = perf_counter()
-            self.screen_parse_data(parsed_data)
+            output_path = self.screen_parse_data(parsed_data)
             screen_duration = perf_counter() - screen_start
             self._record_phase("screen", screen_duration)
             self._record_phase("total", perf_counter() - total_start)
 
             self._print_perf_summary()
+            return output_path
             
         except Exception as e:
             log.e_print(f"协议解析失败: {e}")

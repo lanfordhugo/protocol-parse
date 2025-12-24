@@ -96,14 +96,11 @@ compatibility:
     # 其他头部字段...
 
 types:
-  # 基础类型（从模板复制）
-  uint8:   { base: uint, bytes: 1, signed: false }
-  uint16:  { base: uint, bytes: 2, signed: false }
-  uint32:  { base: uint, bytes: 4, signed: false }
-  # 根据协议需要添加更多类型...
+  # ❗ 按需添加：仅添加CMD实际使用的类型，避免产生未使用的定义
+  # 配置第一个CMD时根据实际字段需要添加类型
 
 enums:
-  # 根据协议定义枚举...
+  # ❗ 按需添加：仅添加CMD实际使用的枚举
 
 cmds:
   # 逐个添加CMD配置...
@@ -198,9 +195,24 @@ enums:
     # ...
 ```
 
-#### 步骤E：添加所需类型
+#### 步骤E：添加所需类型（按需添加）
 
-如果该CMD使用了新的数据类型，在 `types` 部分添加。
+❗ **重要原则**：仅添加该CMD实际使用的类型，不要预先复制一套“常用类型”。
+
+```yaml
+# ✅ 正确做法：字段用到uint16时才添加uint16
+types:
+  uint16: { base: uint, bytes: 2, signed: false }
+
+# ❌ 错误做法：预先复制一套类型，很多可能不会用到
+types:
+  uint8: ...
+  uint16: ...
+  uint32: ...
+  int8: ...    # 可能根本用不到
+  int16: ...   # 可能根本用不到
+  bcd2: ...    # 可能根本用不到
+```
 
 #### 步骤F：更新配置进度
 
@@ -281,11 +293,13 @@ python main.py <protocol_name>
 | bitset | 位集合（每位独立命名） | bits列表 | 见下方示例 |
 | bitfield | 位段（可定义多位组） | bytes, order | `{base: bitfield, bytes: 2, order: lsb0}` |
 
-### 常用类型定义参考
+### 类型定义参考（按需选用）
+
+❗ **重要**：以下仅为参考，请根据实际CMD字段需要按需添加，不要复制全部。
 
 ```yaml
 types:
-  # 基础整数类型
+  # 基础整数类型（按需选用）
   uint8:   { base: uint, bytes: 1, signed: false }    # 0-255
   uint16:  { base: uint, bytes: 2, signed: false }    # 0-65535
   uint32:  { base: uint, bytes: 4, signed: false }    # 0-4294967295
@@ -293,44 +307,27 @@ types:
   int16:   { base: int,  bytes: 2, signed: true }     # -32768到32767
   int32:   { base: int,  bytes: 4, signed: true }
   
-  # 字符串类型
+  # 字符串类型（按需选用）
   ascii:   { base: str,  encoding: ASCII }
   utf8:    { base: str,  encoding: UTF8 }
   
-  # 特殊显示类型
+  # 特殊显示类型（按需选用）
   hex:     { base: hex }                              # 16进制显示
   
-  # BCD码类型（根据协议需要选择）
+  # BCD码类型（根据协议实际使用的字节数选择）
   bcd1:    { base: bcd, bytes: 1 }                   # 最多2位十进制
   bcd2:    { base: bcd, bytes: 2 }                   # 最多4位十进制
-  bcd3:    { base: bcd, bytes: 3 }                   # 最多6位十进制
-  bcd4:    { base: bcd, bytes: 4 }                   # 最多8位十进制
-  bcd6:    { base: bcd, bytes: 6 }                   # 最多12位十进制
   bcd7:    { base: bcd, bytes: 7 }                   # 最多14位（常用于桩编码）
-  bcd10:   { base: bcd, bytes: 10 }                  # 最多20位（常用于SIM卡号）
-  bcd16:   { base: bcd, bytes: 16 }                  # 最多32位（常用于交易流水号）
+  # ... 其他bcdN根据实际需要添加
   
-  # 时间类型
+  # 时间类型（按需选用）
   cp56time2a: { base: time.cp56time2a, bytes: 7 }    # IEC104标准时间格式
-  # IEC104时间格式说明：
-  # 字节0-1: 毫秒 (0-59999)
-  # 字节2: 分钟 (0-59)
-  # 字节3: 小时 (0-23)
-  # 字节4: 日 (1-31)
-  # 字节5: 月 (1-12)
-  # 字节6: 年 (相对于2000年)
   
-  # 二进制字符串类型
-  binary_str_1byte:  { base: binary_str, bytes: 1 }
-  binary_str_2bytes: { base: binary_str, bytes: 2 }
-  binary_str_4bytes: { base: binary_str, bytes: 4 }
-  binary_str_8bytes: { base: binary_str, bytes: 8 }
+  # 二进制字符串类型（根据实际字节数选择）
+  binary_str_4bytes: { base: binary_str, bytes: 4 }  # 仅添加实际用到的
   
-  # 位字段类型
-  bitfield8:  { base: bitfield, bytes: 1, order: lsb0 }
-  bitfield16: { base: bitfield, bytes: 2, order: lsb0 }
-  bitfield32: { base: bitfield, bytes: 4, order: lsb0 }
-  bitfield64: { base: bitfield, bytes: 8, order: lsb0 }  # 用于64个设备状态位
+  # 位字段类型（根据实际字节数选择）
+  bitfield16: { base: bitfield, bytes: 2, order: lsb0 }  # 仅添加实际用到的
 ```
 
 ### bitset类型定义（每位独立命名）

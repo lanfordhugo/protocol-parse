@@ -113,6 +113,7 @@ class Field:
     bit_groups: Optional[List[Dict[str, Any]]] = None  # 字段级位段定义
     notes: Optional[str] = None  # 备注信息
     flatten: bool = False  # 是否展平bitfield结果
+    variable: Optional[str] = None  # 变量名，用于存储解析值供后续引用
     
     def get_bitfield_groups(self) -> List[BitfieldGroup]:
         """获取字段级位段组列表"""

@@ -1,0 +1,5 @@
+# V8Parse GUI 依赖
+# 安装命令: pip install -r requirements-gui.txt
+
+PySide6>=6.5.0
+PyYAML>=6.0

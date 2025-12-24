@@ -23,13 +23,9 @@ types:
   ascii:   { base: str,  encoding: ASCII }
   hex:     { base: hex }
   binary_str_3bytes: { base: binary_str, bytes: 3 }
-  binary_str_1byte:  { base: binary_str, bytes: 1 }
   ieee754_double: { base: float, bytes: 8 }
 
 enums:
-  param_type:
-    1: 设置
-    2: 查询
   
   gun_type:
     1: 直流

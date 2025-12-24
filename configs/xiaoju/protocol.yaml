@@ -24,7 +24,6 @@ types:
   hex:     { base: hex }
   cp56time2a: { base: time.cp56time2a, bytes: 7 }
   binary_str_4bytes: { base: binary_str, bytes: 4 }
-  binary_str_2bytes: { base: binary_str, bytes: 2 }
 
 enums:
   charge_result:

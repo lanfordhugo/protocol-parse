@@ -19,44 +19,16 @@ types:
   uint8:   { base: uint, bytes: 1, signed: false }
   uint16:  { base: uint, bytes: 2, signed: false }
   uint32:  { base: uint, bytes: 4, signed: false }
-  int16:   { base: int,  bytes: 2, signed: true }
-  int8:    { base: int,  bytes: 1, signed: true }
   int32:   { base: int,  bytes: 4, signed: true }
   ascii:   { base: str,  encoding: ASCII }
   hex:     { base: hex }
-  bcd2:    { base: bcd, bytes: 2 }
-  bcd3:    { base: bcd, bytes: 3 }
   bcd4:    { base: bcd, bytes: 4 }
   bcd6:    { base: bcd, bytes: 6 }
-  cp56time2a: { base: time.cp56time2a, bytes: 7 }
   binary_str_1byte:  { base: binary_str, bytes: 1 }
   binary_str_2bytes: { base: binary_str, bytes: 2 }
   binary_str_3bytes: { base: binary_str, bytes: 3 }
   binary_str_4bytes: { base: binary_str, bytes: 4 }
   binary_str_8bytes: { base: binary_str, bytes: 8 }
-  # 保持向后兼容的bitset类型（基于bitfield实现）
-  bitset8:
-    base: bitset
-    bits:
-      - {name: "热电偶1反馈"}
-      - {name: "热电偶2反馈"}
-      - {name: "热电偶3反馈"}
-      - {name: "热电偶4反馈"}
-      - {name: "预留隔离反馈1"}
-      - {name: "预留隔离反馈2"}
-      - {name: "倾斜"}
-      - {name: "水浸"}
-  bitset16:
-    base: bitset
-    bits:
-      - {name: "单体动力蓄电池电压过高或过低"}
-      - {name: "整车动力蓄电池荷电状态SOC过高或过低"}
-      - {name: "动力蓄电池充电过电流"}
-      - {name: "动力蓄电池温度过高"}
-      - {name: "动力蓄电池绝缘状态"}
-      - {name: "动力蓄电池组输出连接器连接状态"}
-      - {name: "允许充电"}
-      - {name: "预留"}
   
   # 通用位段类型（仅描述存储形态）
   bitfield8:  { base: bitfield, bytes: 1, order: lsb0 }

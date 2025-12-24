@@ -20,17 +20,9 @@ types:
   uint8:   { base: uint, bytes: 1, signed: false }
   uint16:  { base: uint, bytes: 2, signed: false }
   uint32:  { base: uint, bytes: 4, signed: false }
-  int16:   { base: int,  bytes: 2, signed: true }
-  int32:   { base: int,  bytes: 4, signed: true }
   ascii:   { base: str,  encoding: ASCII }
   hex:     { base: hex }
-  bcd2:    { base: bcd, bytes: 2 }
-  bcd4:    { base: bcd, bytes: 4 }
-  bcd6:    { base: bcd, bytes: 6 }
-  binary_str_1byte:  { base: binary_str, bytes: 1 }
-  binary_str_2bytes: { base: binary_str, bytes: 2 }
   binary_str_4bytes: { base: binary_str, bytes: 4 }
-  binary_str_8bytes: { base: binary_str, bytes: 8 }
 
 enums:
   operation_type:
@@ -43,22 +35,12 @@ enums:
     0: 即时充电
     1: 定时启动充电
     2: 预约充电
-  gun_status:
-    0: 空闲
-    1: 准备
-    2: 充电中
-    3: 故障
-    4: 停止
   work_status:
     0: 空闲
     1: 正准备开始充电
     2: 充电中
     3: 正在结束充电
     4: 故障
-  device_type:
-    1: 交流充电桩
-    2: 直流充电桩
-    3: 交直流一体桩
   connection_status:
     0: 断开
     1: 半连接

@@ -43,6 +43,10 @@ class YamlFieldParser:
             'hex': self._parse_hex,
             'bcd': self._parse_bcd,
             'time.cp56time2a': self._parse_cp56time2a,
+            'time.bcd7': self._parse_bcd_time7,
+            'time.bcd8': self._parse_bcd_time8,
+            'time.unix': self._parse_unix_time,
+            'time.unix_ms': self._parse_unix_time_ms,
             'binary_str': self._parse_binary_str,
             'bitset': self._parse_bitset,
             'bitfield': self._parse_bitfield,
@@ -276,6 +280,96 @@ class YamlFieldParser:
         except (ValueError, OverflowError) as e:
             logger.warning(f"Failed to parse CP56Time2a: {e}, returning hex")
             return binascii.hexlify(data).decode('ascii').upper()
+    
+    def _parse_bcd_time7(self, data: bytes, type_def: TypeDef, field: Field) -> str:
+        """解析7字节BCD时间格式 (YYYYMMDDhhmmss，最后1字节为空)
+        
+        格式: 年(2BCD) + 月(1BCD) + 日(1BCD) + 时(1BCD) + 分(1BCD) + 秒(1BCD)
+        """
+        if len(data) < 7:
+            raise ValueError(f"BCD时间需要至少7字节，实际{len(data)}字节")
+        
+        try:
+            # 解析BCD码
+            year = self._bcd_to_int(data[0:2])
+            month = self._bcd_byte_to_int(data[2])
+            day = self._bcd_byte_to_int(data[3])
+            hour = self._bcd_byte_to_int(data[4])
+            minute = self._bcd_byte_to_int(data[5])
+            second = self._bcd_byte_to_int(data[6])
+            
+            dt = datetime(year, month, day, hour, minute, second)
+            return dt.strftime('%Y-%m-%d %H:%M:%S')
+            
+        except (ValueError, OverflowError) as e:
+            logger.warning(f"解析BCD时间失败: {e}，返回原始hex")
+            return binascii.hexlify(data).decode('ascii').upper()
+    
+    def _parse_bcd_time8(self, data: bytes, type_def: TypeDef, field: Field) -> str:
+        """解析8字节BCD时间格式 (YYYYMMDDhhmmss + 1字节空)
+        
+        格式: 年(2BCD) + 月(1BCD) + 日(1BCD) + 时(1BCD) + 分(1BCD) + 秒(1BCD) + 空(1字节)
+        """
+        if len(data) < 8:
+            raise ValueError(f"BCD时间需要8字节，实际{len(data)}字节")
+        
+        # 忽略最后1字节空数据，复用7字节解析
+        return self._parse_bcd_time7(data[:7], type_def, field)
+    
+    def _parse_unix_time(self, data: bytes, type_def: TypeDef, field: Field) -> str:
+        """解析Unix时间戳（秒）"""
+        if len(data) != 4:
+            raise ValueError(f"Unix时间戳需要4字节，实际{len(data)}字节")
+        
+        try:
+            endian = field.endian or self.config.meta.default_endian
+            fmt = '<L' if endian == 'LE' else '>L'
+            timestamp = struct.unpack(fmt, data)[0]
+            
+            if timestamp == 0:
+                return "1970-01-01 00:00:00"
+            
+            dt = datetime.fromtimestamp(timestamp)
+            return dt.strftime('%Y-%m-%d %H:%M:%S')
+            
+        except (ValueError, OverflowError, OSError) as e:
+            logger.warning(f"解析Unix时间戳失败: {e}，返回原始值")
+            return str(struct.unpack('<L', data)[0])
+    
+    def _parse_unix_time_ms(self, data: bytes, type_def: TypeDef, field: Field) -> str:
+        """解析Unix时间戳（毫秒）"""
+        if len(data) != 8:
+            raise ValueError(f"Unix毫秒时间戳需要8字节，实际{len(data)}字节")
+        
+        try:
+            endian = field.endian or self.config.meta.default_endian
+            fmt = '<Q' if endian == 'LE' else '>Q'
+            timestamp_ms = struct.unpack(fmt, data)[0]
+            
+            if timestamp_ms == 0:
+                return "1970-01-01 00:00:00.000"
+            
+            dt = datetime.fromtimestamp(timestamp_ms / 1000.0)
+            return dt.strftime('%Y-%m-%d %H:%M:%S.') + f"{timestamp_ms % 1000:03d}"
+            
+        except (ValueError, OverflowError, OSError) as e:
+            logger.warning(f"解析Unix毫秒时间戳失败: {e}，返回原始值")
+            return str(struct.unpack('<Q', data)[0])
+    
+    def _bcd_byte_to_int(self, byte: int) -> int:
+        """单字节BCD转整数"""
+        high = (byte >> 4) & 0x0F
+        low = byte & 0x0F
+        if high > 9 or low > 9:
+            raise ValueError(f"无效BCD字节: 0x{byte:02X}")
+        return high * 10 + low
+    
+    def _bcd_to_int(self, data: bytes) -> int:
+        """多字节BCD转整数（大端序）"""
+        result = 0
+        for byte in data:
+            result = result * 100 + self._bcd_byte_to_int(byte)
+        return result
     
     def _parse_binary_str(self, data: bytes, type_def: TypeDef, field: Field) -> str:
         """解析二进制字符串（作为十六进制显示）"""

@@ -10,8 +10,39 @@ parsed_log/
 # Python缓存文件
 *.pyc
 __pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# PyInstaller 打包相关
+*.spec
+build/
+dist/
+*.egg-info/
+
+# 虚拟环境
+venv/
+env/
+.venv/
+ENV/
+
+# IDE 配置文件
+.vscode/
+.idea/
+.windsurfrules
+*.swp
+*.swo
+*~
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
 
 # 临时文件
 log_1.txt
 memory-bank
+*.log
 

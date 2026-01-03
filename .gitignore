@@ -6,6 +6,7 @@ input_logs/*
 # 解析结果文件 - 不受版本控制
 parsed_log/
 /log/
+tcp_output
 
 # Python缓存文件
 *.pyc

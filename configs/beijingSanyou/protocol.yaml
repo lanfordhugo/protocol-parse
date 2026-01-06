@@ -28,6 +28,7 @@ types:
   uint8:   { base: uint, bytes: 1, signed: false }
   uint16:  { base: uint, bytes: 2, signed: false }
   uint32:  { base: uint, bytes: 4, signed: false }
+  uint64:  { base: uint, bytes: 8, signed: false }
   int8:    { base: int,  bytes: 1, signed: true }
   int16:   { base: int,  bytes: 2, signed: true }
   int32:   { base: int,  bytes: 4, signed: true }
@@ -49,6 +50,11 @@ types:
   
   # 时间类型 - CP56Time2a (7字节)
   cp56time2a: { base: time.cp56time2a, bytes: 7 }
+
+  # 时间类型 - BIN时间格式 (7字节，协议附录D格式)
+  # 格式: 世纪(1) + 年(1) + 月(1) + 日(1) + 时(1) + 分(1) + 秒(1)
+  # 例如: 0x14YYMMDDHHMMSS，其中0x14是世纪（20，表示2000-2099年）
+  bin_time7: { base: time.bin7, bytes: 7 }
 
 # ==================================================================================
 # 枚举定义
@@ -250,6 +256,21 @@ enums:
   lock_control:
     1: 升地锁
     2: 降地锁
+  
+  # 本地限制类型
+  local_limit_type:
+    1: 本地限制最小金额（充电桩自定义）
+    2: 本地不限制
+  
+  # 充电类型
+  charge_type:
+    0x01: 无卡充电
+    0x02: 有卡充电
+  
+  # 充电模式
+  charge_mode:
+    0x1: 恒压
+    0x2: 恒流
 
 # ==================================================================================
 # 命令定义
@@ -355,11 +376,47 @@ cmds:
   # --------------------------------------------------------------------------------
   # 0x0111 - 充电设备定时上报时间
   # 数据方向：充电设备 → 平台
+  # 说明：充电桩每次上电时或与平台建立连接后，主动上报当前时间给平台
   # --------------------------------------------------------------------------------
   0x0111:
     - {len: 16, name: 桩ID, type: ascii}
+    - {len: 7, name: 充电桩时钟, type: bin_time7}
+    - {len: 4, name: 计费模型编号, type: uint32}
+
+  # --------------------------------------------------------------------------------
+  # 0x0121 - 主动启动 VIN 认证
+  # 数据方向：充电设备 → 平台
+  # 说明：用户使用 VIN 方式启动时，充电设备主动上送启动 VIN 认证数据，平台收到 VIN 认证请求后，需回复认证结果应答（0x0122）。
+  #       本指令超时时间为 10 秒，超时未收到回复，执行重发动作，最多发送 4 次，如未收到，放弃本次发送，提示用户鉴权失败。
+  # --------------------------------------------------------------------------------
+  0x0121:
+    - {len: 16, name: 桩ID, type: ascii}
     - {len: 1, name: 充电接口编号, type: uint8}
-    - {len: 7, name: 设备时间, type: cp56time2a}
+    - {len: 17, name: VIN号, type: ascii}
+    - {len: 1, name: 标示, type: uint8, enum: card_type}
+    - {len: 4, name: 卡内余额, type: uint32, scale: 0.01, unit: 元}
+    - {len: 1, name: 是否结算, type: uint8, enum: settle_flag}
+    - {len: 1, name: 密码标志, type: uint8, enum: password_flag}
+    - {len: 16, name: 密码, type: ascii}
+
+  # --------------------------------------------------------------------------------
+  # 0x0122 - 主动启动 VIN 认证结果应答
+  # 数据方向：平台 → 充电设备
+  # 说明：当平台接收到 VIN 认证信息时，判断 VIN 是否有效。之后平台将认证信息备份并将认证结果返回给充电设备。
+  #       如设备在 60 秒内重复请求，需按照单次启动生成订单，每次请求均需给予回复，重复请求的回复验证结果需填写 0xaa。
+  # --------------------------------------------------------------------------------
+  0x0122:
+    - {len: 16, name: 桩ID, type: ascii}
+    - {len: 1, name: 充电接口编号, type: uint8}
+    - {len: 17, name: VIN号, type: ascii}
+    - {len: 8, name: session_id, type: hex}
+    - {len: 1, name: 启动标示, type: uint8, enum: card_type}
+    - {len: 1, name: 验证结果, type: uint8, enum: verify_result}
+    - {len: 1, name: 卡/VIN状态, type: uint8, enum: card_status}
+    - {len: 1, name: 密码状态, type: uint8}
+    - {len: 1, name: 类型, type: uint8, enum: local_limit_type}
+    - {len: 4, name: 账户余额, type: uint32, scale: 0.01, unit: 元}
+    - {len: 16, name: 用户ID, type: ascii}
 
   # --------------------------------------------------------------------------------
   # 0x0123 - 主动启动用户认证
@@ -514,7 +571,79 @@ cmds:
       fields:
         - {len: 1, name: 时段号, type: uint8}
         - {len: 4, name: 时段电量, type: uint32, scale: 0.001, unit: kWh}
-    - {len: 0, name: 遥测数据, type: hex, len_to_end: true}
+    # 遥测数据（附录A.1直流充电桩遥测数据，变化>50V或>20A亦立即上送）
+    - {len: 2, name: 充电输出电压, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 充电输出电流, type: uint16, scale: 0.01, unit: A}
+    - {len: 1, name: 充电接口温度探头1, type: uint8, offset: -50, unit: "℃"}
+    - {len: 1, name: 充电接口温度探头2, type: uint8, offset: -50, unit: "℃"}
+    - {len: 1, name: 充电接口温度探头3, type: uint8, offset: -50, unit: "℃"}
+    - {len: 1, name: 充电接口温度探头4, type: uint8, offset: -50, unit: "℃"}
+    - {len: 2, name: 电压需求, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 电流需求, type: uint16, scale: 0.1, offset: -400, unit: A}
+    - {len: 1, name: 充电模式, type: uint8}
+    - {len: 2, name: 充电电压测量值, type: uint16, scale: 0.1, unit: V}
+    - {len: 2, name: 充电电流测量值, type: uint16, scale: 0.1, offset: -400, unit: A}
+    - {len: 2, name: 最高单体电压与组号, type: hex}
+    - {len: 2, name: 最低单体电压与组号, type: hex}
+    - {len: 1, name: 当前SOC, type: uint8, unit: "%"}
+    - {len: 2, name: 估算剩余充电时间, type: uint16, unit: 分钟}
+    - {len: 1, name: 最高单体电压所在编号, type: uint8}
+    - {len: 1, name: 最高动力蓄电池温度, type: uint8, offset: -50, unit: "℃"}
+    - {len: 1, name: 最高温度检测点编号, type: uint8}
+    - {len: 1, name: 最低动力蓄电池温度, type: uint8, offset: -50, unit: "℃"}
+    - {len: 1, name: 最低动力蓄电池温度检测点编号, type: uint8}
+    # BMS电池状态 (2字节): Bit1-2:单体电压过高/过低(0x00:正常,0x01:过高,0x10:过低);
+    # Bit3-4:SOC过高/过低(0x00:正常,0x01:过高,0x10:过低); Bit5-6:充电过流(0x00:正常,0x01:过流,0x10:不可信);
+    # Bit7-8:温度过高(0x00:正常,0x01:过高,0x10:不可信); Bit9-10:绝缘状态(0x00:正常,0x01:不正常,0x10:不可信);
+    # Bit11-12:连接器状态(0x00:正常,0x01:不正常,0x10:不可信); Bit13-14:充电允许(0x00:禁止,0x01:允许)
+    - {len: 2, name: BMS电池状态, type: hex}
+    - {len: 1, name: 设备温度, type: uint8, offset: -50, unit: "℃"}
+    - {len: 1, name: 设备湿度, type: uint8, unit: "%"}
+    - {len: 2, name: 枪电压, type: uint16, scale: 0.01, unit: V}
+
+  # --------------------------------------------------------------------------------
+  # 0x018E - 充电设备上传充电记录(动态时段方案)
+  # 数据方向：充电设备 → 平台
+  # --------------------------------------------------------------------------------
+  0x018E:
+    - {len: 16, name: 桩ID, type: ascii}
+    - {len: 1, name: 充电接口编号, type: uint8}
+    - {len: 1, name: 类型, type: uint8, enum: charge_type}
+    - {len: 8, name: session_id, type: hex}
+    - {len: 2, name: 充电记录序号, type: uint16}
+    - {len: 16, name: 用户ID或IC卡号, type: ascii}
+    - {len: 17, name: VIN, type: ascii}
+    - {len: 4, name: 计费模型编号, type: uint32}
+    - {len: 6, name: 电表地址, type: bcd6}
+    - {len: 1, name: 时段数, type: uint8, id: period_count}
+    - repeat_by: period_count
+      fields:
+        - {len: 1, name: 时段号, type: uint8}
+        - {len: 4, name: 时段起示值, type: uint32, scale: 0.001, unit: kWh}
+        - {len: 4, name: 时段止示值, type: uint32, scale: 0.001, unit: kWh}
+        - {len: 4, name: 时段电量, type: uint32, scale: 0.001, unit: kWh}
+    - {len: 4, name: 总起示值, type: uint32, scale: 0.001, unit: kWh}
+    - {len: 4, name: 总止示值, type: uint32, scale: 0.001, unit: kWh}
+    - {len: 4, name: 总电量, type: uint32, scale: 0.001, unit: kWh}
+    - {len: 4, name: 本次充电金额, type: uint32, scale: 0.01, unit: 元}
+    - {len: 7, name: 开始充电时间, type: bin_time7}
+    - {len: 7, name: 结束充电时间, type: bin_time7}
+    - {len: 1, name: 停止时OC, type: uint8, unit: "%"}
+    - {len: 1, name: 停止时充电模式, type: uint8, enum: charge_mode}
+    - {len: 2, name: 停止充电原因, type: uint16}
+    - {len: 1, name: 启动原因, type: uint8}
+    - {len: 1, name: BMS中止充电原因, type: uint8}
+    - {len: 2, name: BMS中止充电故障原因, type: uint16}
+    - {len: 1, name: BMS中止充电错误原因, type: uint8}
+    - {len: 1, name: 中止荷电状态SOC, type: uint8, unit: "%"}
+    - {len: 2, name: 动力蓄电池单体最低电压, type: uint16, scale: 0.01, unit: V}
+    - {len: 2, name: 动力蓄电池单体最高电压, type: uint16, scale: 0.01, unit: V}
+    - {len: 1, name: 动力蓄电池最低温度, type: uint8, offset: -50, unit: "℃"}
+    - {len: 1, name: 动力蓄电池最高温度, type: uint8, offset: -50, unit: "℃"}
+    - {len: 1, name: BMS错误报文1, type: uint8}
+    - {len: 1, name: BMS错误报文2, type: uint8}
+    - {len: 1, name: BMS错误报文3, type: uint8}
+    - {len: 1, name: BMS错误报文4, type: uint8}
 
   # --------------------------------------------------------------------------------
   # 0x016C - 充/放电实时数据
@@ -610,12 +739,12 @@ cmds:
   # --------------------------------------------------------------------------------
   # 0x012F - 响应充电记录确认
   # 数据方向：平台 → 充电设备
+  # 说明：后台收到充电桩上传的充电记录后，下发充电记录确认
   # --------------------------------------------------------------------------------
   0x012F:
     - {len: 16, name: 桩ID, type: ascii}
     - {len: 1, name: 充电接口编号, type: uint8}
-    - {len: 8, name: session_id, type: hex}
-    - {len: 1, name: 确认结果, type: uint8, enum: result_code}
+    - {len: 2, name: 交易流水号, type: uint16}
 
   # --------------------------------------------------------------------------------
   # 0x0132 - 充电设备请求平台下发计费模型
@@ -688,7 +817,7 @@ cmds:
     - {len: 16, name: 卡号或用户ID, type: ascii}
     - {len: 8, name: session_id, type: hex}
     - {len: 1, name: 开关机控制, type: uint8, enum: power_control}
-    - {len: 1, name: 类型, type: uint8}
+    - {len: 1, name: 类型, type: uint8, enum: local_limit_type}
     - {len: 4, name: 账户余额, type: uint32, scale: 0.01, unit: 元}
 
   # --------------------------------------------------------------------------------
@@ -965,7 +1094,20 @@ cmds:
   0x01A1:
     - {len: 16, name: 桩ID, type: ascii}
     - {len: 1, name: 充电接口编号, type: uint8}
-    - {len: 0, name: 计费模型数据, type: hex, len_to_end: true}
+    - {len: 4, name: 计费模型编号, type: uint32}
+    - {len: 8, name: 计费模型ID, type: uint64}
+    - {len: 7, name: 生效时间, type: cp56time2a}
+    - {len: 7, name: 失效时间, type: cp56time2a}
+    - {len: 2, name: 预冻结金额第1档, type: uint16, scale: 0.01, unit: 分}
+    - {len: 2, name: 预冻结金额第2档, type: uint16, scale: 0.01, unit: 分}
+    - {len: 1, name: 时段数N, type: uint8, id: period_count}
+    - repeat_by: period_count
+      fields:
+        - {len: 2, name: 时段起始时间点, type: uint16, unit: hhmm}
+        - {len: 1, name: 时段标志, type: uint8}
+        - {len: 4, name: 时段电价, type: uint32, scale: 0.00001, unit: 微分}
+        - {len: 2, name: 时段服务费, type: uint16, scale: 0.01, unit: 元}
+
 
   # --------------------------------------------------------------------------------
   # 0x01A2 - 充电桩本地升级状态同步

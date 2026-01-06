@@ -8,6 +8,7 @@ import logging
 from typing import Dict, Any, List, Union, Optional
 from datetime import datetime
 import binascii
+from decimal import Decimal, ROUND_HALF_UP
 
 from src.yaml_config import ProtocolConfig, Field, Group, TypeDef
 
@@ -45,6 +46,7 @@ class YamlFieldParser:
             'time.cp56time2a': self._parse_cp56time2a,
             'time.bcd7': self._parse_bcd_time7,
             'time.bcd8': self._parse_bcd_time8,
+            'time.bin7': self._parse_bin_time7,
             'time.unix': self._parse_unix_time,
             'time.unix_ms': self._parse_unix_time_ms,
             'binary_str': self._parse_binary_str,
@@ -148,7 +150,10 @@ class YamlFieldParser:
         # 生成组结果键名（基于第一个字段名）
         if group.fields:
             first_field_name = self._get_first_field_name(group.fields[0])
-            if repeat_count == 1:
+            if repeat_count == 0:
+                # 0个项目，不创建字段（避免显示空列表）
+                pass
+            elif repeat_count == 1:
                 # 单个项目，直接合并到结果中
                 result.update(group_items[0])
             else:
@@ -356,6 +361,34 @@ class YamlFieldParser:
             logger.warning(f"解析Unix毫秒时间戳失败: {e}，返回原始值")
             return str(struct.unpack('<Q', data)[0])
     
+    def _parse_bin_time7(self, data: bytes, type_def: TypeDef, field: Field) -> str:
+        """解析7字节BIN时间格式（协议附录D格式）
+        
+        格式: 世纪(1) + 年(1) + 月(1) + 日(1) + 时(1) + 分(1) + 秒(1)
+        例如: 0x14YYMMDDHHMMSS，其中0x14是世纪（20，表示2000-2099年）
+        """
+        if len(data) != 7:
+            raise ValueError(f"BIN时间需要7字节，实际{len(data)}字节")
+        
+        try:
+            century = data[0]  # 世纪（20表示2000-2099年）
+            year = data[1]     # 年（0-99，相对于世纪）
+            month = data[2]    # 月（1-12）
+            day = data[3]       # 日（1-31）
+            hour = data[4]      # 时（0-23）
+            minute = data[5]    # 分（0-59）
+            second = data[6]    # 秒（0-59）
+            
+            # 计算实际年份：世纪 * 100 + 年
+            actual_year = century * 100 + year
+            
+            dt = datetime(actual_year, month, day, hour, minute, second)
+            return dt.strftime('%Y-%m-%d %H:%M:%S')
+            
+        except (ValueError, OverflowError) as e:
+            logger.warning(f"解析BIN时间失败: {e}，返回原始hex")
+            return binascii.hexlify(data).decode('ascii').upper()
+    
     def _bcd_byte_to_int(self, byte: int) -> int:
         """单字节BCD转整数"""
         high = (byte >> 4) & 0x0F
@@ -456,13 +489,31 @@ class YamlFieldParser:
                 value = (value << 8) | byte
         return value
     
+    def _get_decimal_places(self, scale: float) -> int:
+        """根据缩放因子确定小数位数"""
+        if scale == 0:
+            return 0
+        # 将 scale 转换为字符串，计算小数位数
+        scale_str = f"{scale:.10f}".rstrip('0').rstrip('.')
+        if '.' in scale_str:
+            return len(scale_str.split('.')[1])
+        return 0
+    
     def _post_process_value(self, raw_value: Any, field: Field) -> Any:
         """后处理字段值（缩放、枚举映射等）"""
         processed_value = raw_value
         
-        # 应用缩放因子
+        # 应用缩放因子，使用 Decimal 进行精确计算
         if field.scale is not None and isinstance(raw_value, (int, float)):
-            processed_value = raw_value * field.scale
+            # 使用 Decimal 进行精确计算
+            decimal_value = Decimal(str(raw_value)) * Decimal(str(field.scale))
+            # 根据 scale 确定小数位数并格式化
+            decimal_places = self._get_decimal_places(field.scale)
+            # 四舍五入到指定小数位数
+            processed_value = float(decimal_value.quantize(
+                Decimal(10) ** -decimal_places, 
+                rounding=ROUND_HALF_UP
+            ))
         
         # 应用枚举映射
         if field.enum and field.enum in self.config.enums:

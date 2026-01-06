@@ -292,6 +292,28 @@ class YamlUnifiedProtocol:
             log.e_print(f"保存解析结果失败: {e}")
             return None
 
+    def _format_float(self, value: float) -> str:
+        """格式化浮点数，避免精度问题"""
+        if not isinstance(value, float):
+            return str(value)
+        # 使用 Decimal 进行精确格式化
+        from decimal import Decimal
+        try:
+            # 转换为 Decimal 并格式化为最多5位小数
+            decimal_value = Decimal(str(value))
+            # 尝试不同的小数位数（最多5位），找到最合适的
+            for places in range(5, -1, -1):
+                formatted = f"{decimal_value:.{places}f}"
+                # 检查格式化后的值是否与原值相等（考虑精度误差）
+                if abs(float(formatted) - value) < 1e-10:
+                    # 移除末尾的0和小数点
+                    return formatted.rstrip('0').rstrip('.')
+            # 如果都不匹配，使用5位小数
+            return f"{decimal_value:.5f}".rstrip('0').rstrip('.')
+        except Exception:
+            # 如果 Decimal 转换失败，使用原始方法
+            return f"{value:.5f}".rstrip('0').rstrip('.')
+    
     def _print_content(self, content: Dict[str, Any], indent: int = 0):
         """递归打印内容"""
         prefix = "  " * indent
@@ -307,16 +329,16 @@ class YamlUnifiedProtocol:
                     self._print_content(value, indent + 1)
             elif isinstance(value, list):
                 log.printf(f"{prefix}{key}: [{len(value)} 项]")
-                for i, item in enumerate(value[:3]):  # 只显示前3项
+                for i, item in enumerate(value):  # 显示所有项
                     if isinstance(item, dict):
                         log.printf(f"{prefix}  [{i}]:")
                         self._print_content(item, indent + 2)
                     else:
-                        log.printf(f"{prefix}  [{i}]: {item}")
-                if len(value) > 3:
-                    log.printf(f"{prefix}  ... 还有 {len(value) - 3} 项")
+                        formatted_item = self._format_float(item) if isinstance(item, float) else item
+                        log.printf(f"{prefix}  [{i}]: {formatted_item}")
             else:
-                log.printf(f"{prefix}{key}: {value}")
+                formatted_value = self._format_float(value) if isinstance(value, float) else value
+                log.printf(f"{prefix}{key}: {formatted_value}")
 
     def _collect_content_lines(self, content: Dict[str, Any], output_lines: List[str], indent: int = 0):
         """递归收集内容行到列表中"""
@@ -333,16 +355,16 @@ class YamlUnifiedProtocol:
                     self._collect_content_lines(value, output_lines, indent + 1)
             elif isinstance(value, list):
                 output_lines.append(f"{prefix}{key}: [{len(value)} 项]")
-                for i, item in enumerate(value[:3]):  # 只显示前3项
+                for i, item in enumerate(value):  # 显示所有项
                     if isinstance(item, dict):
                         output_lines.append(f"{prefix}  [{i}]:")
                         self._collect_content_lines(item, output_lines, indent + 2)
                     else:
-                        output_lines.append(f"{prefix}  [{i}]: {item}")
-                if len(value) > 3:
-                    output_lines.append(f"{prefix}  ... 还有 {len(value) - 3} 项")
+                        formatted_item = self._format_float(item) if isinstance(item, float) else item
+                        output_lines.append(f"{prefix}  [{i}]: {formatted_item}")
             else:
-                output_lines.append(f"{prefix}{key}: {value}")
+                formatted_value = self._format_float(value) if isinstance(value, float) else value
+                output_lines.append(f"{prefix}{key}: {formatted_value}")
 
     def extract_data_from_file(self, file_path: str) -> List[Dict[str, str]]:
         """

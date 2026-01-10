@@ -69,7 +69,16 @@ v8parse/
 │   ├── validate_configs.py    # YAML配置验证工具
 │   ├── logger_instance.py     # 📊 日志实例管理
 │   └── m_print.py             # 🖨️ 打印工具
-
+├── tcp_log/                   # 🔌 TCP日志工具模块(测试组件)
+│   ├── tcp_client.py          # TCP客户端核心实现
+│   ├── tcp_server.py          # TCP服务端核心实现
+│   ├── sender_gui.py          # 发送端GUI应用
+│   ├── server_gui.py          # 接收端GUI应用
+│   ├── log_entry_parser.py    # 日志条目解析器
+│   ├── themes.py              # 主题配置
+│   └── test/                  # 测试工具目录
+│       ├── run_sender.py      # 发送端启动脚本
+│       └── run_server.py      # 接收端启动脚本
 ├── tools/                     # 🔧 其他辅助工具目录
 ├── input_logs/                # 📥 输入日志文件目录
 │   ├── v8.log                  # V8协议日志文件
@@ -143,6 +152,51 @@ python main.py --validate
 | 运维 | `input_logs/yunwei.log` | 文本格式，时间戳 + 十六进制数据 |
 | Sinexcel | `input_logs/sinexcel.log` | 文本格式，时间戳 + 十六进制数据 |
 | 云快充 | `input_logs/yunkuaichong.log` | 文本格式，时间戳 + 十六进制数据 |
+
+### 5. TCP日志工具模块(测试组件)
+
+项目包含一个完整的 TCP 日志收发测试工具,位于 `tcp_log/` 目录,用于模拟设备通信、日志采集和协议测试。
+
+#### 功能特性
+
+- **🔄 实时收发**: 支持 TCP 客户端/服务端双向通信
+- **📋 日志解析**: 自动解析 V8Parse 格式的日志文件
+- **🎨 GUI界面**: 提供友好的图形化操作界面
+- **⚙️ 灵活配置**: 支持自定义 IP、端口、发送间隔等参数
+- **📊 进度显示**: 实时显示发送进度和统计信息
+- **🌓 主题支持**: 内置亮色/暗色主题切换
+
+#### 启动方式
+
+```bash
+# 启动 TCP 服务端(接收端)
+python tcp_log/test/run_server.py
+
+# 启动 TCP 客户端(发送端)
+python tcp_log/test/run_sender.py
+```
+
+#### 依赖安装
+
+TCP 日志工具需要额外的 GUI 依赖:
+
+```bash
+pip install -r requirements-gui.txt
+```
+
+#### 使用场景
+
+1. **协议开发测试**: 在开发新协议配置时,模拟设备通信验证解析结果
+2. **日志回放**: 将历史日志文件通过 TCP 发送,测试解析器性能
+3. **设备模拟**: 模拟充电桩等设备的行为,测试监控系统
+4. **压力测试**: 批量发送报文,测试系统稳定性
+
+#### 注意事项
+
+- TCP 日志工具是**测试组件**,仅用于开发和调试环境
+- 不建议在生产环境中使用,主要用于协议开发和验证
+- 默认监听端口: 服务端 `8888`,客户端可配置目标地址
+- 测试工具位于 `tcp_log/test/` 目录,与核心实现分离
 
 ## 💡 添加新协议（零代码）
 

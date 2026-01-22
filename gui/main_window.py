@@ -102,46 +102,61 @@ class ParseWorker(QObject):
         self.log_path = log_path
         self.filter_settings = filter_settings
         self._should_stop = False
-    
+        self._protocol = None  # 保存协议引用以便停止
+
     def stop(self):
         """请求停止"""
         self._should_stop = True
-    
+        # 如果协议已创建，立即设置其停止标志
+        if self._protocol:
+            self._protocol.set_should_stop(True)
+
     @Slot()
     def run(self):
         """执行解析"""
+        protocol = None
         try:
             self.started.emit()
             self.log_info.emit(f"协议 {self.protocol_name} 配置加载完成")
-            
+
             # 检查过滤条件
             time_range = self.filter_settings.get('time_range')
             include_cmds = self.filter_settings.get('include_cmds')
             exclude_cmds = self.filter_settings.get('exclude_cmds')
-            
+
             if time_range:
                 start, end = time_range
                 self.log_info.emit(
                     f"应用过滤条件: 时间 {start.strftime('%Y-%m-%d %H:%M:%S')} "
                     f"~ {end.strftime('%Y-%m-%d %H:%M:%S')}"
                 )
-            
+
             if include_cmds:
                 self.log_info.emit(f"应用过滤条件: 包含命令 {include_cmds}")
-            
+
             if exclude_cmds:
                 self.log_info.emit(f"应用过滤条件: 排除命令 {exclude_cmds}")
-            
+
             self.log_info.emit(f"开始解析日志文件 {self.log_path} ...")
-            
+
             # 导入解析器并执行
             from src.yaml_unified_protocol import YamlUnifiedProtocol
-            
+
             protocol = YamlUnifiedProtocol(
                 self.log_path,
                 self.config_path
             )
-            
+
+            # 保存协议引用以便停止
+            self._protocol = protocol
+
+            # 设置进度回调
+            protocol.set_progress_callback(lambda current, total: self.progress.emit(current, total))
+
+            # 如果已经请求停止，立即设置协议停止标志
+            if self._should_stop:
+                protocol.set_should_stop(True)
+
             # 设置过滤条件
             if include_cmds:
                 protocol.set_include_cmds([int(c) for c in include_cmds])
@@ -149,25 +164,21 @@ class ParseWorker(QObject):
                 protocol.set_exclude_cmds([int(c) for c in exclude_cmds])
             if time_range:
                 protocol.set_time_range(time_range[0], time_range[1])
-            
-            # 统计文件行数用于进度显示
-            total_lines = 0
-            try:
-                with open(self.log_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    total_lines = sum(1 for _ in f)
-                self.log_info.emit(f"日志文件共 {total_lines} 行")
-            except Exception:
-                pass
-            
-            # 模拟进度（由于核心解析器不支持回调，这里分阶段报告）
+
             self.progress.emit(10, 100)
             self.log_info.emit("正在提取数据...")
-            
+
             # 执行解析
             output_path = protocol.run()
-            
+
+            # 检查是否被停止
+            if self._should_stop:
+                self.log_warning.emit("解析已被用户停止")
+                self.finished.emit(False, "解析已停止", "")
+                return
+
             self.progress.emit(90, 100)
-            
+
             if output_path:
                 self.log_success.emit(f"解析完成，结果已保存到: {output_path}")
                 self.progress.emit(100, 100)
@@ -176,12 +187,21 @@ class ParseWorker(QObject):
                 self.log_warning.emit("解析完成，但没有生成输出文件（可能没有匹配的数据）")
                 self.progress.emit(100, 100)
                 self.finished.emit(True, "解析完成（无数据）", "")
-                
+
         except Exception as e:
-            # 友好化错误信息
-            error_msg = self._friendly_error_message(str(e))
-            self.log_error.emit(f"解析失败: {error_msg}")
-            self.finished.emit(False, error_msg, "")
+            # 检查是否是停止导致的异常
+            if self._should_stop:
+                self.log_warning.emit("解析已被用户停止")
+                self.finished.emit(False, "解析已停止", "")
+            else:
+                # 友好化错误信息
+                error_msg = self._friendly_error_message(str(e))
+                self.log_error.emit(f"解析失败: {error_msg}")
+                self.finished.emit(False, error_msg, "")
+        finally:
+            # 确保停止协议（如果存在）
+            if protocol and self._should_stop:
+                protocol.set_should_stop(True)
     
     def _friendly_error_message(self, error: str) -> str:
         """将技术错误信息转换为友好的中文提示"""
@@ -402,9 +422,10 @@ class MainWindow(QMainWindow):
         """连接信号"""
         # 协议选择变化
         self.protocol_panel.protocol_selected.connect(self._on_protocol_selected)
-        
+
         # 操作按钮
         self.detail_panel.parse_clicked.connect(self._on_parse_clicked)
+        self.detail_panel.stop_clicked.connect(self._on_stop_clicked)  # 新增
         self.detail_panel.validate_clicked.connect(self._on_validate_clicked)
         self.detail_panel.open_output_dir_clicked.connect(self._open_output_dir)
         self.detail_panel.select_log_clicked.connect(self._on_select_log_clicked)
@@ -631,7 +652,14 @@ class MainWindow(QMainWindow):
         
         # 启动线程
         self._parse_thread.start()
-    
+
+    def _on_stop_clicked(self):
+        """停止解析"""
+        if self._parse_worker:
+            self._parse_worker.stop()
+            self.log_panel.log_warning("正在停止解析...")
+            self._update_status("正在停止解析...")
+
     @Slot(bool, str, str)
     def _on_parse_finished(self, success: bool, message: str, output_path: str):
         """解析完成"""

@@ -268,20 +268,21 @@ class FilterWidget(QGroupBox):
 
 class ActionWidget(QGroupBox):
     """操作按钮组件"""
-    
+
     # 信号
     parse_clicked = Signal()
+    stop_clicked = Signal()  # 新增：停止信号
     validate_clicked = Signal()
     open_output_dir_clicked = Signal()
-    
+
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__("操作", parent)
         self._setup_ui()
-    
+
     def _setup_ui(self):
         """初始化UI"""
         layout = QVBoxLayout(self)
-        
+
         # 第一行按钮
         row1 = QHBoxLayout()
         self.parse_btn = QPushButton("▶ 开始解析")
@@ -302,35 +303,63 @@ class ActionWidget(QGroupBox):
         """)
         self.parse_btn.clicked.connect(self.parse_clicked.emit)
         row1.addWidget(self.parse_btn)
-        
+
+        # 停止按钮（初始隐藏）
+        self.stop_btn = QPushButton("⏹ 停止解析")
+        self.stop_btn.setMinimumHeight(36)
+        self.stop_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #e74c3c;
+                color: white;
+                font-weight: bold;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #c0392b;
+            }
+            QPushButton:disabled {
+                background-color: #bdc3c7;
+            }
+        """)
+        self.stop_btn.clicked.connect(self.stop_clicked.emit)
+        self.stop_btn.setVisible(False)
+        row1.addWidget(self.stop_btn)
+
         self.validate_btn = QPushButton("✓ 验证配置")
         self.validate_btn.setMinimumHeight(36)
         self.validate_btn.clicked.connect(self.validate_clicked.emit)
         row1.addWidget(self.validate_btn)
         layout.addLayout(row1)
-        
+
         # 第二行按钮
         row2 = QHBoxLayout()
         self.output_dir_btn = QPushButton("📁 打开输出目录")
         self.output_dir_btn.clicked.connect(self.open_output_dir_clicked.emit)
         row2.addWidget(self.output_dir_btn)
         layout.addLayout(row2)
-    
+
     def set_parsing(self, parsing: bool):
         """设置解析状态"""
-        self.parse_btn.setEnabled(not parsing)
-        self.validate_btn.setEnabled(not parsing)
         if parsing:
-            self.parse_btn.setText("⏳ 解析中...")
+            # 解析中：隐藏开始按钮，显示停止按钮
+            self.parse_btn.setVisible(False)
+            self.stop_btn.setVisible(True)
+            self.stop_btn.setEnabled(True)
+            self.validate_btn.setEnabled(False)
         else:
-            self.parse_btn.setText("▶ 开始解析")
+            # 未解析：显示开始按钮，隐藏停止按钮
+            self.parse_btn.setVisible(True)
+            self.parse_btn.setEnabled(True)
+            self.stop_btn.setVisible(False)
+            self.validate_btn.setEnabled(True)
 
 
 class DetailPanel(QWidget):
     """右侧详情面板"""
-    
+
     # 信号
     parse_clicked = Signal()
+    stop_clicked = Signal()  # 新增：停止信号
     validate_clicked = Signal()
     open_output_dir_clicked = Signal()
     select_log_clicked = Signal()  # 选择日志文件
@@ -374,6 +403,7 @@ class DetailPanel(QWidget):
     def _connect_signals(self):
         """连接信号"""
         self.action_widget.parse_clicked.connect(self.parse_clicked.emit)
+        self.action_widget.stop_clicked.connect(self.stop_clicked.emit)  # 新增
         self.action_widget.validate_clicked.connect(self.validate_clicked.emit)
         self.action_widget.open_output_dir_clicked.connect(
             self.open_output_dir_clicked.emit

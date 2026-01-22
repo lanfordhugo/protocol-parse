@@ -172,7 +172,8 @@ class ComLogger:
         while len(existing_files) >= self.config['max_files']:
             os.remove(existing_files.pop())
         # 重命名当前文件
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        # 使用毫秒级时间戳避免同一秒内的文件名冲突
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # 保留毫秒前3位
         new_file_name = f"{self.config['base_file_name']}_{timestamp}.txt"
         new_file_path = os.path.join(self.config['log_dir'], new_file_name)
         os.rename(self.com_file_path, new_file_path)
@@ -441,7 +442,8 @@ class MyLogger:
                 print(f"无法删除文件 {oldest_file}: {e}")
 
         # 重命名当前文件
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        # 使用毫秒级时间戳避免同一秒内的文件名冲突
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # 保留毫秒前3位
         new_file_name = f"{self.config['base_file_name']}_{timestamp}.txt"
         new_file_path = os.path.join(self.config['log_dir'], new_file_name)
         try:

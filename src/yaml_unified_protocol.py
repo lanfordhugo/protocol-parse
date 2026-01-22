@@ -25,17 +25,53 @@ class YamlUnifiedProtocol:
         # 保存文件路径
         self.log_file_name = log_file_name
         self.protocol_yaml_path = protocol_yaml_path
-        
+
         # 加载YAML配置
         self.yaml_format = YamlCmdFormat(protocol_yaml_path)
         self.yaml_config = self.yaml_format.config
-        
+
         # 创建字段解析器
         self.field_parser = YamlFieldParser(self.yaml_format.config)
-        
+
         logger.info(f"Initialized YAML protocol: {self.yaml_config.meta.protocol}")
 
         self._reset_perf_stats()
+
+        # 进度回调和停止标志（用于GUI）
+        self._progress_callback = None
+        self._should_stop = False
+
+    def set_progress_callback(self, callback):
+        """设置进度回调函数
+
+        Args:
+            callback: 回调函数，签名为 callback(current: int, total: int)
+        """
+        self._progress_callback = callback
+
+    def set_should_stop(self, value: bool = True):
+        """设置停止标志
+
+        Args:
+            value: 是否停止，默认为 True
+        """
+        self._should_stop = value
+
+    def _emit_progress(self, current: int, total: int):
+        """发送进度更新"""
+        if self._progress_callback:
+            try:
+                self._progress_callback(current, total)
+            except Exception:
+                pass  # 忽略回调异常
+
+    def _check_should_stop(self) -> bool:
+        """检查是否应该停止
+
+        Returns:
+            是否应该停止
+        """
+        return self._should_stop
 
     def _reset_perf_stats(self):
         """重置性能统计数据"""
@@ -66,31 +102,40 @@ class YamlUnifiedProtocol:
                 f"最大 {max(values)*1000:.2f} ms | 最小 {min(values)*1000:.2f} ms"
             )
 
-        log.printf("\n=== 性能统计摘要 ===")
-        log.printf(f"总耗时: {_format_stats(self.perf_stats['total'])}")
-        log.printf(f"提取:   {_format_stats(self.perf_stats['extract'])}")
-        log.printf(f"解析:   {_format_stats(self.perf_stats['parse'])}")
-        log.printf(f"输出:   {_format_stats(self.perf_stats['screen'])}")
-
-        if self.perf_stats["cmd_counts"]:
-            log.printf("命令处理统计:")
-            for cmd_id, count in sorted(self.perf_stats["cmd_counts"].items()):
-                log.printf(f"  CMD {cmd_id}: {count} 条")
-
-        if self.perf_stats["errors"]:
-            log.printf(f"解析失败: {self.perf_stats['errors']} 次")
-        log.printf("====================\n")
+        # 性能统计不再输出到系统日志，改为在解析结果文件中输出
+        # log.printf("\n=== 性能统计摘要 ===")
+        # log.printf(f"总耗时: {_format_stats(self.perf_stats['total'])}")
+        # log.printf(f"提取:   {_format_stats(self.perf_stats['extract'])}")
+        # log.printf(f"解析:   {_format_stats(self.perf_stats['parse'])}")
+        # log.printf(f"输出:   {_format_stats(self.perf_stats['screen'])}")
+        # if self.perf_stats["cmd_counts"]:
+        #     log.printf("命令处理统计:")
+        #     for cmd_id, count in sorted(self.perf_stats["cmd_counts"].items()):
+        #         log.printf(f"  CMD {cmd_id}: {count} 条")
+        # if self.perf_stats["errors"]:
+        #     log.printf(f"解析失败: {self.perf_stats['errors']} 次")
+        # log.printf("====================\n")
 
     def parse_data_content(self, data_groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """使用YAML配置解析数据内容"""
         filtered_data_groups = []
-        
-        for group in data_groups:
+        total_count = len(data_groups)
+
+        for index, group in enumerate(data_groups):
+            # 检查停止标志
+            if self._check_should_stop():
+                # log.i_print(f"解析已停止，已处理 {index}/{total_count} 条数据")
+                break
+
+            # 发送进度更新（10-80%用于数据解析阶段）
+            progress = 10 + int((index / total_count) * 70)
+            self._emit_progress(progress, 100)
+
             try:
                 # 解析数据字节
                 data_bytes = group["data"].strip().split()
                 if len(data_bytes) < self.yaml_config.head_len:
-                    log.d_print(f"数据长度不足，跳过: {len(data_bytes)} < {self.yaml_config.head_len}")
+                    # log.d_print(f"数据长度不足，跳过: {len(data_bytes)} < {self.yaml_config.head_len}")
                     continue
                 
                 # 转换为字节数组
@@ -103,13 +148,13 @@ class YamlUnifiedProtocol:
                 
                 cmd_id = header_info.get('cmd')
                 if cmd_id is None:
-                    log.d_print("未找到命令ID，跳过")
+                    # log.d_print("未找到命令ID，跳过")
                     continue
-                
-                
+
+
                 # 检查是否支持该命令
                 if not self.yaml_format.has_cmd(cmd_id):
-                    log.d_print(f"不支持的命令: {cmd_id}")
+                    # log.d_print(f"不支持的命令: {cmd_id}")
                     continue
                 
                 # 解析数据内容（跳过头部和尾部）
@@ -132,7 +177,7 @@ class YamlUnifiedProtocol:
                     filtered_data_groups.append(result)
                     
                 except Exception as e:
-                    log.d_print(f"解析命令{cmd_id}数据失败: {e}")
+                    # log.d_print(f"解析命令{cmd_id}数据失败: {e}")
                     self.perf_stats["errors"] += 1
                     self.perf_stats["cmd_counts"][cmd_id] += 1
                     # 添加原始数据作为备用
@@ -167,7 +212,7 @@ class YamlUnifiedProtocol:
                 field_type = field_config['type']
                 
                 if offset + length > len(header_data):
-                    log.d_print(f"头部字段{name}超出数据范围")
+                    # log.d_print(f"头部字段{name}超出数据范围")
                     continue
                 
                 field_data = header_data[offset:offset + length]
@@ -181,7 +226,7 @@ class YamlUnifiedProtocol:
                     expected = field_config.get('const_value')
                     if expected is not None and value != expected:
                         if field_config.get('required', True):
-                            log.d_print(f"头部字段{name}常量检查失败: {value} != {expected}")
+                            # log.d_print(f"头部字段{name}常量检查失败: {value} != {expected}")
                             return None
                 elif field_type == 'hex':
                     value = field_data.hex().upper()
@@ -195,7 +240,7 @@ class YamlUnifiedProtocol:
             return header_info
             
         except Exception as e:
-            log.d_print(f"解析头部失败: {e}")
+            # log.d_print(f"解析头部失败: {e}")
             return None
 
     def _parse_uint_field(self, data: bytes, endian: str) -> int:
@@ -222,7 +267,7 @@ class YamlUnifiedProtocol:
             输出文件的绝对路径，如果没有数据则返回 None
         """
         # 记录日志信息（带时间戳）
-        log.i_print("筛选解析报文并打印")
+        # log.i_print("筛选解析报文并打印")
         
         if not parse_data:
             log.printf("没有解析到有效数据")
@@ -275,17 +320,40 @@ class YamlUnifiedProtocol:
             
             if 'parse_error' in item:
                 output_lines.append(f"解析错误: {item['parse_error']}")
-        
-        # 同时输出到控制台和文件
-        for line in output_lines:
-            log.printf(line)
-        
-        # 写入解析结果文件
+
+        # 添加性能统计到解析结果文件
+        output_lines.append("\n=== 性能统计摘要 ===")
+
+        def _format_stats(values):
+            """格式化性能统计"""
+            if not values:
+                return "N/A"
+            return (
+                f"{len(values)} 次 | 平均 {sum(values)/len(values)*1000:.2f} ms | "
+                f"最大 {max(values)*1000:.2f} ms | 最小 {min(values)*1000:.2f} ms"
+            )
+
+        output_lines.append(f"总耗时: {_format_stats(self.perf_stats['total'])}")
+        output_lines.append(f"提取:   {_format_stats(self.perf_stats['extract'])}")
+        output_lines.append(f"解析:   {_format_stats(self.perf_stats['parse'])}")
+        output_lines.append(f"输出:   {_format_stats(self.perf_stats['screen'])}")
+
+        if self.perf_stats["cmd_counts"]:
+            output_lines.append("命令处理统计:")
+            for cmd_id, count in sorted(self.perf_stats["cmd_counts"].items()):
+                output_lines.append(f"  CMD {cmd_id}: {count} 条")
+
+        if self.perf_stats["errors"]:
+            output_lines.append(f"解析失败: {self.perf_stats['errors']} 次")
+        output_lines.append("====================\n")
+
+        # 只写入解析结果文件，不输出到系统日志
+        # （避免系统日志和解析结果文件内容重复）
         try:
             with open(output_path, 'w', encoding='utf-8') as f:
                 for line in output_lines:
                     f.write(line + '\n')
-            log.i_print(f"解析结果已保存到: {output_path}")
+            # log.i_print(f"解析结果已保存到: {output_path}")
             # 返回绝对路径
             return os.path.abspath(output_path)
         except Exception as e:
@@ -438,42 +506,53 @@ class YamlUnifiedProtocol:
 
     def run(self) -> Optional[str]:
         """运行协议解析
-        
+
         Returns:
             解析结果文件的绝对路径，如果解析失败或无数据则返回 None
         """
         try:
             self._reset_perf_stats()
             total_start = perf_counter()
+
             # 提取数据
             extract_start = perf_counter()
+            self._emit_progress(5, 100)  # 开始提取
             data_groups = self.extract_data_from_file(self.log_file_name)
             extract_duration = perf_counter() - extract_start
             self._record_phase("extract", extract_duration)
+
             if not data_groups:
-                log.d_print("没有提取到数据")
+                # log.d_print("没有提取到数据")
                 self._record_phase("total", perf_counter() - total_start)
                 self._print_perf_summary()
                 return None
-            
-            log.i_print(f"提取到 {len(data_groups)} 组数据")
-            
+
+            # log.i_print(f"提取到 {len(data_groups)} 组数据")
+            self._emit_progress(10, 100)  # 提取完成
+
             # 解析数据
             parse_start = perf_counter()
             parsed_data = self.parse_data_content(data_groups)
             parse_duration = perf_counter() - parse_start
             self._record_phase("parse", parse_duration)
-            
+
+            # 检查是否被停止
+            if self._check_should_stop():
+                # log.i_print("解析已被用户停止")
+                return None
+
             # 筛选并打印结果
             screen_start = perf_counter()
+            self._emit_progress(85, 100)  # 开始输出
             output_path = self.screen_parse_data(parsed_data)
             screen_duration = perf_counter() - screen_start
             self._record_phase("screen", screen_duration)
             self._record_phase("total", perf_counter() - total_start)
 
+            self._emit_progress(100, 100)  # 完成
             self._print_perf_summary()
             return output_path
-            
+
         except Exception as e:
             log.e_print(f"协议解析失败: {e}")
             raise

@@ -1,5 +1,6 @@
 ---
 description: Python项目代码质量检查规则，系统化代码审查标准
+auto_execution_mode: 1
 ---
 
 # AI Python代码质量检查清单 (Code Review)

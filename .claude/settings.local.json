@@ -3,7 +3,13 @@
     "allow": [
       "Skill(user-commit)",
       "Skill(user-commit:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Skill(superpowers:systematic-debugging)",
+      "Skill(superpowers:systematic-debugging:*)",
+      "Skill(superpowers:brainstorming)",
+      "Skill(superpowers:brainstorming:*)",
+      "mcp__web-search-prime__webSearchPrime"
     ]
   }
 }

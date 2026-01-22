@@ -34,6 +34,8 @@ class YamlFieldParser:
     def __init__(self, config: ProtocolConfig):
         self.config = config
         self.type_parsers = self._build_type_parsers()
+        # 性能优化：预缓存 struct 格式对象
+        self._struct_cache = {}  # {(endian, fmt_char, data_len): struct.Struct}
     
     def _build_type_parsers(self) -> Dict[str, callable]:
         """构建类型解析器映射"""
@@ -53,6 +55,23 @@ class YamlFieldParser:
             'bitset': self._parse_bitset,
             'bitfield': self._parse_bitfield,
         }
+
+    def _get_struct(self, endian: str, fmt_char: str, data_len: int) -> struct.Struct:
+        """获取缓存的 struct.Struct 对象（性能优化）
+
+        Args:
+            endian: 字节序 ('LE' 或 'BE')
+            fmt_char: 格式字符 ('B', 'H', 'L', 'Q' 等)
+            data_len: 数据长度（字节）
+
+        Returns:
+            struct.Struct 对象
+        """
+        key = (endian, fmt_char, data_len)
+        if key not in self._struct_cache:
+            endian_char = '<' if endian == 'LE' else '>'
+            self._struct_cache[key] = struct.Struct(f"{endian_char}{fmt_char}")
+        return self._struct_cache[key]
 
     # TODO: 支持按配置动态扩展解析器
     
@@ -200,38 +219,34 @@ class YamlFieldParser:
     def _parse_uint(self, data: bytes, type_def: TypeDef, field: Field) -> int:
         """解析无符号整数"""
         endian = field.endian or self.config.meta.default_endian
-        fmt = '<' if endian == 'LE' else '>'
-        
+
+        # 使用缓存的 struct 对象（性能优化）
         if len(data) == 1:
-            fmt += 'B'
+            return self._get_struct(endian, 'B', 1).unpack(data)[0]
         elif len(data) == 2:
-            fmt += 'H'
+            return self._get_struct(endian, 'H', 2).unpack(data)[0]
         elif len(data) == 4:
-            fmt += 'L'
+            return self._get_struct(endian, 'L', 4).unpack(data)[0]
         elif len(data) == 8:
-            fmt += 'Q'
+            return self._get_struct(endian, 'Q', 8).unpack(data)[0]
         else:
             raise ValueError(f"Unsupported uint size: {len(data)} bytes")
-        
-        return struct.unpack(fmt, data)[0]
     
     def _parse_int(self, data: bytes, type_def: TypeDef, field: Field) -> int:
         """解析有符号整数"""
         endian = field.endian or self.config.meta.default_endian
-        fmt = '<' if endian == 'LE' else '>'
-        
+
+        # 使用缓存的 struct 对象（性能优化）
         if len(data) == 1:
-            fmt += 'b'
+            return self._get_struct(endian, 'b', 1).unpack(data)[0]
         elif len(data) == 2:
-            fmt += 'h'
+            return self._get_struct(endian, 'h', 2).unpack(data)[0]
         elif len(data) == 4:
-            fmt += 'l'
+            return self._get_struct(endian, 'l', 4).unpack(data)[0]
         elif len(data) == 8:
-            fmt += 'q'
+            return self._get_struct(endian, 'q', 8).unpack(data)[0]
         else:
             raise ValueError(f"Unsupported int size: {len(data)} bytes")
-        
-        return struct.unpack(fmt, data)[0]
     
     def _parse_str(self, data: bytes, type_def: TypeDef, field: Field) -> str:
         """解析字符串"""

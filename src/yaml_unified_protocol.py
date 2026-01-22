@@ -46,6 +46,11 @@ class YamlUnifiedProtocol:
         self._exclude_cmds = None  # 排除的命令ID列表
         self._time_range = None    # 时间范围 (start_time, end_time)
 
+        # 预编译正则表达式（性能优化：避免重复编译）
+        self._info_line_re = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:|\.]\d{2,3}")
+        self._byte_sequence_re = re.compile(self.yaml_config.frame_head)
+        self._direction_re = re.compile(r"(Send|Recv|TX|RX)", re.IGNORECASE)
+
     def set_progress_callback(self, callback):
         """设置进度回调函数
 
@@ -209,8 +214,8 @@ class YamlUnifiedProtocol:
                     # log.d_print(f"数据长度不足，跳过: {len(data_bytes)} < {self.yaml_config.head_len}")
                     continue
                 
-                # 转换为字节数组
-                byte_data = bytes([int(b, 16) for b in data_bytes])
+                # 转换为字节数组（性能优化：使用 fromhex 替代列表推导）
+                byte_data = bytes.fromhex("".join(data_bytes))
                 
                 # 解析头部字段
                 header_info = self._parse_header(byte_data[:self.yaml_config.head_len])
@@ -516,19 +521,14 @@ class YamlUnifiedProtocol:
     def extract_data_from_file(self, file_path: str) -> List[Dict[str, str]]:
         """
         从文件中提取数据，增强版本支持提取方向信息
-        
+
         :param file_path: 文件路径
         :return: 提取的数据列表
         """
-        import re
-        
-        # 兼容多种时间格式：
-        # 格式1: 2024-01-01 12:00:00:123 或 2024-01-01 12:00:00.123 (毫秒3位)
-        # 格式2: 2023-07-26 14:05:11.67 (毫秒2位，如VIN码充电流程报文样例)
-        info_line_re = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:|\.]\d{2,3}")
-        byte_sequence_re = re.compile(self.yaml_config.frame_head)
-        # 兼容多种方向标识：Send/Recv 或 TX/RX
-        direction_re = re.compile(r"(Send|Recv|TX|RX)", re.IGNORECASE)
+        # 使用预编译的正则表达式（性能优化）
+        info_line_re = self._info_line_re
+        byte_sequence_re = self._byte_sequence_re
+        direction_re = self._direction_re
 
         data_groups = []
         current_group = None
@@ -540,7 +540,7 @@ class YamlUnifiedProtocol:
                     line = line.strip()
                     if line == "":
                         continue
-                    
+
                     # 跳过注释行（以 // 开头）
                     if line.startswith("//"):
                         continue
@@ -561,7 +561,7 @@ class YamlUnifiedProtocol:
                         current_group = {
                             "time": time_str,
                             "direction": direction,
-                            "data": ""
+                            "data_parts": []  # 性能优化：使用列表收集，避免频繁字符串拼接
                         }
                         continue
 
@@ -573,10 +573,16 @@ class YamlUnifiedProtocol:
                         line = line[byte_sequence_match.start():]
 
                     if is_collecting_data and current_group is not None:
-                        current_group["data"] += line + " "
+                        current_group["data_parts"].append(line)
 
-                if current_group and current_group["data"]:
-                    data_groups.append(current_group)
+                # 合并 data_parts 为 data 字符串
+                for group in data_groups:
+                    if "data_parts" in group:
+                        group["data"] = " ".join(group["data_parts"])
+                        del group["data_parts"]
+
+                # 过滤空数据组
+                data_groups = [g for g in data_groups if g.get("data")]
 
             return data_groups
         except IOError as e:

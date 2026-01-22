@@ -31,8 +31,8 @@ class Sidebar(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # 固定宽度：250px
-        self.setFixedWidth(250)
+        # 固定宽度：180px（更紧凑）
+        self.setFixedWidth(180)
         self.setObjectName("sidebar_container")
 
         # 标题区域
@@ -42,7 +42,8 @@ class Sidebar(QWidget):
         # 导航按钮区域
         nav_group = QGroupBox("功能导航")
         nav_layout = QVBoxLayout(nav_group)
-        nav_layout.setSpacing(8)
+        nav_layout.setSpacing(4)
+        nav_layout.setContentsMargins(8, 8, 8, 8)
 
         # 普通解析按钮
         self._normal_btn = self._create_nav_button(
@@ -76,10 +77,10 @@ class Sidebar(QWidget):
         """创建标题区域"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(12, 16, 12, 12)
+        layout.setContentsMargins(8, 12, 8, 8)
 
         title = QLabel("V8Parse")
-        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #6c8cd5;")
+        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #6c8cd5;")
         title.setAlignment(Qt.AlignCenter)
 
         subtitle = QLabel("多协议通信报文解析工具")
@@ -97,17 +98,18 @@ class Sidebar(QWidget):
         widget.setCursor(Qt.PointingHandCursor)
 
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(4)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(2)
 
         # 图标 + 文本
         top_row = QHBoxLayout()
+        top_row.setSpacing(4)
 
         icon_label = QLabel(icon)
-        icon_label.setStyleSheet("font-size: 20px;")
+        icon_label.setStyleSheet("font-size: 18px;")
 
         text_label = QLabel(text)
-        text_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        text_label.setStyleSheet("font-size: 13px; font-weight: bold;")
 
         top_row.addWidget(icon_label)
         top_row.addWidget(text_label)

@@ -73,7 +73,7 @@ v8parse/
 │   ├── tcp_client.py          # TCP客户端核心实现
 │   ├── tcp_server.py          # TCP服务端核心实现
 │   ├── sender_gui.py          # 发送端GUI应用
-│   ├── server_gui.py          # 接收端GUI应用
+│   ├── server_panel.py        # 服务端面板（集成到主GUI）
 │   ├── log_entry_parser.py    # 日志条目解析器
 │   ├── themes.py              # 主题配置
 │   └── test/                  # 测试工具目录
@@ -153,7 +153,49 @@ python main.py --validate
 | Sinexcel | `input_logs/sinexcel.log` | 文本格式，时间戳 + 十六进制数据 |
 | 云快充 | `input_logs/yunkuaichong.log` | 文本格式，时间戳 + 十六进制数据 |
 
-### 5. TCP日志工具模块(测试组件)
+### 5. GUI 应用
+
+项目提供统一的 GUI 应用，集成普通解析和 TCP 实时解析功能。
+
+#### 功能特性
+
+- **📋 普通解析**: 批量解析日志文件，支持协议选择、命令过滤、时间范围过滤
+- **🌐 TCP 服务端**: 实时接收 TCP 连接并解析报文（集成在统一 GUI 中）
+- **🎨 统一界面**: 侧边栏导航的多页面架构，操作更直观
+- **🌓 主题支持**: 内置亮色/暗色主题切换
+- **⚙️ 灵活配置**: 支持自定义过滤条件、解析参数等
+
+#### 启动方式
+
+```bash
+# 启动 GUI 应用
+python main_gui.py
+```
+
+#### 依赖安装
+
+GUI 应用需要额外的依赖:
+
+```bash
+pip install -r requirements-gui.txt
+```
+
+#### 打包发布
+
+```bash
+# 打包为独立可执行文件（自动清理 build 目录）
+python build_gui.py            # 标准打包
+python build_gui.py --clean    # 清理后打包
+python build_gui.py --debug    # 调试模式（显示控制台）
+```
+
+#### 界面说明
+
+- **普通解析页面**: 选择协议 → 配置过滤 → 开始解析 → 查看结果
+- **TCP 服务端页面**: 启动服务器 → 等待连接 → 实时解析报文
+- **快捷键**: `Ctrl+1` 切换到普通解析，`Ctrl+2` 切换到 TCP 服务端
+
+### 6. TCP日志工具模块(测试组件)
 
 项目包含一个完整的 TCP 日志收发测试工具,位于 `tcp_log/` 目录,用于模拟设备通信、日志采集和协议测试。
 
@@ -161,7 +203,6 @@ python main.py --validate
 
 - **🔄 实时收发**: 支持 TCP 客户端/服务端双向通信
 - **📋 日志解析**: 自动解析 V8Parse 格式的日志文件
-- **🎨 GUI界面**: 提供友好的图形化操作界面
 - **⚙️ 灵活配置**: 支持自定义 IP、端口、发送间隔等参数
 - **📊 进度显示**: 实时显示发送进度和统计信息
 - **🌓 主题支持**: 内置亮色/暗色主题切换

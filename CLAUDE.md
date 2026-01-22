@@ -131,16 +131,18 @@ YamlUnifiedProtocol (统一协议解析器)
 
 ### GUI 架构
 
-GUI 应用基于 PySide6，采用模块化设计：
+GUI 应用基于 PySide6，采用统一侧边栏导航的多页面架构：
 
 ```
 main_gui.py (入口)
     ↓
-gui/main_window.py (主窗口)
-    ├── gui/protocol_panel.py (协议选择面板)
-    ├── gui/log_panel.py (日志输入面板)
-    ├── gui/detail_panel.py (解析结果面板)
-    └── gui/themes.py (主题系统)
+gui/unified_main_window.py (统一主窗口)
+    ├── gui/sidebar.py (侧边栏导航)
+    ├── gui/normal_parse_page.py (普通解析页面)
+    │   ├── gui/protocol_panel.py (协议选择面板)
+    │   ├── gui/detail_panel.py (详情面板)
+    │   └── gui/log_panel.py (日志输出面板)
+    └── tcp_log/server_panel.py (TCP 服务端页面)
 ```
 
 **GUI 自定义组件：**
@@ -148,6 +150,10 @@ gui/main_window.py (主窗口)
 - `gui/widgets/searchable_list.py`: 可搜索列表控件
 - `gui/widgets/multi_select_combo.py`: 多选下拉框
 - `gui/widgets/datetime_picker.py`: 日期时间选择器
+
+**页面功能：**
+- **普通解析**: 批量解析日志文件，支持协议选择、命令过滤、时间范围过滤
+- **TCP 服务端**: 实时接收 TCP 连接并解析报文（集成在统一 GUI 中）
 
 ## 添加新协议（零代码）
 

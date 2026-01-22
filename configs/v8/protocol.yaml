@@ -201,7 +201,7 @@ cmds:
     - {len: 1, name: BRM-电池组产权标识, type: uint8}
     - {len: 1, name: 预留, type: uint8}
     - {len: 17, name: BRM-车辆识别码vin, type: ascii}
-    - {len: 8, name: BRM-BMS软件版本号, type: ascii}
+    - {len: 8, name: BRM-BMS软件版本号, type: hex}
     - {len: 2, name: BCP-单体动力蓄电池最高允许充电电压, type: uint16, scale: 0.01}
     - {len: 2, name: BCP-最高允许充电电流, type: uint16, scale: 0.1}
     - {len: 2, name: BCP-动力蓄电池标称总能量, type: uint16, scale: 0.1}

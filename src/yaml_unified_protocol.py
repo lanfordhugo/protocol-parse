@@ -41,6 +41,11 @@ class YamlUnifiedProtocol:
         self._progress_callback = None
         self._should_stop = False
 
+        # 过滤条件（用于GUI）
+        self._include_cmds = None  # 包含的命令ID列表
+        self._exclude_cmds = None  # 排除的命令ID列表
+        self._time_range = None    # 时间范围 (start_time, end_time)
+
     def set_progress_callback(self, callback):
         """设置进度回调函数
 
@@ -72,6 +77,72 @@ class YamlUnifiedProtocol:
             是否应该停止
         """
         return self._should_stop
+
+    def set_include_cmds(self, cmd_list: List[int]):
+        """设置包含的命令ID列表
+
+        Args:
+            cmd_list: 要包含的命令ID列表，只解析这些命令
+        """
+        self._include_cmds = cmd_list
+
+    def set_exclude_cmds(self, cmd_list: List[int]):
+        """设置排除的命令ID列表
+
+        Args:
+            cmd_list: 要排除的命令ID列表，不解析这些命令
+        """
+        self._exclude_cmds = cmd_list
+
+    def set_time_range(self, start_time: datetime, end_time: datetime):
+        """设置时间过滤范围
+
+        Args:
+            start_time: 起始时间
+            end_time: 结束时间
+        """
+        self._time_range = (start_time, end_time)
+
+    def _check_cmd_filter(self, cmd_id: int) -> bool:
+        """检查命令ID是否通过过滤条件
+
+        Args:
+            cmd_id: 命令ID
+
+        Returns:
+            True 表示通过（应该解析），False 表示不通过（应该跳过）
+        """
+        # 如果设置了包含列表，只解析列表中的命令
+        if self._include_cmds is not None:
+            return cmd_id in self._include_cmds
+
+        # 如果设置了排除列表，跳过列表中的命令
+        if self._exclude_cmds is not None:
+            return cmd_id not in self._exclude_cmds
+
+        # 都没有设置，解析所有命令
+        return True
+
+    def _check_time_filter(self, timestamp_str: str) -> bool:
+        """检查时间是否在过滤范围内
+
+        Args:
+            timestamp_str: 时间戳字符串（格式：YYYY-MM-DD HH:MM:SS.mmm）
+
+        Returns:
+            True 表示通过（在范围内），False 表示不通过（不在范围内）
+        """
+        if self._time_range is None:
+            return True  # 没有设置时间过滤，全部通过
+
+        try:
+            # 解析时间戳
+            timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S.%f")
+            start_time, end_time = self._time_range
+            return start_time <= timestamp <= end_time
+        except (ValueError, TypeError):
+            # 时间格式错误，默认通过
+            return True
 
     def _reset_perf_stats(self):
         """重置性能统计数据"""
@@ -151,10 +222,18 @@ class YamlUnifiedProtocol:
                     # log.d_print("未找到命令ID，跳过")
                     continue
 
+                # 应用命令过滤
+                if not self._check_cmd_filter(cmd_id):
+                    continue
 
                 # 检查是否支持该命令
                 if not self.yaml_format.has_cmd(cmd_id):
                     # log.d_print(f"不支持的命令: {cmd_id}")
+                    continue
+
+                # 应用时间过滤
+                timestamp_str = group.get('time', '')
+                if not self._check_time_filter(timestamp_str):
                     continue
                 
                 # 解析数据内容（跳过头部和尾部）

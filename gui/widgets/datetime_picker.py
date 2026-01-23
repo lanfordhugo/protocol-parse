@@ -150,9 +150,9 @@ class DateTimePickerWidget(QWidget):
         layout.addWidget(self.display_edit)
         
         # 清除按钮
-        self.clear_button = QPushButton("✕")
-        self.clear_button.setFixedWidth(24)
-        self.clear_button.setToolTip("清除")
+        self.clear_button = QPushButton("清除")
+        self.clear_button.setFixedWidth(50)
+        self.clear_button.setToolTip("清除已选择的时间")
         self.clear_button.clicked.connect(self._clear_datetime)
         layout.addWidget(self.clear_button)
     

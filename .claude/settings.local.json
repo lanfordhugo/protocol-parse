@@ -15,7 +15,21 @@
       "Skill(superpowers:using-superpowers:*)",
       "Skill(superpowers:using-git-worktrees)",
       "Skill(superpowers:using-git-worktrees:*)",
-      "Bash(git worktree:*)"
+      "Bash(git worktree:*)",
+      "Bash(iconv:*)",
+      "Bash(code --help:*)",
+      "Bash(code:*)",
+      "Bash(/plugin uninstall:*)",
+      "Skill(using-superpowers)",
+      "Skill(using-superpowers:*)",
+      "Bash(claude mcp list:*)",
+      "Bash(where:*)",
+      "Bash(npm view:*)",
+      "Bash(npm cache clean:*)",
+      "Bash(npm install:*)",
+      "Bash(claude:*)",
+      "mcp__zai-mcp-server__ui_to_artifact",
+      "Bash(curl:*)"
     ]
   }
 }

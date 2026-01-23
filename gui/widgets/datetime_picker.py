@@ -132,6 +132,7 @@ class DateTimePickerWidget(QWidget):
         """初始化UI"""
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
         
         # 标签
         if self._label:
@@ -143,14 +144,10 @@ class DateTimePickerWidget(QWidget):
         self.display_edit.setReadOnly(True)
         self.display_edit.setPlaceholderText("点击选择时间...")
         self.display_edit.setMinimumWidth(160)
+        self.display_edit.setCursor(Qt.PointingHandCursor)
+        # 允许点击文本框触发选择
+        self.display_edit.mousePressEvent = lambda e: self._show_picker()
         layout.addWidget(self.display_edit)
-        
-        # 选择按钮
-        self.pick_button = QPushButton("📅")
-        self.pick_button.setFixedWidth(32)
-        self.pick_button.setToolTip("选择日期时间")
-        self.pick_button.clicked.connect(self._show_picker)
-        layout.addWidget(self.pick_button)
         
         # 清除按钮
         self.clear_button = QPushButton("✕")
@@ -188,5 +185,4 @@ class DateTimePickerWidget(QWidget):
         """设置启用状态"""
         super().setEnabled(enabled)
         self.display_edit.setEnabled(enabled)
-        self.pick_button.setEnabled(enabled)
         self.clear_button.setEnabled(enabled)

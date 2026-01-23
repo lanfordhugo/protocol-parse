@@ -174,8 +174,33 @@ class FilterWidget(QGroupBox):
         """初始化UI"""
         layout = QVBoxLayout(self)
         
+        # 复选框统一样式
+        checkbox_style = """
+            QCheckBox {
+                padding: 4px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+            }
+            QCheckBox:unchecked {
+                background-color: #34495e;
+                color: #ecf0f1;
+            }
+            QCheckBox:checked {
+                background-color: #3498db;
+                color: white;
+            }
+            QCheckBox:hover {
+                background-color: #2980b9;
+            }
+        """
+        
         # 时间过滤
         self.time_filter_check = QCheckBox("启用时间过滤")
+        self.time_filter_check.setStyleSheet(checkbox_style)
         layout.addWidget(self.time_filter_check)
         
         time_layout = QGridLayout()
@@ -195,6 +220,7 @@ class FilterWidget(QGroupBox):
         
         # 命令过滤
         self.cmd_filter_check = QCheckBox("启用命令过滤")
+        self.cmd_filter_check.setStyleSheet(checkbox_style)
         layout.addWidget(self.cmd_filter_check)
         
         cmd_layout = QGridLayout()

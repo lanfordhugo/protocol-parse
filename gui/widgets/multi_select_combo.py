@@ -159,14 +159,9 @@ class MultiSelectComboBox(QWidget):
         self.display_edit = QLineEdit()
         self.display_edit.setReadOnly(True)
         self.display_edit.setPlaceholderText(self._placeholder)
+        self.display_edit.setCursor(Qt.PointingHandCursor)
         self.display_edit.mousePressEvent = self._on_display_clicked
         layout.addWidget(self.display_edit)
-        
-        # 下拉按钮
-        self.drop_button = QPushButton("▼")
-        self.drop_button.setFixedWidth(28)
-        self.drop_button.clicked.connect(self._toggle_popup)
-        layout.addWidget(self.drop_button)
     
     def _on_display_clicked(self, event):
         """点击显示框时打开弹窗"""
@@ -243,4 +238,3 @@ class MultiSelectComboBox(QWidget):
         """设置启用状态"""
         super().setEnabled(enabled)
         self.display_edit.setEnabled(enabled)
-        self.drop_button.setEnabled(enabled)

@@ -13,7 +13,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
     QPushButton, QCheckBox, QGridLayout, QFrame, QScrollArea,
-    QSizePolicy
+    QSizePolicy, QDialog, QMessageBox
 )
 from PySide6.QtCore import Signal, Qt
 
@@ -202,21 +202,35 @@ class FilterWidget(QGroupBox):
         self.time_filter_check = QCheckBox("启用时间过滤")
         self.time_filter_check.setStyleSheet(checkbox_style)
         layout.addWidget(self.time_filter_check)
-        
+
         time_layout = QGridLayout()
         time_layout.setContentsMargins(20, 0, 0, 0)
-        
-        time_layout.addWidget(QLabel("起始:"), 0, 0)
-        self.start_time_picker = DateTimePickerWidget()
-        self.start_time_picker.setEnabled(False)
-        time_layout.addWidget(self.start_time_picker, 0, 1)
-        
-        time_layout.addWidget(QLabel("结束:"), 1, 0)
-        self.end_time_picker = DateTimePickerWidget()
-        self.end_time_picker.setEnabled(False)
-        time_layout.addWidget(self.end_time_picker, 1, 1)
-        
+
+        # 日志时间范围显示
+        time_layout.addWidget(QLabel("📅 日志范围:"), 0, 0)
+        self.log_range_label = QLabel("未加载")
+        self.log_range_label.setStyleSheet("color: #888; font-size: 11px;")
+        time_layout.addWidget(self.log_range_label, 0, 1)
+
+        # 当前选择显示
+        time_layout.addWidget(QLabel("🕒 当前选择:"), 1, 0)
+        self.current_range_label = QLabel("未选择")
+        self.current_range_label.setStyleSheet("color: #569cd6; font-size: 11px;")
+        time_layout.addWidget(self.current_range_label, 1, 1)
+
+        # 可视化选择按钮
+        self.open_visual_picker_btn = QPushButton("📊 可视化选择时间范围...")
+        self.open_visual_picker_btn.setEnabled(False)
+        self.open_visual_picker_btn.clicked.connect(self._open_visual_time_picker)
+        time_layout.addWidget(self.open_visual_picker_btn, 2, 0, 1, 2)
+
         layout.addLayout(time_layout)
+
+        # 保留原有的 DateTimePickerWidget（用于内部存储，设为不可见）
+        self.start_time_picker = DateTimePickerWidget()
+        self.start_time_picker.setVisible(False)
+        self.end_time_picker = DateTimePickerWidget()
+        self.end_time_picker.setVisible(False)
         
         # 命令过滤
         self.cmd_filter_check = QCheckBox("启用命令过滤")
@@ -245,8 +259,8 @@ class FilterWidget(QGroupBox):
     
     def _on_time_filter_toggled(self, checked: bool):
         """时间过滤启用状态变化"""
-        self.start_time_picker.setEnabled(checked)
-        self.end_time_picker.setEnabled(checked)
+        # 启用/禁用可视化选择按钮
+        self.open_visual_picker_btn.setEnabled(checked)
     
     def _on_cmd_filter_toggled(self, checked: bool):
         """命令过滤启用状态变化"""
@@ -290,6 +304,66 @@ class FilterWidget(QGroupBox):
         self.end_time_picker.set_datetime(None)
         self.include_cmd_combo.clear_selection()
         self.exclude_cmd_combo.clear_selection()
+
+        # 清空显示标签
+        self.log_range_label.setText("未加载")
+        self.current_range_label.setText("未选择")
+
+    def set_log_path(self, log_path: Optional[str]):
+        """
+        设置日志文件路径（用于加载时间范围）
+
+        Args:
+            log_path: 日志文件路径
+        """
+        self._log_path = log_path
+
+    def _open_visual_time_picker(self):
+        """打开可视化时间选择对话框"""
+        if not hasattr(self, '_log_path') or not self._log_path:
+            QMessageBox.warning(self, "提示", "请先选择日志文件")
+            return
+
+        # 获取当前选择
+        current_range = self.get_time_filter()
+
+        # 导入并打开对话框
+        try:
+            from .widgets.visual_time_picker_dialog import VisualTimePickerDialog
+
+            dialog = VisualTimePickerDialog(
+                self._log_path,
+                current_range,
+                self
+            )
+
+            if dialog.exec() == QDialog.Accepted:
+                range_result = dialog.get_time_range()
+                if range_result:
+                    start, end = range_result
+                    self.start_time_picker.set_datetime(start)
+                    self.end_time_picker.set_datetime(end)
+                    self._update_display_labels()
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "错误",
+                f"打开可视化时间选择器失败:\n{str(e)}"
+            )
+
+    def _update_display_labels(self):
+        """更新显示标签"""
+        start = self.start_time_picker.get_datetime()
+        end = self.end_time_picker.get_datetime()
+
+        if start and end:
+            # 显示当前选择
+            start_str = start.strftime("%H:%M:%S")
+            end_str = end.strftime("%H:%M:%S")
+            self.current_range_label.setText(f"{start_str} ~ {end_str}")
+        else:
+            self.current_range_label.setText("未选择")
 
 
 class ActionWidget(QGroupBox):

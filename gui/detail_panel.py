@@ -19,6 +19,7 @@ from PySide6.QtCore import Signal, Qt
 
 from .widgets.datetime_picker import DateTimePickerWidget
 from .widgets.multi_select_combo import MultiSelectComboBox
+from .widgets.log_time_scanner import LogTimeScanner, TimeScanResult
 
 
 class ProtocolDetailWidget(QGroupBox):
@@ -167,6 +168,11 @@ class FilterWidget(QGroupBox):
     
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__("过滤设置（可选）", parent)
+
+        # 日志时间扫描器（后台线程）
+        self._scanner: Optional[LogTimeScanner] = None
+        self._scan_result: Optional[TimeScanResult] = None
+
         self._setup_ui()
         self._connect_signals()
     
@@ -260,7 +266,11 @@ class FilterWidget(QGroupBox):
     def _on_time_filter_toggled(self, checked: bool):
         """时间过滤启用状态变化"""
         # 启用/禁用可视化选择按钮
-        self.open_visual_picker_btn.setEnabled(checked)
+        # 只有当扫描完成后才启用按钮
+        if checked and self._scan_result and self._scan_result.has_valid_range:
+            self.open_visual_picker_btn.setEnabled(True)
+        else:
+            self.open_visual_picker_btn.setEnabled(False)
     
     def _on_cmd_filter_toggled(self, checked: bool):
         """命令过滤启用状态变化"""
@@ -307,7 +317,19 @@ class FilterWidget(QGroupBox):
 
         # 清空显示标签
         self.log_range_label.setText("未加载")
+        self.log_range_label.setStyleSheet("color: #888; font-size: 11px;")
         self.current_range_label.setText("未选择")
+
+        # 清理扫描状态
+        self._scan_result = None
+        if hasattr(self, '_last_scanned_path'):
+            delattr(self, '_last_scanned_path')
+
+    def cleanup(self):
+        """清理资源（停止扫描线程）"""
+        if self._scanner and self._scanner.isRunning():
+            self._scanner.stop()
+            self._scanner.wait()
 
     def set_log_path(self, log_path: Optional[str]):
         """
@@ -317,6 +339,64 @@ class FilterWidget(QGroupBox):
             log_path: 日志文件路径
         """
         self._log_path = log_path
+
+        # 如果路径有效，自动触发后台扫描
+        if log_path:
+            self._start_background_scan()
+
+    def _start_background_scan(self):
+        """启动后台日志时间扫描"""
+        if not hasattr(self, '_log_path') or not self._log_path:
+            return
+
+        # 如果已有扫描结果且路径未变，不重复扫描
+        if self._scan_result and hasattr(self, '_last_scanned_path'):
+            if self._last_scanned_path == self._log_path:
+                return
+
+        # 更新 UI 状态：正在扫描
+        self.log_range_label.setText("🔄 正在扫描日志时间范围...")
+        self.log_range_label.setStyleSheet("color: #f39c12; font-size: 11px;")
+        self.open_visual_picker_btn.setEnabled(False)  # 扫描期间禁用按钮
+
+        # 启动后台扫描线程
+        self._scanner = LogTimeScanner(self._log_path, self)
+        self._scanner.progress.connect(self._on_scan_progress)
+        self._scanner.finished.connect(self._on_scan_finished)
+        self._scanner.error.connect(self._on_scan_error)
+        self._scanner.start()
+
+    def _on_scan_progress(self, current: int, total: int):
+        """扫描进度更新（可选显示，避免频繁刷新）"""
+        # 每 10% 更新一次显示
+        if total > 0 and current % (total // 10) == 0:
+            progress = int(current * 100 / total)
+            self.log_range_label.setText(f"🔄 正在扫描... {progress}%")
+
+    def _on_scan_finished(self, result: TimeScanResult):
+        """扫描完成"""
+        self._scan_result = result
+        self._last_scanned_path = self._log_path
+
+        if result.has_valid_range:
+            # 显示日志时间范围
+            min_str = result.min_time.strftime("%H:%M:%S")
+            max_str = result.max_time.strftime("%H:%M:%S")
+            self.log_range_label.setText(f"{min_str} ~ {max_str}")
+            self.log_range_label.setStyleSheet("color: #27ae60; font-size: 11px;")
+
+            # 如果时间过滤已启用，则启用可视化选择按钮
+            if self.time_filter_check.isChecked():
+                self.open_visual_picker_btn.setEnabled(True)
+        else:
+            # 没有找到有效时间戳
+            self.log_range_label.setText("⚠️ 未找到有效时间戳")
+            self.log_range_label.setStyleSheet("color: #e74c3c; font-size: 11px;")
+
+    def _on_scan_error(self, error_msg: str):
+        """扫描错误"""
+        self.log_range_label.setText(f"❌ 扫描失败")
+        self.log_range_label.setStyleSheet("color: #e74c3c; font-size: 11px;")
 
     def _open_visual_time_picker(self):
         """打开可视化时间选择对话框"""
@@ -532,10 +612,14 @@ class DetailPanel(QWidget):
             log_path, log_exists, log_size,
             cmd_count, enum_count, type_count
         )
-        
+
         # 更新命令过滤选项
         if commands:
             self.filter_widget.set_commands(commands)
+
+        # 传递日志路径到 FilterWidget，触发自动扫描
+        if log_path and log_exists:
+            self.filter_widget.set_log_path(log_path)
     
     def get_filter_settings(self) -> Dict[str, Any]:
         """获取过滤设置"""
@@ -553,3 +637,7 @@ class DetailPanel(QWidget):
         """清空面板"""
         self.detail_widget.clear()
         self.filter_widget.clear()
+
+    def cleanup(self):
+        """清理资源"""
+        self.filter_widget.cleanup()

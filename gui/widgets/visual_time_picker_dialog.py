@@ -19,6 +19,7 @@ from PySide6.QtCore import Qt
 from .datetime_picker import DateTimePickerWidget
 from .time_range_slider import TimeRangeSlider
 from .log_time_scanner import LogTimeScanner, TimeScanResult
+from .time_formatter import format_time_range_smart
 
 
 class VisualTimePickerDialog(QDialog):
@@ -302,10 +303,9 @@ class VisualTimePickerDialog(QDialog):
             days = span_seconds / 86400
             span_str = f"{days:.1f}天"
 
-        start_str = start.strftime("%H:%M:%S")
-        end_str = end.strftime("%H:%M:%S")
-
-        self.range_summary_label.setText(f"{start_str} ~ {end_str} ({span_str})")
+        # 使用智能格式化时间范围
+        range_str = format_time_range_smart(start, end)
+        self.range_summary_label.setText(f"{range_str} ({span_str})")
 
     def _enable_quick_buttons(self, enabled: bool):
         """启用/禁用快捷按钮"""

@@ -20,6 +20,7 @@ from PySide6.QtCore import Signal, Qt
 from .widgets.datetime_picker import DateTimePickerWidget
 from .widgets.multi_select_combo import MultiSelectComboBox
 from .widgets.log_time_scanner import LogTimeScanner, TimeScanResult
+from .widgets.time_formatter import format_time_range_smart
 
 
 class ProtocolDetailWidget(QGroupBox):
@@ -379,10 +380,10 @@ class FilterWidget(QGroupBox):
         self._last_scanned_path = self._log_path
 
         if result.has_valid_range:
-            # 显示日志时间范围
-            min_str = result.min_time.strftime("%H:%M:%S")
-            max_str = result.max_time.strftime("%H:%M:%S")
-            self.log_range_label.setText(f"{min_str} ~ {max_str}")
+            # 显示日志时间范围（智能格式化 + 时间跨度）
+            range_str = format_time_range_smart(result.min_time, result.max_time)
+            span_str = result.time_span_human
+            self.log_range_label.setText(f"{range_str} (跨度: {span_str})")
             self.log_range_label.setStyleSheet("color: #27ae60; font-size: 11px;")
 
             # 如果时间过滤已启用，则启用可视化选择按钮
@@ -438,10 +439,9 @@ class FilterWidget(QGroupBox):
         end = self.end_time_picker.get_datetime()
 
         if start and end:
-            # 显示当前选择
-            start_str = start.strftime("%H:%M:%S")
-            end_str = end.strftime("%H:%M:%S")
-            self.current_range_label.setText(f"{start_str} ~ {end_str}")
+            # 显示当前选择（智能格式化）
+            range_str = format_time_range_smart(start, end)
+            self.current_range_label.setText(range_str)
         else:
             self.current_range_label.setText("未选择")
 

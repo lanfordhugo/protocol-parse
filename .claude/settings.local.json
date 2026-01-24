@@ -29,7 +29,26 @@
       "Bash(npm install:*)",
       "Bash(claude:*)",
       "mcp__zai-mcp-server__ui_to_artifact",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Skill(executing-plans)",
+      "Skill(executing-plans:*)",
+      "Skill(superpowers:verification-before-completion)",
+      "Skill(superpowers:verification-before-completion:*)",
+      "Bash(git push:*)",
+      "Skill(skill-creator)",
+      "Skill(skill-creator:*)",
+      "Bash(done:*)",
+      "Skill(code-review:code-review)",
+      "Skill(code-review:code-review:*)",
+      "Bash(comm:*)",
+      "Bash(test:*)",
+      "Bash(U0001F300-U0001F5FF\"\n\\\\U0001F600-\\\\U0001F64F\")",
+      "Bash(U0001F680-U0001F6FF\"\n\\\\U0001F700-\\\\U0001F77F\")",
+      "Bash(U0001F780-U0001F7FF\"\n\\\\U0001F800-\\\\U0001F8FF\")",
+      "Bash(U0001F900-U0001F9FF\"\n\\\\U0001FA00-\\\\U0001FA6F\")",
+      "Bash(U0001FA70-U0001FAFF\"\n\\\\U00002702-\\\\U000027B0\")",
+      "Bash(U000024C2-U0001F251\"\n]+'', flags=re.UNICODE\\)\n\n# 移除特定表情符号行\ncontent = re.sub\\(r''## 1\\\\. 🚫 核心约束与禁止项'', ''## 1. 核心约束与禁止项'', content\\)\ncontent = re.sub\\(r''> \\\\*\\\\*⚠️ 以下约束条件必须严格遵守，违反将导致测试失效\\\\*\\\\*'', ''> **以下约束条件必须严格遵守，违反将导致测试失效**'', content\\)\n\nwith open\\(''SKILL.md'', ''w'', encoding=''utf-8''\\) as f:\n    f.write\\(content\\)\n\nprint\\(''Removed emojis from python-testing''\\)\n\")",
+      "Bash(rm:*)"
     ]
   }
 }

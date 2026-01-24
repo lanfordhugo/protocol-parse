@@ -20,7 +20,7 @@ from PySide6.QtCore import Signal, Qt
 from .widgets.datetime_picker import DateTimePickerWidget
 from .widgets.multi_select_combo import MultiSelectComboBox
 from .widgets.log_time_scanner import LogTimeScanner, TimeScanResult
-from .widgets.time_formatter import format_time_range_smart
+from gui.shared.time_utils import format_time_range_smart
 
 
 class ProtocolDetailWidget(QGroupBox):

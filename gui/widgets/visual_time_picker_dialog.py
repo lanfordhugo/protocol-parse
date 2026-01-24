@@ -19,7 +19,7 @@ from PySide6.QtCore import Qt
 from .datetime_picker import DateTimePickerWidget
 from .time_range_slider import TimeRangeSlider
 from .log_time_scanner import LogTimeScanner, TimeScanResult
-from .time_formatter import format_time_range_smart
+from gui.shared.time_utils import format_time_range_smart, format_time_span_smart
 
 
 class VisualTimePickerDialog(QDialog):
@@ -290,18 +290,7 @@ class VisualTimePickerDialog(QDialog):
     def _update_range_summary(self, start: datetime, end: datetime):
         """更新范围摘要"""
         span_seconds = (end - start).total_seconds()
-
-        if span_seconds < 60:
-            span_str = f"{span_seconds:.0f}秒"
-        elif span_seconds < 3600:
-            minutes = span_seconds / 60
-            span_str = f"{minutes:.1f}分钟"
-        elif span_seconds < 86400:
-            hours = span_seconds / 3600
-            span_str = f"{hours:.1f}小时"
-        else:
-            days = span_seconds / 86400
-            span_str = f"{days:.1f}天"
+        span_str = format_time_span_smart(span_seconds)
 
         # 使用智能格式化时间范围
         range_str = format_time_range_smart(start, end)

@@ -10,12 +10,9 @@
 from .searchable_list import SearchableListWidget
 from .datetime_picker import DateTimePickerWidget
 from .multi_select_combo import MultiSelectComboBox
-from .time_formatter import format_time_range_smart, format_time_smart
 
 __all__ = [
     'SearchableListWidget',
     'DateTimePickerWidget',
     'MultiSelectComboBox',
-    'format_time_range_smart',
-    'format_time_smart',
 ]

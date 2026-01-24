@@ -13,34 +13,21 @@ from PySide6.QtWidgets import (
     QMenuBar, QMenu
 )
 from PySide6.QtCore import Qt, QSettings
-from PySide6.QtGui import QAction, QActionGroup, QShortcut, QKeySequence
+from PySide6.QtGui import QAction, QShortcut, QKeySequence
 
 from .sidebar import Sidebar
 from .normal_parse_page import NormalParsePage
 from shared import get_unified_theme
 from tcp_log.server_panel import TcpServerPage
+from gui.shared import ThemeManagerMixin, WindowStateMixin, DialogHelperMixin
 
 
-class PlaceholderPage(QWidget):
-    """占位页面（临时使用）"""
-
-    def __init__(self, title: str, parent=None):
-        super().__init__(parent)
-        self._setup_ui(title)
-
-    def _setup_ui(self, title: str):
-        """初始化UI"""
-        layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignCenter)
-
-        from PySide6.QtWidgets import QLabel
-        label = QLabel(f"{title}\n\n功能开发中...")
-        label.setStyleSheet("font-size: 24px; color: #888;")
-        label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(label)
-
-
-class UnifiedMainWindow(QMainWindow):
+class UnifiedMainWindow(
+    QMainWindow,
+    ThemeManagerMixin,
+    WindowStateMixin,
+    DialogHelperMixin
+):
     """统一主窗口 - 带侧边栏导航的整合窗口"""
 
     def __init__(self):
@@ -50,6 +37,10 @@ class UnifiedMainWindow(QMainWindow):
         # 加载设置
         self._settings = QSettings("V8Parse", "UnifiedGUI")
         self._current_theme = self._settings.value("theme", "dark")
+
+        # 初始化窗口管理混入类
+        self._setup_window_state_manager(self._settings)
+        self._setup_theme_manager(self._settings, get_unified_theme, "dark")
 
         # 创建页面
         self._normal_page = None
@@ -141,39 +132,13 @@ class UnifiedMainWindow(QMainWindow):
 
         # 主题子菜单
         theme_menu = view_menu.addMenu("界面风格")
-
-        # 主题选项组（互斥）
-        self._theme_group = QActionGroup(self)
-        self._theme_group.setExclusive(True)
-
-        # 深色主题
-        dark_action = QAction("深色主题", self)
-        dark_action.setCheckable(True)
-        dark_action.setData("dark")
-        self._theme_group.addAction(dark_action)
-        theme_menu.addAction(dark_action)
-
-        # 浅色主题
-        light_action = QAction("浅色主题", self)
-        light_action.setCheckable(True)
-        light_action.setData("light")
-        self._theme_group.addAction(light_action)
-        theme_menu.addAction(light_action)
-
-        # 设置当前主题选中状态
-        if self._current_theme == "dark":
-            dark_action.setChecked(True)
-        else:
-            light_action.setChecked(True)
-
-        # 连接主题切换信号
-        self._theme_group.triggered.connect(self._on_theme_changed)
+        self._create_theme_menu_actions(theme_menu)
 
         # 帮助菜单
         help_menu = menubar.addMenu("帮助(&H)")
 
         about_action = QAction("关于(&A)", self)
-        about_action.triggered.connect(self._show_about)
+        about_action.triggered.connect(self._show_about_dialog)
         help_menu.addAction(about_action)
 
     def _setup_shortcuts(self):
@@ -206,71 +171,24 @@ class UnifiedMainWindow(QMainWindow):
             self._update_status("TCP 服务端")
 
     def _on_next_page(self):
-        """切换到下一个页面（Ctrl+Tab）"""
+        """切换到下一个页面(Ctrl+Tab)"""
         if self._current_page == 'normal':
             self._on_page_requested('tcp_server')
         else:
             self._on_page_requested('normal')
 
-    def _on_theme_changed(self, action: QAction):
-        """主题切换"""
-        theme = action.data()
-        if theme != self._current_theme:
-            self._current_theme = theme
-            self._apply_theme(theme)
-            self._settings.setValue("theme", theme)
-
-    def _apply_theme(self, theme: str):
-        """应用主题"""
-        app = QApplication.instance()
-        if app:
-            app.setStyleSheet(get_unified_theme(theme))
-
-    def _show_about(self):
-        """显示关于对话框"""
-        QMessageBox.about(
-            self,
-            "关于 V8Parse",
-            "<h3>V8Parse - 多协议通信报文解析工具</h3>"
-            "<p>版本: 1.0.0</p>"
-            "<p>基于 YAML 配置的现代化协议解析框架</p>"
-            "<p>支持零代码扩展新协议</p>"
-            "<p>功能模块：</p>"
-            "<ul>"
-            "<li>📋 普通解析 - 批量解析日志文件</li>"
-            "<li>🌐 TCP 服务端 - 实时接收并解析报文</li>"
-            "</ul>"
-        )
-
-    def _update_status(self, message: str):
+    def _update_status(self, message: str) -> None:
         """更新状态栏"""
         self.status_bar.showMessage(message)
 
-    def _restore_window_state(self):
-        """恢复窗口状态"""
-        # 尝试恢复窗口几何信息
-        geometry = self._settings.value("window/geometry")
-        if geometry:
-            self.restoreGeometry(geometry)
-        else:
-            # 默认大小和居中
-            self.resize(1200, 800)
-            self._center_on_screen()
-
-    def _save_window_state(self):
-        """保存窗口状态"""
-        self._settings.setValue("window/geometry", self.saveGeometry())
-
-    def _center_on_screen(self):
-        """将窗口居中显示在屏幕中央"""
-        screen = QApplication.primaryScreen().geometry()
-        window_size = self.geometry()
-        x = (screen.width() - window_size.width()) // 2
-        y = (screen.height() - window_size.height()) // 2
-        self.move(x, y)
-
-    def closeEvent(self, event):
+    def closeEvent(self, event) -> None:
         """窗口关闭事件"""
-        # 保存窗口状态
-        self._save_window_state()
-        event.accept()
+        # 清理页面资源
+        if self._normal_page and hasattr(self._normal_page, 'cleanup'):
+            self._normal_page.cleanup()
+
+        if self._tcp_server_page and hasattr(self._tcp_server_page, 'cleanup'):
+            self._tcp_server_page.cleanup()
+
+        # 调用Mixin的closeEvent保存窗口状态
+        super().closeEvent(event)

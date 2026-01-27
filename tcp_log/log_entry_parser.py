@@ -23,6 +23,7 @@ class LogEntry:
     source_info: str        # 源信息 (文件:行号 pid:xxx tid:xxx)
     hex_data: str           # 十六进制数据
     raw_text: str           # 原始文本
+    terminal_id: Optional[int] = None  # 终端ID，如 [1] 中的 1，部分报文可能没有
 
 
 class LogEntryParser:
@@ -120,6 +121,10 @@ class LogEntryParser:
         cmd_id = int(info_match.group('cmd'))
         source_info = info_match.group('source')
         
+        # 提取终端ID（可选字段）
+        terminal_id_str = info_match.group('id')
+        terminal_id = int(terminal_id_str) if terminal_id_str else None
+        
         # 提取十六进制数据（第二行及之后）
         hex_lines = []
         for line in lines[1:]:
@@ -137,7 +142,8 @@ class LogEntryParser:
             cmd_id=cmd_id,
             source_info=source_info,
             hex_data=hex_data,
-            raw_text=raw_text
+            raw_text=raw_text,
+            terminal_id=terminal_id
         )
     
     def _is_hex_line(self, line: str) -> bool:

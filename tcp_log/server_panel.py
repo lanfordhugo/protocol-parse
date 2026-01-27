@@ -168,15 +168,17 @@ class TcpServerPage(QWidget):
 
         # 解析结果表格
         self._result_table = QTableWidget()
-        self._result_table.setColumnCount(4)
-        self._result_table.setHorizontalHeaderLabels(["时间", "方向", "CMD", "摘要"])
+        self._result_table.setColumnCount(5)
+        self._result_table.setHorizontalHeaderLabels(["时间", "方向", "CMD", "终端ID", "摘要"])
         self._result_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
         self._result_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
         self._result_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
-        self._result_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self._result_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Fixed)
+        self._result_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
         self._result_table.setColumnWidth(0, 90)
         self._result_table.setColumnWidth(1, 50)
         self._result_table.setColumnWidth(2, 60)
+        self._result_table.setColumnWidth(3, 60)
         self._result_table.verticalHeader().setDefaultSectionSize(26)
         self._result_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._result_table.setAlternatingRowColors(True)
@@ -454,6 +456,12 @@ class TcpServerPage(QWidget):
         cmd_item.setTextAlignment(Qt.AlignCenter)
         self._result_table.setItem(row, 2, cmd_item)
 
+        # 终端ID列
+        terminal_text = str(entry.terminal_id) if entry.terminal_id is not None else ""
+        terminal_item = QTableWidgetItem(terminal_text)
+        terminal_item.setTextAlignment(Qt.AlignCenter)
+        self._result_table.setItem(row, 3, terminal_item)
+
         if parsed_result:
             summary = self._generate_summary(parsed_result)
         else:
@@ -462,7 +470,7 @@ class TcpServerPage(QWidget):
         summary_item = QTableWidgetItem(summary)
         if not success:
             summary_item.setForeground(QColor("red"))
-        self._result_table.setItem(row, 3, summary_item)
+        self._result_table.setItem(row, 4, summary_item)
 
         time_item.setData(Qt.UserRole, {
             "entry": entry,
@@ -523,6 +531,8 @@ class TcpServerPage(QWidget):
         lines.append(f"方向: {entry.direction}")
         lines.append(f"命令: cmd{entry.cmd_id}")
         lines.append(f"字节数: {entry.byte_count}")
+        if entry.terminal_id is not None:
+            lines.append(f"终端ID: {entry.terminal_id}")
         lines.append(f"源信息: {entry.source_info}")
         lines.append("")
 
@@ -728,6 +738,7 @@ class TcpServerPage(QWidget):
                 "direction": entry.direction,
                 "cmd_id": entry.cmd_id,
                 "byte_count": entry.byte_count,
+                "terminal_id": entry.terminal_id,
                 "success": success,
                 "parsed": parsed if parsed else {},
                 "hex_data": entry.hex_data

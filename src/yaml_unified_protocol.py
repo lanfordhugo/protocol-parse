@@ -50,6 +50,7 @@ class YamlUnifiedProtocol:
         self._info_line_re = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:|\.]\d{2,3}")
         self._byte_sequence_re = re.compile(self.yaml_config.frame_head)
         self._direction_re = re.compile(r"(Send|Recv|TX|RX)", re.IGNORECASE)
+        self._terminal_id_re = re.compile(r"\[(\d+)\]\s+\w+.*?:")  # 匹配 [数字] 终端ID
 
     def set_progress_callback(self, callback):
         """设置进度回调函数
@@ -252,6 +253,7 @@ class YamlUnifiedProtocol:
                     result = {
                         'timestamp': group.get('time', ''),  # 使用'time'而不是'timestamp'
                         'direction': group.get('direction', ''),
+                        'terminal_id': group.get('terminal_id'),  # 添加终端ID
                         'raw_data': group.get('data', ''),
                         'header': header_info,
                         'cmd': cmd_id,
@@ -268,6 +270,7 @@ class YamlUnifiedProtocol:
                     result = {
                         'timestamp': group.get('time', ''),  # 使用'time'而不是'timestamp'
                         'direction': group.get('direction', ''),
+                        'terminal_id': group.get('terminal_id'),  # 添加终端ID
                         'raw_data': group.get('data', ''),
                         'header': header_info,
                         'cmd': cmd_id,
@@ -395,6 +398,11 @@ class YamlUnifiedProtocol:
             output_lines.append(f"时间: {item.get('timestamp', 'N/A')}")
             output_lines.append(f"方向: {item.get('direction', 'N/A')}")
             output_lines.append(f"命令: cmd{item.get('cmd', 'N/A')}")
+            
+            # 添加终端ID（如果存在）
+            terminal_id = item.get('terminal_id')
+            if terminal_id is not None:
+                output_lines.append(f"终端ID: {terminal_id}")
             
             # 打印解析内容
             content = item.get('content', {})
@@ -529,6 +537,7 @@ class YamlUnifiedProtocol:
         info_line_re = self._info_line_re
         byte_sequence_re = self._byte_sequence_re
         direction_re = self._direction_re
+        terminal_id_re = self._terminal_id_re
 
         data_groups = []
         current_group = None
@@ -558,9 +567,14 @@ class YamlUnifiedProtocol:
                         direction_match = direction_re.search(line)
                         direction = direction_match.group() if direction_match else ""
                         
+                        # 提取终端ID
+                        terminal_id_match = terminal_id_re.search(line)
+                        terminal_id = int(terminal_id_match.group(1)) if terminal_id_match else None
+                        
                         current_group = {
                             "time": time_str,
                             "direction": direction,
+                            "terminal_id": terminal_id,  # 添加终端ID
                             "data_parts": []  # 性能优化：使用列表收集，避免频繁字符串拼接
                         }
                         continue

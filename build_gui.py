@@ -47,6 +47,29 @@ HIDDEN_IMPORTS = [
     "src.validate_configs",
     "src.logger_instance",
     "src.m_print",
+    # gui 主模块
+    "gui.unified_main_window",
+    "gui.sidebar",
+    "gui.normal_parse_page",
+    "gui.protocol_panel",
+    "gui.detail_panel",
+    "gui.log_panel",
+    "gui.themes",
+    # gui 共享模块
+    "gui.shared.app_helpers",
+    "gui.shared.time_utils",
+    "gui.shared.window_manager",
+    "shared.unified_themes",
+    # gui 自定义控件
+    "gui.widgets.searchable_list",
+    "gui.widgets.multi_select_combo",
+    "gui.widgets.datetime_picker",
+    "gui.widgets.log_time_scanner",
+    "gui.widgets.time_range_slider",
+    "gui.widgets.visual_time_picker_dialog",
+    # gui 工作线程
+    "gui.workers.parse_worker",
+    "gui.workers.validate_worker",
 ]
 
 # 排除的模块（减小打包体积）

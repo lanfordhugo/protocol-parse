@@ -44,23 +44,27 @@ V8Parse是一个专业的多协议通信报文解析工具，采用现代化的Y
 
 | 协议名称 | 协议头标识 | 头长度 | 尾长度 | YAML配置 | 状态 | 日志文件 |
 |---------|-----------|--------|--------|----------|------|----------|
-| V8 | AA F5 | 11字节 | 2字节 | ✅ `configs/v8/protocol.yaml` | 🟢 完整支持 | `v8_com.log` |
+| V8 | AA F5 | 11字节 | 2字节 | ✅ `configs/v8/protocol.yaml` | 🟢 完整支持 | `v8.log` |
 | 小桔(XIAOJU) | 7D D0 | 14字节 | 1字节 | ✅ `configs/xiaoju/protocol.yaml` | 🟢 完整支持 | `xiaoju.log` |
 | 运维(YUNWEI) | AA F5 | 11字节 | 2字节 | ✅ `configs/yunwei/protocol.yaml` | 🟢 完整支持 | `yunwei.log` |
 | Sinexcel | AA F5 | 8字节 | 1字节 | ✅ `configs/sinexcel/protocol.yaml` | 🟢 完整支持 | `sinexcel.log` |
 | 云快充(Yunkuaichong) | 68 | 6字节 | 2字节 | ✅ `configs/yunkuaichong/protocol.yaml` | 🟢 完整支持 | `yunkuaichong.log` |
+| 北京三友(BeijingSanyou) | AA F5 | 11字节 | 2字节 | ✅ `configs/beijingSanyou/protocol.yaml` | 🟢 完整支持 | `beijingSanyou.log` |
 
 ## 📁 项目结构
 
 ```text
 v8parse/
-├── main.py                    # 🚀 主程序入口（YAML配置驱动）
+├── main.py                    # 🚀 主程序入口（CLI版本，YAML配置驱动）
+├── main_gui.py                # 🖥️ GUI应用主入口
+├── build_gui.py               # 📦 GUI打包脚本
 ├── configs/                   # 🚀 YAML协议配置目录
 │   ├── v8/protocol.yaml       # V8协议YAML配置
 │   ├── xiaoju/protocol.yaml   # 小桔协议YAML配置
 │   ├── yunwei/protocol.yaml   # 运维协议YAML配置
 │   ├── sinexcel/protocol.yaml # Sinexcel协议YAML配置
-│   └── yunkuaichong/protocol.yaml # 云快充协议YAML配置
+│   ├── yunkuaichong/protocol.yaml # 云快充协议YAML配置
+│   └── beijingSanyou/protocol.yaml # 北京三友协议YAML配置
 ├── src/                       # 📦 核心源码目录
 │   ├── yaml_config.py         # YAML配置加载器
 │   ├── yaml_unified_protocol.py # YAML统一协议解析器
@@ -69,6 +73,22 @@ v8parse/
 │   ├── validate_configs.py    # YAML配置验证工具
 │   ├── logger_instance.py     # 📊 日志实例管理
 │   └── m_print.py             # 🖨️ 打印工具
+├── gui/                       # 🖥️ GUI应用模块（模块化架构）
+│   ├── unified_main_window.py # 统一主窗口
+│   ├── sidebar.py             # 侧边栏导航
+│   ├── normal_parse_page.py   # 普通解析页面
+│   ├── protocol_panel.py      # 协议选择面板
+│   ├── detail_panel.py        # 详情面板
+│   ├── log_panel.py           # 日志输出面板
+│   ├── themes.py              # 主题配置
+│   ├── shared/                # 共享模块
+│   │   └── ...                # 共享工具类
+│   ├── workers/               # 工作线程
+│   │   └── ...                # 后台任务线程
+│   └── widgets/               # 自定义控件
+│       ├── searchable_list.py # 可搜索列表
+│       ├── multi_select_combo.py # 多选下拉框
+│       └── datetime_picker.py # 日期时间选择器
 ├── tcp_log/                   # 🔌 TCP日志工具模块(测试组件)
 │   ├── tcp_client.py          # TCP客户端核心实现
 │   ├── tcp_server.py          # TCP服务端核心实现
@@ -79,18 +99,27 @@ v8parse/
 │   └── test/                  # 测试工具目录
 │       ├── run_sender.py      # 发送端启动脚本
 │       └── run_server.py      # 接收端启动脚本
-├── tools/                     # 🔧 其他辅助工具目录
+├── .claude/                   # 🤖 Claude Code 配置
+│   ├── skills/                # Skills 技能系统
+│   │   ├── *.md               # 各种开发和测试技能
+│   │   └── ...                # 更多技能文件
+│   └── rules/                 # 代码质量规则
+│       ├── python-*.md        # Python 编码规范
+│       └── ...                # 更多规则文件
 ├── input_logs/                # 📥 输入日志文件目录
-│   ├── v8.log                  # V8协议日志文件
+│   ├── v8.log                 # V8协议日志文件
 │   ├── xiaoju.log             # 小桔协议日志文件
 │   ├── yunwei.log             # 运维协议日志文件
-│   ├── sinexcel.log            # Sinexcel协议日志文件
-│   └── yunkuaichong.log        # 云快充协议日志文件
+│   ├── sinexcel.log           # Sinexcel协议日志文件
+│   ├── yunkuaichong.log       # 云快充协议日志文件
+│   └── beijingSanyou.log      # 北京三友协议日志文件
 ├── parsed_log/                # 📤 解析结果输出目录（按协议+时间戳）
 ├── protocol_template.yaml     # 📋 协议配置模板文件
+├── CLAUDE.md                  # 📖 Claude Code 工作指南
 ├── README.md                  # 📖 项目说明文档
 ├── .gitignore                 # 🔧 版本控制忽略文件
-└── v8协议解析.code-workspace   # 💻 VS Code工作区配置
+├── requirements-gui.txt       # 📦 GUI依赖列表
+└── v8协议解析.code-workspace  # 💻 VS Code工作区配置
 ```
 
 ### 🎯 架构亮点
@@ -98,8 +127,10 @@ v8parse/
 - **🆕 YAML配置**: 每个协议只需一个`protocol.yaml`文件，包含所有配置
 - **🚀 零代码扩展**: 添加新协议只需创建YAML配置，无需修改任何Python代码
 - **🔧 自动发现**: `main.py`自动发现`configs/`目录下的协议配置
-- **🛡️ 配置验证**: `tools/validate_configs.py`提供完整的配置验证
+- **🛡️ 配置验证**: `src/validate_configs.py`提供完整的配置验证
 - **📊 智能日志**: 按协议名+时间戳生成解析结果文件，不创建系统日志
+- **🤖 AI赋能**: 集成Claude Code Skills系统，提供代码质量和测试规范
+- **🖥️ 模块化GUI**: 统一侧边栏导航，可扩展页面架构
 
 ## 🚀 快速开始
 
@@ -128,17 +159,20 @@ python src/validate_configs.py --all
 
 ```bash
 # 解析指定协议
-python main.py v8        # 解析V8协议
-python main.py xiaoju    # 解析小桔协议
-python main.py yunwei    # 解析运维协议
-python main.py sinexcel  # 解析Sinexcel协议
-python main.py yunkuaichong # 解析云快充协议
+python main.py v8              # 解析V8协议
+python main.py xiaoju          # 解析小桔协议
+python main.py yunwei          # 解析运维协议
+python main.py sinexcel        # 解析Sinexcel协议
+python main.py yunkuaichong    # 解析云快充协议
+python main.py beijingSanyou   # 解析北京三友协议
 
 # 列出所有可用协议
 python main.py --list
+python main.py -l
 
 # 验证所有配置
 python main.py --validate
+python main.py -v
 ```
 
 ### 4. 日志文件准备
@@ -152,6 +186,7 @@ python main.py --validate
 | 运维 | `input_logs/yunwei.log` | 文本格式，时间戳 + 十六进制数据 |
 | Sinexcel | `input_logs/sinexcel.log` | 文本格式，时间戳 + 十六进制数据 |
 | 云快充 | `input_logs/yunkuaichong.log` | 文本格式，时间戳 + 十六进制数据 |
+| 北京三友 | `input_logs/beijingSanyou.log` | 文本格式，时间戳 + 十六进制数据 |
 
 ### 5. GUI 应用
 
@@ -164,6 +199,8 @@ python main.py --validate
 - **🎨 统一界面**: 侧边栏导航的多页面架构，操作更直观
 - **🌓 主题支持**: 内置亮色/暗色主题切换
 - **⚙️ 灵活配置**: 支持自定义过滤条件、解析参数等
+- **📅 可视化时间选择**: 直观的时间范围选择器，支持快捷选择
+- **🔄 实时进度**: 后台线程处理，实时显示解析进度和统计
 
 #### 启动方式
 
@@ -184,9 +221,10 @@ pip install -r requirements-gui.txt
 
 ```bash
 # 打包为独立可执行文件（自动清理 build 目录）
-python build_gui.py            # 标准打包
+python build_gui.py            # 标准打包（自动清理 build/）
 python build_gui.py --clean    # 清理后打包
 python build_gui.py --debug    # 调试模式（显示控制台）
+python build_gui.py --clean-only  # 仅清理不打包
 ```
 
 #### 界面说明
@@ -339,6 +377,26 @@ filters:                       # 过滤器
 | binary_str | 二进制串 | `{base: binary_str, bytes: 4}` |
 | bitset | 位段 | `{base: bitset, bits: [{name: "bit0"}]}` |
 
+### 条件字段支持
+
+```yaml
+# 基础字段
+- {len: 1, name: 数据类型, type: uint8, id: data_type}
+- {len: 2, name: 基础数据, type: uint16}
+
+# 条件字段（仅当条件满足时解析）
+- {len: 4, name: 扩展数据, type: uint32, when: "data_type == 1"}
+- {len: 8, name: 额外信息, type: uint64, when: "data_type > 1"}
+```
+
+**条件表达式支持:**
+
+- 相等比较: `field == value`
+- 不等比较: `field != value`
+- 大于小于: `field > value`, `field < value`
+- 逻辑运算: `field1 == 1 and field2 == 2`
+- 复杂条件: `(field1 == 1 or field2 == 2) and field3 == 3`
+
 ### 循环结构支持
 
 ```yaml
@@ -406,6 +464,44 @@ parsed_<protocol>_log_YYYY-MM-DD HH-MM-SS.txt
 - 枚举值的名称映射
 - 带单位的数值显示
 
+## 🤖 Claude Code Skills 系统
+
+项目集成了 Claude Code Skills 技能系统,提供AI辅助的代码质量和测试规范。
+
+### 核心技能
+
+**代码质量保障:**
+
+- **代码审查**: 系统化代码检查清单,确保代码质量
+- **编码规范**: Python编码风格规范(PEP 8、DRY/KISS/YAGNI原则)
+- **测试规范**: pytest测试规范(AAA模式、覆盖率要求)
+- **测试审查**: 测试代码质量检查(断言质量、FIRST原则)
+
+**开发流程:**
+
+- **需求澄清**: 快速实现小需求的技术方案设计
+- **架构设计**: 系统架构设计专家,提供可扩展方案
+- **模块设计**: 模块逻辑文档规范,确保文档一致性
+- **问题分析**: 通用问题分析与技术方案文档化
+
+**调试与验证:**
+
+- **Bug排查**: 系统性分析和解决软件问题
+- **系统化调试**: 遇到bug时的标准调试流程
+- **验证前置**: 完成工作前的验证检查清单
+
+### 规则系统
+
+项目根据文件类型自动应用相应规则:
+
+- `**/*.py` → Python代码质量和编码风格规范
+- `**/test_*.py` → Python测试规范和测试代码审查
+- `build*.py`, `*.spec` → PyInstaller打包规范
+
+### 使用方式
+
+Claude Code 会自动加载相关技能和规则,无需手动配置。详见 [`.claude/`](.claude/) 目录。
+
 ## 🔧 开发指南
 
 ### 扩展类型系统
@@ -445,6 +541,14 @@ parsed_<protocol>_log_YYYY-MM-DD HH-MM-SS.txt
 
 ## 📋 更新日志
 
+### v3.5.0 (2025-01-24) 🎨 GUI模块化重构
+
+- 🎨 **GUI模块化**: 提取共享模块和工作线程到独立目录
+- 📅 **可视化时间选择**: 添加直观的日期时间选择器控件
+- 🔄 **智能时间格式化**: 实现人类可读的时间显示（今天、昨天等）
+- 🤖 **Claude Code集成**: 添加Skills系统和代码质量规则
+- 📦 **北京三友协议**: 新增北京三友充电桩协议支持
+
 ### v3.0.0 (2025-09-13) 🚀 全面YAML重构
 
 - 🚀 **完全重构**: 基于YAML配置的现代化架构
@@ -480,4 +584,4 @@ parsed_<protocol>_log_YYYY-MM-DD HH-MM-SS.txt
 
 **V8Parse** - 现代化的多协议通信报文解析工具 🚀
 
-*最后更新时间: 2025-12-15*
+*最后更新时间: 2025-01-24*

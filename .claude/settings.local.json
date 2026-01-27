@@ -50,7 +50,14 @@
       "Bash(U000024C2-U0001F251\"\n]+'', flags=re.UNICODE\\)\n\n# 移除特定表情符号行\ncontent = re.sub\\(r''## 1\\\\. 🚫 核心约束与禁止项'', ''## 1. 核心约束与禁止项'', content\\)\ncontent = re.sub\\(r''> \\\\*\\\\*⚠️ 以下约束条件必须严格遵守，违反将导致测试失效\\\\*\\\\*'', ''> **以下约束条件必须严格遵守，违反将导致测试失效**'', content\\)\n\nwith open\\(''SKILL.md'', ''w'', encoding=''utf-8''\\) as f:\n    f.write\\(content\\)\n\nprint\\(''Removed emojis from python-testing''\\)\n\")",
       "Bash(rm:*)",
       "Skill(commit-commands:commit)",
-      "Skill(commit-commands:commit:*)"
+      "Skill(commit-commands:commit:*)",
+      "Bash(ssh:*)",
+      "Bash(git fetch:*)",
+      "Bash(mv:*)",
+      "Bash(if:*)",
+      "Bash(then rm -rf \"C:/Users/lanford/.claude/skills/pyinstaller-packager\")",
+      "Bash(else echo \"用户目录中没有该 skill\")",
+      "Bash(fi:*)"
     ]
   }
 }

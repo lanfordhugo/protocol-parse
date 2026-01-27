@@ -52,6 +52,23 @@ python src/validate_configs.py --all
 python src/validate_configs.py configs/v8/protocol.yaml
 ```
 
+### 测试
+
+```bash
+# 运行所有测试
+python -m pytest tests/
+
+# 运行特定测试文件
+python -m pytest tests/test_yaml_config.py -v
+python -m pytest tests/test_bitfield.py -v
+
+# 运行单个测试
+python -m pytest tests/test_yaml_config.py::test_meta_parsing -v
+
+# 查看测试覆盖率
+python -m pytest tests/ --cov=src --cov-report=html
+```
+
 ### GUI 应用
 
 ```bash
@@ -131,6 +148,11 @@ YamlUnifiedProtocol (统一协议解析器)
 - `src/yaml_cmdformat.py`: 命令格式管理器，处理协议头/尾、命令定义
 - `src/yaml_field_parser.py`: 字段解析器，实现各种数据类型的解析逻辑
 - `src/yaml_unified_protocol.py`: 统一协议解析器，整合上述组件提供完整解析流程
+- `src/validate_configs.py`: 配置验证工具，提供语法和语义检查
+
+**共享模块** (`shared/`):
+
+- `unified_themes.py`: 统一主题系统，支持亮色/暗色主题切换
 
 ### GUI 架构
 
@@ -153,11 +175,25 @@ gui/unified_main_window.py (统一主窗口)
 - `gui/widgets/searchable_list.py`: 可搜索列表控件
 - `gui/widgets/multi_select_combo.py`: 多选下拉框
 - `gui/widgets/datetime_picker.py`: 日期时间选择器
+- `gui/widgets/log_time_scanner.py`: 日志时间扫描器
+- `gui/widgets/time_range_slider.py`: 时间范围滑块
+- `gui/widgets/visual_time_picker_dialog.py`: 可视化时间选择对话框
 
 **页面功能：**
 
 - **普通解析**: 批量解析日志文件，支持协议选择、命令过滤、时间范围过滤
 - **TCP 服务端**: 实时接收 TCP 连接并解析报文（集成在统一 GUI 中）
+
+**GUI 工作线程** (`gui/workers/`):
+
+- `parse_worker.py`: 异步解析工作线程
+- `validate_worker.py`: 配置验证工作线程
+
+**GUI 共享模块** (`gui/shared/`):
+
+- `app_helpers.py`: 应用辅助函数
+- `time_utils.py`: 时间工具函数
+- `window_manager.py`: 窗口管理器
 
 ## 添加新协议（零代码）
 
@@ -337,6 +373,18 @@ Claude Code 根据文件扩展名自动应用相应规则：
 3. 在 `src/yaml_config.py` 的 `TypeDef` 中添加类型验证逻辑
 4. 在 YAML 配置的 `types` 中使用
 
+### 工具模块
+
+**辅助工具** (`tools/`):
+
+- `cmd_analysis.py`: 协议配置与文档对比分析工具
+  - 支持多种协议格式（V8、盛弘、云快充等）
+  - 智能处理 Windows 中文文件名编码问题
+  - 批量分析配置文件
+
+- `yaml_validator.py`: YAML 配置验证工具（独立版本）
+- `报文拆分为单个字节.py`: 报文分析辅助工具
+
 ### 调试解析问题
 
 1. 使用 `--validate` 检查配置
@@ -356,6 +404,7 @@ Claude Code 根据文件扩展名自动应用相应规则：
 - YAML 配置会自动缓存
 - 字段解析器使用预编译类型映射
 - 支持大文件流式处理
+- GUI 使用工作线程进行异步处理
 
 ## 设计原则
 

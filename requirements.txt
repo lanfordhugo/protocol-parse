@@ -1,0 +1,16 @@
+# V8Parse 项目依赖
+# CLI 版本只需要 pytest 用于测试，无需其他第三方依赖
+
+# 测试框架
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# 可选：代码质量工具
+black>=23.0.0
+isort>=5.12.0
+flake8>=6.0.0
+
+# 可选：测试性能提升
+pytest-xdist>=3.0.0
+
+# 注意：GUI 依赖请查看 requirements-gui.txt

@@ -1,0 +1,368 @@
+"""
+pytest 测试文件模板
+遵循 AAA (Arrange-Act-Assert) 模式
+"""
+
+import pytest
+from unittest.mock import Mock, patch, MagicMock
+# import module_under_test  # 导入要测试的模块
+
+
+# ================================
+# 基础测试示例
+# ================================
+
+class TestExample:
+    """测试类示例：相关测试方法组织在一起"""
+
+    def test_addition(self):
+        """基础测试示例"""
+        # Arrange (准备测试数据)
+        a = 2
+        b = 3
+
+        # Act (执行被测试的操作)
+        result = a + b
+
+        # Assert (验证结果)
+        assert result == 5
+
+    def test_string_operations(self):
+        """字符串操作测试"""
+        # Arrange
+        text = "hello world"
+
+        # Act
+        result = text.upper()
+
+        # Assert
+        assert result == "HELLO WORLD"
+        assert result.isupper()
+
+
+# ================================
+# AAA 模式示例
+# ================================
+
+def test_user_creation():
+    """AAA 模式完整示例"""
+    # Arrange (准备测试数据和环境)
+    user_data = {
+        "name": "Test User",
+        "email": "test@example.com"
+    }
+    # repository = UserRepository()
+
+    # Act (执行被测试的操作)
+    # user = repository.create_user(user_data)
+
+    # Assert (验证结果)
+    # assert user.name == "Test User"
+    # assert user.email == "test@example.com"
+    # assert user.id is not None
+    pass  # 替换为实际测试代码
+
+
+# ================================
+# Given-When-Then 模式示例
+# ================================
+
+def test_purchase_with_insufficient_balance():
+    """Given-When-Then 模式示例"""
+    # Given: 账户余额不足
+    # account = Account(balance=50)
+
+    # When: 尝试购买100元的商品
+    # result = account.purchase(amount=100)
+
+    # Then: 交易被拒绝
+    # assert result.success is False
+    # assert result.error == "Insufficient balance"
+    pass  # 替换为实际测试代码
+
+
+# ================================
+# 参数化测试示例
+# ================================
+
+@pytest.mark.parametrize("input,expected", [
+    (2, 4),
+    (3, 9),
+    (5, 25),
+    (10, 100),
+])
+def test_square(input, expected):
+    """参数化测试示例"""
+    assert input ** 2 == expected
+
+
+@pytest.mark.parametrize("email,valid", [
+    ("user@example.com", True),
+    ("user.name@example.com", True),
+    ("user+tag@example.co.uk", True),
+    ("invalid", False),
+    ("@example.com", False),
+    ("user@", False),
+])
+def test_email_validation(email, valid):
+    """邮箱验证参数化测试"""
+    # is_valid = validate_email(email)
+    # assert is_valid == valid
+    pass  # 替换为实际测试代码
+
+
+# ================================
+# Mock 和 Patch 示例
+# ================================
+
+def test_with_mock_object():
+    """使用 Mock 对象"""
+    # 创建 Mock 对象
+    mock_service = Mock()
+    mock_service.get_data.return_value = {"status": "ok", "data": [1, 2, 3]}
+
+    # 调用被测试的函数
+    # result = process_data(mock_service)
+
+    # 验证结果
+    # assert result == [1, 2, 3]
+
+    # 验证 Mock 被正确调用
+    mock_service.get_data.assert_called_once()
+
+
+def test_with_patch():
+    """使用 patch 装饰器"""
+    # with patch('module.external_api_call') as mock_api:
+    #     mock_api.return_value = {"success": True}
+
+    #     result = module.process_payment(amount=100)
+
+    #     assert result is True
+    #     mock_api.assert_called_once_with(amount=100)
+    pass  # 替换为实际测试代码
+
+
+# ================================
+# Fixture 使用示例
+# ================================
+
+def test_with_fixture(sample_config):
+    """使用 fixture（定义在 conftest.py 中）"""
+    assert sample_config["debug"] is True
+    assert sample_config["max_retries"] == 3
+
+
+def test_with_temp_file(temp_file):
+    """使用临时文件 fixture"""
+    assert temp_file.exists()
+    content = temp_file.read_text()
+    assert len(content) > 0
+
+
+# ================================
+# 异常测试示例
+# ================================
+
+def test_raise_exception():
+    """测试异常抛出"""
+    # with pytest.raises(ValueError, match="Invalid value"):
+    #     raise ValueError("Invalid value")
+    pass  # 替换为实际测试代码
+
+
+def test_division_by_zero():
+    """测试除零异常"""
+    with pytest.raises(ZeroDivisionError):
+        result = 1 / 0
+
+
+# ================================
+# 测试标记示例
+# ================================
+
+@pytest.mark.unit
+def test_unit_example():
+    """单元测试标记"""
+    assert True
+
+
+@pytest.mark.slow
+def test_slow_example():
+    """慢速测试标记"""
+    import time
+    time.sleep(0.1)
+    assert True
+
+
+@pytest.mark.integration
+@pytest.mark.network
+def test_integration_example():
+    """集成测试标记"""
+    # response = requests.get("https://api.example.com")
+    # assert response.status_code == 200
+    pass  # 替换为实际测试代码
+
+
+# ================================
+# 跳过测试示例
+# ================================
+
+@pytest.mark.skip(reason="功能尚未实现")
+def test_not_implemented():
+    """跳过未实现的功能"""
+    pass
+
+
+@pytest.mark.skipif(sys.version_info < (3, 8), reason="需要 Python 3.8+")
+def test_python38_feature():
+    """条件跳过"""
+    # 使用 Python 3.8+ 特性
+    pass
+
+
+# ================================
+# 使用 caplog 测试日志
+# ================================
+
+def test_logging(caplog):
+    """测试日志输出"""
+    import logging
+
+    # 设置日志级别
+    caplog.set_level(logging.INFO)
+
+    # 执行会产生日志的代码
+    # logger = logging.getLogger(__name__)
+    # logger.info("Test message")
+
+    # 验证日志内容
+    # assert "Test message" in caplog.text
+    pass  # 替换为实际测试代码
+
+
+# ================================
+# 使用 monkeypatch 修改环境
+# ================================
+
+def test_with_monkeypatch(monkeypatch):
+    """使用 monkeypatch 修改环境变量或函数"""
+    # 修改环境变量
+    # monkeypatch.setenv("TEST_MODE", "true")
+
+    # 替换函数
+    # def mock_get_config():
+    #     return {"test": True}
+    # monkeypatch.setattr("module.get_config", mock_get_config)
+
+    # 执行测试
+    # config = get_config()
+    # assert config["test"] is True
+    pass  # 替换为实际测试代码
+
+
+# ================================
+# 使用 tmp_path 和 tmpdir
+# ================================
+
+def test_with_tmp_path(tmp_path):
+    """使用临时路径（pathlib.Path）"""
+    # 创建文件
+    test_file = tmp_path / "test.txt"
+    test_file.write_text("Hello, World!")
+
+    # 验证
+    assert test_file.exists()
+    assert test_file.read_text() == "Hello, World!"
+
+
+def test_with_tmpdir(tmpdir):
+    """使用临时目录（py.path.local）"""
+    # 创建文件
+    test_file = tmpdir.join("test.txt")
+    test_file.write("Hello, World!")
+
+    # 验证
+    assert test_file.check()
+    assert test_file.read() == "Hello, World!"
+
+
+# ================================
+# 测试类 setup/teardown
+# ================================
+
+class TestWithSetup:
+    """测试类使用 setup/teardown"""
+
+    def setup_method(self):
+        """每个测试方法前执行"""
+        self.test_data = {"key": "value"}
+
+    def teardown_method(self):
+        """每个测试方法后执行"""
+        # 清理资源
+        pass
+
+    def test_setup_works(self):
+        """验证 setup 正常工作"""
+        assert self.test_data == {"key": "value"}
+
+    def test_independent(self):
+        """测试之间独立"""
+        assert self.test_data == {"key": "value"}
+
+
+# ================================
+# 组合 Fixtures
+# ================================
+
+@pytest.fixture
+def user():
+    """用户 fixture"""
+    return {"name": "Test User", "id": 1}
+
+
+@pytest.fixture
+def admin_user():
+    """管理员用户 fixture"""
+    return {"name": "Admin", "id": 999, "role": "admin"}
+
+
+def test_with_multiple_fixtures(user, admin_user):
+    """使用多个 fixtures"""
+    assert user["id"] == 1
+    assert admin_user["role"] == "admin"
+    assert user["id"] < admin_user["id"]
+
+
+# ================================
+# 测试说明
+# ================================
+
+"""
+测试命名规范：
+- 测试文件：test_*.py 或 *_test.py
+- 测试类：Test*（无 __init__ 方法）
+- 测试函数：test_*
+
+运行特定测试：
+```bash
+# 运行单个测试文件
+pytest tests/test_example.py -v
+
+# 运行单个测试函数
+pytest tests/test_example.py::test_addition -v
+
+# 运行测试类的所有方法
+pytest tests/test_example.py::TestExample -v
+
+# 运行带标记的测试
+pytest -m unit -v
+pytest -m "not slow" -v
+```
+
+生成覆盖率报告：
+```bash
+pytest --cov=src --cov-report=html
+```
+"""

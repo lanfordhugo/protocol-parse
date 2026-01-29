@@ -1,0 +1,206 @@
+"""
+pytest conftest.py 模板
+共享 fixtures 和测试配置
+将此文件复制到 tests/ 目录并重命名为 conftest.py
+"""
+
+import pytest
+import sys
+from pathlib import Path
+
+
+# ================================
+# 项目路径配置
+# ================================
+
+# 添加 src 目录到 Python 路径
+src_path = Path(__file__).parent.parent / "src"
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
+
+
+# ================================
+# 全局 Fixtures
+# ================================
+
+@pytest.fixture(scope="session")
+def test_data_dir():
+    """返回测试数据目录路径"""
+    data_dir = Path(__file__).parent / "data"
+    data_dir.mkdir(exist_ok=True)
+    return data_dir
+
+
+@pytest.fixture(scope="session")
+def temp_output_dir(tmp_path_factory):
+    """创建临时输出目录（session 级别）"""
+    return tmp_path_factory.mktemp("outputs")
+
+
+@pytest.fixture(scope="function")
+def sample_config():
+    """返回测试配置字典"""
+    return {
+        "debug": True,
+        "log_level": "DEBUG",
+        "max_retries": 3,
+        "timeout": 30
+    }
+
+
+@pytest.fixture(scope="function")
+def mock_logger(caplog):
+    """捕获日志输出的 fixture"""
+    import logging
+    caplog.set_level(logging.DEBUG)
+    return caplog
+
+
+# ================================
+# 数据库相关 Fixtures（示例）
+# ================================
+
+@pytest.fixture(scope="function")
+def temp_db(tmp_path):
+    """
+    创建临时数据库
+    根据实际项目调整数据库类型和初始化逻辑
+    """
+    db_path = tmp_path / "test.db"
+
+    # TODO: 初始化数据库
+    # db = create_database(db_path)
+    # db.initialize()
+
+    yield db_path  # 或 yield db
+
+    # 清理
+    # db.cleanup()
+    if db_path.exists():
+        db_path.unlink()
+
+
+# ================================
+# API 相关 Fixtures（示例）
+# ================================
+
+@pytest.fixture(scope="function")
+def mock_api_client():
+    """Mock API 客户端"""
+    from unittest.mock import MagicMock
+
+    client = MagicMock()
+    client.get.return_value = {"status": "ok", "data": {}}
+    client.post.return_value = {"status": "created"}
+    return client
+
+
+@pytest.fixture(scope="function")
+def mock_requests(monkeypatch):
+    """Mock requests 库"""
+    from unittest.mock import MagicMock
+
+    mock = MagicMock()
+    mock.get.return_value.status_code = 200
+    mock.get.return_value.json.return_value = {"success": True}
+
+    monkeypatch.setattr("requests.get", mock.get)
+    monkeypatch.setattr("requests.post", mock.post)
+    return mock
+
+
+# ================================
+# 文件系统 Fixtures（示例）
+# ================================
+
+@pytest.fixture(scope="function")
+def temp_file(tmp_path):
+    """创建临时文件"""
+    file_path = tmp_path / "test_file.txt"
+    file_path.write_text("Test content")
+    return file_path
+
+
+@pytest.fixture(scope="function")
+def temp_dir(tmp_path):
+    """创建临时目录"""
+    dir_path = tmp_path / "test_dir"
+    dir_path.mkdir()
+    return dir_path
+
+
+# ================================
+# pytest 钩子（Hooks）
+# ================================
+
+def pytest_configure(config):
+    """pytest 配置钩子"""
+    # 注册自定义标记
+    config.addinivalue_line(
+        "markers", "unit: Unit tests (fast, isolated)"
+    )
+    config.addinivalue_line(
+        "markers", "integration: Integration tests (slower)"
+    )
+    config.addinivalue_line(
+        "markers", "slow: Slow running tests"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """修改测试收集结果（例如自动添加标记）"""
+    for item in items:
+        # 为所有测试自动添加标记
+        if "tests/integration" in str(item.fspath):
+            item.add_marker(pytest.mark.integration)
+        elif "tests/unit" in str(item.fspath):
+            item.add_marker(pytest.mark.unit)
+
+
+# ================================
+# 跳过条件示例
+# ================================
+
+def pytest_collection_finish(session):
+    """测试收集完成后的钩子"""
+    # 可以在这里添加条件跳过逻辑
+    pass
+
+
+# ================================
+# 使用说明
+# ================================
+
+"""
+在测试中使用 fixtures:
+
+```python
+def test_example(sample_config, temp_file):
+    # 使用 fixtures
+    assert sample_config["debug"] is True
+    assert temp_file.exists()
+    content = temp_file.read_text()
+    assert content == "Test content"
+```
+
+使用 mock fixtures:
+
+```python
+def test_api_call(mock_api_client):
+    response = mock_api_client.get("/api/data")
+    assert response["status"] == "ok"
+    mock_api_client.get.assert_called_once_with("/api/data")
+```
+
+使用参数化测试:
+
+```python
+@pytest.mark.parametrize("input,expected", [
+    (2, 4),
+    (3, 9),
+    (5, 25),
+])
+def test_square(input, expected, sample_config):
+    assert input ** 2 == expected
+```
+"""

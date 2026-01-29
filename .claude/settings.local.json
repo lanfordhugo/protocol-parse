@@ -60,7 +60,16 @@
       "Bash(fi:*)",
       "Bash(git merge-base:*)",
       "Bash(git stash show:*)",
-      "Bash(git stash drop:*)"
+      "Bash(git stash drop:*)",
+      "Skill(writing-skills)",
+      "Skill(writing-skills:*)",
+      "Bash(dir:*)",
+      "Read(//d/**)",
+      "Bash(git rev-parse:*)",
+      "Bash(flake8:*)",
+      "Bash(pytest:*)",
+      "Bash(black:*)",
+      "Bash(isort:*)"
     ]
   }
 }

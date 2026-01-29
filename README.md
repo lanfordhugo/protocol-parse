@@ -18,8 +18,10 @@ V8Parse是一个专业的多协议通信报文解析工具，采用现代化的Y
 - **🎨 丰富类型系统**: 支持uint、ascii、bcd、cp56time2a、binary_str、bitset等类型
 - **🔄 循环结构**: 支持固定次数和按字段值的循环解析
 - **📊 枚举映射**: 支持数值到名称的自动映射
-- **⏰ 时间筛选**: 支持按时间范围筛选日志数据
+- **⏰ 时间筛选**: 支持按时间范围筛选日志数据（绝对时间和相对时间）
 - **🔍 命令过滤**: 支持按命令码过滤特定类型的报文
+- **📊 日志统计**: 自动分析日志文件的时间范围、大小、行数等统计信息
+- **🆔 终端ID显示**: 解析并显示通信终端的设备ID
 - **📊 结构化输出**: 解析结果以结构化格式输出，便于分析和后续处理
 
 ## 🏗️ 技术架构
@@ -71,6 +73,8 @@ v8parse/
 │   ├── yaml_field_parser.py   # YAML字段解析器
 │   ├── yaml_cmdformat.py      # YAML命令格式管理器
 │   ├── validate_configs.py    # YAML配置验证工具
+│   ├── time_parser.py         # ⏰ 时间范围解析器
+│   ├── log_scanner.py         # 📊 日志文件扫描器
 │   ├── logger_instance.py     # 📊 日志实例管理
 │   └── m_print.py             # 🖨️ 打印工具
 ├── gui/                       # 🖥️ GUI应用模块（模块化架构）
@@ -175,7 +179,175 @@ python main.py --validate
 python main.py -v
 ```
 
-### 4. 日志文件准备
+### 4. 测试
+
+项目采用 pytest 测试框架，拥有完整的单元测试和集成测试套件。
+
+#### 4.1 运行测试
+
+```bash
+# 运行所有测试
+pytest
+
+# 运行特定测试文件
+pytest tests/test_yaml_field_parser.py
+
+# 运行特定测试类
+pytest tests/test_yaml_field_parser.py::TestBasicTypes
+
+# 运行特定测试用例
+pytest tests/test_yaml_field_parser.py::TestBasicTypes::test_uint8_le
+
+# 显示详细输出
+pytest -v
+
+# 显示打印输出
+pytest -s
+
+# 遇到第一个失败就停止
+pytest -x
+
+# 只运行失败的测试
+pytest --lf
+```
+
+#### 4.2 生成覆盖率报告
+
+```bash
+# 终端覆盖率报告
+pytest --cov=src --cov-report=term-missing
+
+# HTML覆盖率报告
+pytest --cov=src --cov-report=html
+
+# 查看HTML覆盖率报告（Windows）
+start htmlcov/index.html
+
+# 查看HTML覆盖率报告（Linux/macOS）
+open htmlcov/index.html
+```
+
+#### 4.3 测试覆盖率
+
+**当前整体测试覆盖率：90%**
+
+核心模块覆盖率：
+
+| 模块 | 语句数 | 覆盖率 | 状态 |
+|------|--------|--------|------|
+| yaml_cmdformat.py | 47 | 100% | ✅ |
+| protocol_data_extractor.py | 61 | 100% | ✅ |
+| logger_instance.py | 2 | 100% | ✅ |
+| validate_configs.py | 132 | 92% | ✅ |
+| yaml_field_parser.py | 314 | 92% | ✅ |
+| yaml_unified_protocol.py | 87 | 92% | ✅ |
+| protocol_output_formatter.py | 109 | 94% | ✅ |
+| time_parser.py | 108 | 94% | ✅ |
+| log_scanner.py | 177 | 92% | ✅ |
+| m_print.py | 291 | 82% | ✅ |
+| protocol_parser.py | 122 | 89% | ✅ |
+| yaml_config.py | 195 | 90% | ✅ |
+
+#### 4.4 测试结构
+
+```
+tests/
+├── conftest.py                          # 共享 fixtures
+├── helpers/                             # 测试辅助工具
+│   └── byte_data_builder.py             # 字节数据构建器
+├── test_yaml_field_parser.py            # 字段解析器测试（172个测试）
+├── test_yaml_cmdformat.py               # 命令格式管理器测试（50个测试）
+├── test_yaml_config.py                  # YAML配置加载器测试
+├── test_protocol_data_extractor.py      # 数据提取器测试（16个测试）
+├── test_protocol_parser.py              # 协议解析器测试（40个测试）
+├── test_protocol_output_formatter.py    # 输出格式化器测试（15个测试）
+├── test_yaml_unified_protocol_integration.py  # 集成测试（16个测试）
+└── test_validate_configs.py             # 配置验证测试
+```
+
+**测试统计**：
+- 总测试用例数：342个
+- 测试文件数：13个
+- 测试代码行数：约6200行
+
+#### 4.5 测试规范
+
+项目遵循以下测试规范：
+
+- **AAA模式**：所有测试用例遵循 Arrange-Act-Assert 模式
+- **中文注释**：测试代码使用中文注释说明测试意图
+- **覆盖率要求**：核心模块覆盖率 >90%，整体覆盖率 >85%
+- **独立性**：每个测试用例独立运行，不依赖其他测试
+- **快速反馈**：单元测试快速运行，集成测试可以较慢
+
+详细的测试指南请参考 [tests/README.md](tests/README.md)
+
+### 5. 高级功能
+
+#### 5.1 时间范围过滤
+
+CLI 版本支持强大的时间过滤功能，可以快速定位特定时间段的日志数据：
+
+```bash
+# 绝对时间过滤
+python main.py v8 --time-start "2024-01-01 00:00:00" --time-end "2024-01-31 23:59:59"
+python main.py v8 --time-start "2024-01-01" --time-end "2024-01-31"
+python main.py v8 --time-start "2024-01-01 00:00"
+
+# 相对时间过滤（最近 N 时间单位）
+python main.py v8 --time-last "1h"      # 最近1小时
+python main.py v8 --time-last "24h"     # 最近24小时
+python main.py v8 --time-last "7d"      # 最近7天
+python main.py v8 --time-last "30d"     # 最近30天
+python main.py v8 --time-last "1h 30m"  # 语法错误：时间last只支持单个单位
+```
+
+**支持的时间单位：**
+- `s` - 秒
+- `m` - 分钟
+- `h` - 小时
+- `d` - 天
+
+#### 5.2 命令过滤
+
+可以通过命令ID过滤特定类型的报文：
+
+```bash
+# 只解析特定命令
+python main.py v8 --include-cmds "2,3,5"
+
+# 排除特定命令
+python main.py v8 --exclude-cmds "1,99"
+
+# 组合过滤（时间 + 命令）
+python main.py v8 --time-last "1h" --include-cmds "2,3"
+```
+
+#### 5.3 日志统计
+
+查看日志文件的统计信息（时间范围、文件大小、总行数等）：
+
+```bash
+# 显示日志统计信息
+python main.py v8 --stats
+
+# 统计信息包括：
+# - 文件路径和大小
+# - 总行数和扫描耗时
+# - 时间范围（最早/最晚时间戳）
+# - 时间跨度（秒/分钟/小时/天）
+```
+
+#### 5.4 自定义日志文件
+
+使用自定义日志文件路径：
+
+```bash
+# 使用自定义日志文件
+python main.py v8 --log-file "/path/to/custom.log"
+```
+
+### 6. 日志文件准备
 
 将需要解析的日志文件复制到 `input_logs/` 目录，并根据协议类型重命名：
 
@@ -188,7 +360,7 @@ python main.py -v
 | 云快充 | `input_logs/yunkuaichong.log` | 文本格式，时间戳 + 十六进制数据 |
 | 北京三友 | `input_logs/beijingSanyou.log` | 文本格式，时间戳 + 十六进制数据 |
 
-### 5. GUI 应用
+### 7. GUI 应用
 
 项目提供统一的 GUI 应用，集成普通解析和 TCP 实时解析功能。
 
@@ -233,9 +405,9 @@ python build_gui.py --clean-only  # 仅清理不打包
 - **TCP 服务端页面**: 启动服务器 → 等待连接 → 实时解析报文
 - **快捷键**: `Ctrl+1` 切换到普通解析，`Ctrl+2` 切换到 TCP 服务端
 
-### 6. TCP日志工具模块(测试组件)
+### 8. TCP 日志工具模块（测试组件）
 
-项目包含一个完整的 TCP 日志收发测试工具,位于 `tcp_log/` 目录,用于模拟设备通信、日志采集和协议测试。
+项目包含一个完整的 TCP 日志收发测试工具，位于 `tcp_log/` 目录，用于模拟设备通信、日志采集和协议测试。
 
 #### 功能特性
 
@@ -541,7 +713,24 @@ Claude Code 会自动加载相关技能和规则,无需手动配置。详见 [`.
 
 ## 📋 更新日志
 
-### v3.5.0 (2025-01-24) 🎨 GUI模块化重构
+### v3.6.0 (2025-01-28) 🚀 CLI 增强功能
+
+- ⏰ **时间过滤**: CLI 版本新增强大的时间范围过滤功能
+  - 支持绝对时间过滤（`--time-start`、`--time-end`）
+  - 支持相对时间过滤（`--time-last`：1h、24h、7d 等）
+  - 智能时间格式化显示
+- 📊 **日志统计**: 新增日志文件统计分析功能（`--stats`）
+  - 文件大小和总行数统计
+  - 自动检测时间范围（最早/最晚时间戳）
+  - 时间跨度智能格式化（秒/分钟/小时/天）
+  - 大文件采样优化（>1MB）
+- 🆔 **终端ID显示**: 解析并显示通信终端的设备ID
+- 🔧 **多编码支持**: 日志扫描器支持 UTF-8/GBK/Latin-1 多编码自动检测
+- ⚡ **性能优化**: 大文件采用采样策略，提升扫描速度
+- 📦 **命令过滤**: 增强 `--include-cmds` 和 `--exclude-cmds` 参数
+- 📖 **自定义日志**: 支持 `--log-file` 参数使用自定义日志文件路径
+
+### v3.5.0 (2025-01-24) 🎨 GUI 模块化重构
 
 - 🎨 **GUI模块化**: 提取共享模块和工作线程到独立目录
 - 📅 **可视化时间选择**: 添加直观的日期时间选择器控件
@@ -584,4 +773,4 @@ Claude Code 会自动加载相关技能和规则,无需手动配置。详见 [`.
 
 **V8Parse** - 现代化的多协议通信报文解析工具 🚀
 
-*最后更新时间: 2025-01-24*
+*最后更新时间: 2025-01-28*

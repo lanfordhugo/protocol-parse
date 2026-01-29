@@ -57,7 +57,10 @@
       "Bash(if:*)",
       "Bash(then rm -rf \"C:/Users/lanford/.claude/skills/pyinstaller-packager\")",
       "Bash(else echo \"用户目录中没有该 skill\")",
-      "Bash(fi:*)"
+      "Bash(fi:*)",
+      "Bash(git merge-base:*)",
+      "Bash(git stash show:*)",
+      "Bash(git stash drop:*)"
     ]
   }
 }

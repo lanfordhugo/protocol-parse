@@ -27,6 +27,7 @@ import os
 import sys
 import threading
 import time
+from abc import ABC
 from enum import Enum
 from typing import Union, Optional
 
@@ -48,14 +49,62 @@ class LogMode(Enum):
     PRINT_AND_SAVE = 3  # 打印并保存
 
 
-class ComLogger:
+class BaseLogger(ABC):
     """
-    通信日志记录器类。
+    日志记录器基类。
+
+    提供公共的文件路径管理、线程安全机制和退出处理逻辑。
     """
 
+    # 公共类变量
     _file_paths = set()
     _exit_handler_registered = False
     _lock = threading.Lock()
+
+    @classmethod
+    def _exit_handler(cls):
+        """
+        程序退出时的处理方法，关闭所有未关闭的文件。
+        """
+        for file_path in list(cls._file_paths):  # 使用列表复制以避免在迭代时修改集合
+            if os.path.exists(file_path):
+                try:
+                    # 尝试打开文件并关闭它
+                    with open(file_path, "a", encoding="utf-8") as f:
+                        f.close()
+                    cls._file_paths.remove(file_path)
+                except Exception as e:
+                    print(f"关闭文件 {file_path} 时发生错误: {e}")
+            else:
+                print(f"文件 {file_path} 不存在，已从列表中移除")
+                cls._file_paths.remove(file_path)
+
+    def __enter__(self):
+        """
+        上下文管理器的进入方法。
+        """
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        上下文管理器的退出方法。关闭文件。
+        """
+        self.close_file()
+        return False
+
+    def __del__(self):
+        """
+        析构方法。确保对象被销毁时关闭文件。
+        """
+        # 子类必须实现close_file方法
+        if hasattr(self, 'close_file'):
+            self.close_file()
+
+
+class ComLogger(BaseLogger):
+    """
+    通信日志记录器类。
+    """
 
     def __new__(
         cls,
@@ -128,24 +177,6 @@ class ComLogger:
         # 标记初始化完成
         self.initialized = True
 
-    @classmethod
-    def _exit_handler(cls):
-        """
-        程序退出时的处理方法，关闭所有未关闭的文件。
-        """
-        for file_path in list(cls._file_paths):  # 使用列表复制以避免在迭代时修改集合
-            if os.path.exists(file_path):
-                try:
-                    # 尝试打开文件并关闭它
-                    with open(file_path, "a", encoding="utf-8") as f:
-                        f.close()
-                    cls._file_paths.remove(file_path)
-                except Exception as e:
-                    print(f"关闭文件 {file_path} 时发生错误: {e}")
-            else:
-                print(f"文件 {file_path} 不存在，已从列表中移除")
-                cls._file_paths.remove(file_path)
-
     def open_com_file(self):
         """
         打开通信日志文件。
@@ -165,24 +196,6 @@ class ComLogger:
         if self.com_file and not self.com_file.closed:
             self.com_file.flush()
             self.com_file.close()
-
-    def __enter__(self):
-        """
-        上下文管理器的进入方法。
-        """
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """
-        上下文管理器的退出方法。关闭文件。
-        """
-        self.close_file()
-
-    def __del__(self):
-        """
-        析构方法。确保对象被销毁时关闭文件。
-        """
-        self.close_file()
 
     def rotate_log_file(self):
         """
@@ -280,14 +293,10 @@ class ComLogger:
             print(error_detail)
 
 
-class MyLogger:
+class MyLogger(BaseLogger):
     """
     日志记录器类。
     """
-
-    _file_paths = set()
-    _exit_handler_registered = False
-    _lock = threading.Lock()
 
     def __new__(
         cls,
@@ -376,24 +385,6 @@ class MyLogger:
         # 标记初始化完成
         self.initialized = True
 
-    @classmethod
-    def _exit_handler(cls):
-        """
-        程序退出时的处理方法，关闭所有未关闭的文件。
-        """
-        for file_path in list(cls._file_paths):  # 使用列表复制以避免在迭代时修改集合
-            if os.path.exists(file_path):
-                try:
-                    # 尝试打开文件并关闭它
-                    with open(file_path, "a", encoding="utf-8") as f:
-                        f.close()
-                    cls._file_paths.remove(file_path)
-                except Exception as e:
-                    print(f"关闭文件 {file_path} 时发生错误: {e}")
-            else:
-                print(f"文件 {file_path} 不存在，已从列表中移除")
-                cls._file_paths.remove(file_path)
-
     def open_file(self):
         """
         打开日志文件。如果文件未打开或已关闭，则重新打开。
@@ -419,28 +410,6 @@ class MyLogger:
         if self.file and not self.file.closed:
             self.file.flush()
             self.file.close()
-
-    def __enter__(self):
-        """
-        上下文管理器的进入方法。
-        :return: 返回 MyLogger 实例自身
-        """
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """
-        上下文管理器的退出方法。关闭文件。
-        :param exc_type: 异常类型
-        :param exc_val: 异常值
-        :param exc_tb: 异常追踪信息
-        """
-        self.close_file()
-
-    def __del__(self):
-        """
-        析构方法。确保对象被销毁时关闭文件。
-        """
-        self.close_file()
 
     def check_and_flush(self):
         """

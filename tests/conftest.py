@@ -152,3 +152,28 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "unit: 单元测试标记")
     config.addinivalue_line("markers", "integration: 集成测试标记")
     config.addinivalue_line("markers", "slow: 慢速测试标记")
+
+
+@pytest.fixture(autouse=True)
+def cleanup_global_state():
+    """每个测试后自动清理全局状态
+
+    这个 fixture 会自动在每个测试执行后清理全局状态,
+    确保测试之间的独立性，支持并行执行。
+    """
+    yield  # 测试执行
+
+    # 清理 ComLogger 全局路径集合
+    try:
+        from src.m_print import ComLogger
+        ComLogger._file_paths.clear()
+    except ImportError:
+        pass  # 如果 ComLogger 不存在，忽略
+
+    # 清理 MyLogger 全局路径集合
+    try:
+        from src.m_print import MyLogger
+        MyLogger._file_paths.clear()
+    except ImportError:
+        pass  # 如果 MyLogger 不存在，忽略
+

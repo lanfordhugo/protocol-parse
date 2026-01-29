@@ -69,7 +69,7 @@ class TimeParser:
                     elif len(groups) == 3:  # YYYY-MM-DD
                         year, month, day = groups
                         return datetime(int(year), int(month), int(day), 0, 0, 0)
-                except ValueError as e:
+                except ValueError:
                     # 日期时间值不合法（如 2024-13-01）
                     return None
 
@@ -243,7 +243,7 @@ def parse_command_ids(cmd_str: str) -> list:
 
         return cmd_ids
 
-    except ValueError as e:
+    except ValueError:
         print(f"错误: 命令ID格式不正确: {cmd_str}")
         print("提示: 命令ID应为逗号分隔的整数，例如：2,3,5")
         return []

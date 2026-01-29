@@ -10,7 +10,7 @@ import pytest
 # 添加src目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from yaml_config import ProtocolConfig, yaml_loader
+from yaml_config import ProtocolConfig, yaml_loader, TypeDef, BitfieldGroup, Group
 
 
 class TestYamlConfig:
@@ -100,3 +100,41 @@ class TestYamlConfig:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+class TestTypeDefValidation:
+    """测试 TypeDef 参数验证"""
+
+    def test_uint_missing_bytes(self):
+        """验证 uint 类型缺少 bytes 参数"""
+        with pytest.raises(ValueError, match=r"Type uint requires 'bytes' parameter"):
+            TypeDef(base="uint", bytes=None)
+
+    def test_int_missing_bytes(self):
+        """验证 int 类型缺少 bytes 参数"""
+        with pytest.raises(ValueError, match=r"Type int requires 'bytes' parameter"):
+            TypeDef(base="int", bytes=None)
+
+    def test_bitset_missing_bits(self):
+        """验证 bitset 类型缺少 bits 参数"""
+        with pytest.raises(ValueError, match=r"Bitset type requires 'bits' parameter"):
+            TypeDef(base="bitset", bits=None)
+
+    def test_bitfield_missing_bytes(self):
+        """验证 bitfield 类型缺少 bytes 参数"""
+        with pytest.raises(ValueError, match=r"Bitfield type requires 'bytes' parameter"):
+            TypeDef(base="bitfield", bytes=None)
+
+
+class TestGroupValidation:
+    """测试 Group 验证逻辑"""
+
+    def test_no_repeat_params(self):
+        """验证无循环条件"""
+        with pytest.raises(ValueError, match=r"Group must specify either repeat_by or repeat_const"):
+            Group(fields=[], repeat_by=None, repeat_const=None)
+
+    def test_both_repeat_params(self):
+        """验证同时设置两个循环条件"""
+        with pytest.raises(ValueError, match=r"Group cannot specify both repeat_by and repeat_const"):
+            Group(fields=[], repeat_by="count", repeat_const=10)
+

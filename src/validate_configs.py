@@ -14,7 +14,6 @@ from yaml_config import ProtocolConfig, yaml_loader
 # 当前文件已在src目录中，无需添加路径
 
 
-
 class ConfigValidator:
     """配置校验器"""
 
@@ -74,8 +73,9 @@ class ConfigValidator:
                     # 检查长度一致性
                     if type_def.bytes and field_item.len != type_def.bytes:
                         self.errors.append(
-                            f"{context}: Field '{field_item.name}' length {field_item.len} "
-                            f"doesn't match type '{field_item.type}' expected length {type_def.bytes}"
+                            f"{context}: Field '{field_item.name}' length "
+                            f"{field_item.len} doesn't match type '{field_item.type}' "
+                            f"expected length {type_def.bytes}"
                         )
 
                     # 检查缩放因子合理性

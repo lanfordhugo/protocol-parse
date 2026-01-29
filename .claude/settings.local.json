@@ -69,7 +69,10 @@
       "Bash(flake8:*)",
       "Bash(pytest:*)",
       "Bash(black:*)",
-      "Bash(isort:*)"
+      "Bash(isort:*)",
+      "Skill(user-code-review)",
+      "Skill(user-code-review:*)",
+      "Bash(git check-ignore:*)"
     ]
   }
 }

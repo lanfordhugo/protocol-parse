@@ -345,3 +345,59 @@ class TestEdgeCases:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+class TestComLoggerExceptionHandling:
+    """测试 ComLogger 异常处理"""
+
+    def test_com_logger_write_failure(self, tmp_path):
+        """测试 ComLogger 文件写入失败"""
+        from unittest.mock import patch, mock_open
+        logger = ComLogger(log_file=99, log_mode=LogMode.SAVE_ONLY, log_dir=str(tmp_path))
+        
+        # 模拟文件写入失败
+        with patch('builtins.open', mock_open()) as mock_file:
+            mock_file.return_value.write.side_effect = IOError("磁盘已满")
+            with patch('builtins.print') as mock_print:
+                try:
+                    logger.com_print(b"", cmd=1, addr=1)
+                except:
+                    pass  # 异常应该被处理
+        
+        logger.close_file()
+
+
+class TestMyLoggerExceptionHandling:
+    """测试 MyLogger 异常处理和资源清理"""
+
+    def test_my_logger_context_manager_with_exception(self, tmp_path):
+        """测试 MyLogger 上下文管理器异常清理"""
+        try:
+            with MyLogger(log_file=97, log_mode=LogMode.SAVE_ONLY, log_dir=str(tmp_path)) as logger:
+                logger.printf("test")
+                raise ValueError("测试异常")
+        except ValueError:
+            pass  # 预期的异常
+        
+        # 验证文件存在（说明上下文正确清理）
+        log_file = tmp_path / "log_97.txt"
+        assert log_file.exists()
+
+    def test_my_logger_print_only_mode(self):
+        """测试 PRINT_ONLY 模式下的属性设置"""
+        logger = MyLogger(log_file=96, log_mode=LogMode.PRINT_ONLY)
+        
+        # 验证所有文件相关属性都为 None
+        assert logger.file_name is None
+        assert logger.file_path is None
+        assert logger.file is None
+
+    def test_my_logger_print_only_open_file(self):
+        """测试 PRINT_ONLY 模式下不打开文件"""
+        logger = MyLogger(log_file=95, log_mode=LogMode.PRINT_ONLY)
+        
+        # 在 PRINT_ONLY 模式下调用 open_file
+        logger.open_file()
+        
+        # 验证文件对象仍为 None
+        assert logger.file is None
+

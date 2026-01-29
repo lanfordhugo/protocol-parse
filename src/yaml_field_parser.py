@@ -3,14 +3,14 @@
 统一处理各种数据类型的解析和转换
 """
 
-import struct
-import logging
-from typing import Dict, Any, List, Union, Optional
-from datetime import datetime
 import binascii
-from decimal import Decimal, ROUND_HALF_UP
+import logging
+import struct
+from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Any, Dict, List, Optional, Union
 
-from src.yaml_config import ProtocolConfig, Field, Group, TypeDef
+from src.yaml_config import Field, Group, ProtocolConfig, TypeDef
 
 logger = logging.getLogger(__name__)
 MISSING_FIELD_PLACEHOLDER = "无数据，未解析"
@@ -18,6 +18,7 @@ MISSING_FIELD_PLACEHOLDER = "无数据，未解析"
 
 class FieldDataMissing(ValueError):
     """字段数据不足异常"""
+
     pass
 
 
@@ -29,31 +30,51 @@ __all__ = [
 
 
 class YamlFieldParser:
-    """基于YAML配置的字段解析器"""
-    
+    """基于YAML配置的字段解析器
+
+    负责根据YAML配置解析各种类型的字段数据，包括：
+    - 基本整数类型（uint8, uint16, uint32, int8, int16, int32等）
+    - 字符串类型（ASCII, UTF-8）
+    - 十六进制显示
+    - BCD编码
+    - 时间类型（cp56time2a, bcd7等）
+    - 位段和位组
+    - 二进制串
+
+    Attributes:
+        config: 协议配置对象
+        type_parsers: 类型解析器映射表
+        _struct_cache: struct格式缓存，用于性能优化
+    """
+
     def __init__(self, config: ProtocolConfig):
+        """初始化字段解析器
+
+        Args:
+            config: 协议配置对象，包含类型定义、枚举定义等信息
+        """
         self.config = config
         self.type_parsers = self._build_type_parsers()
         # 性能优化：预缓存 struct 格式对象
         self._struct_cache = {}  # {(endian, fmt_char, data_len): struct.Struct}
-    
+
     def _build_type_parsers(self) -> Dict[str, callable]:
         """构建类型解析器映射"""
         return {
-            'uint': self._parse_uint,
-            'int': self._parse_int,
-            'str': self._parse_str,
-            'hex': self._parse_hex,
-            'bcd': self._parse_bcd,
-            'time.cp56time2a': self._parse_cp56time2a,
-            'time.bcd7': self._parse_bcd_time7,
-            'time.bcd8': self._parse_bcd_time8,
-            'time.bin7': self._parse_bin_time7,
-            'time.unix': self._parse_unix_time,
-            'time.unix_ms': self._parse_unix_time_ms,
-            'binary_str': self._parse_binary_str,
-            'bitset': self._parse_bitset,
-            'bitfield': self._parse_bitfield,
+            "uint": self._parse_uint,
+            "int": self._parse_int,
+            "str": self._parse_str,
+            "hex": self._parse_hex,
+            "bcd": self._parse_bcd,
+            "time.cp56time2a": self._parse_cp56time2a,
+            "time.bcd7": self._parse_bcd_time7,
+            "time.bcd8": self._parse_bcd_time8,
+            "time.bin7": self._parse_bin_time7,
+            "time.unix": self._parse_unix_time,
+            "time.unix_ms": self._parse_unix_time_ms,
+            "binary_str": self._parse_binary_str,
+            "bitset": self._parse_bitset,
+            "bitfield": self._parse_bitfield,
         }
 
     def _get_struct(self, endian: str, fmt_char: str, data_len: int) -> struct.Struct:
@@ -69,21 +90,22 @@ class YamlFieldParser:
         """
         key = (endian, fmt_char, data_len)
         if key not in self._struct_cache:
-            endian_char = '<' if endian == 'LE' else '>'
+            endian_char = "<" if endian == "LE" else ">"
             self._struct_cache[key] = struct.Struct(f"{endian_char}{fmt_char}")
         return self._struct_cache[key]
 
     # TODO: 支持按配置动态扩展解析器
-    
-    def parse_fields(self, data: bytes, fields: List[Union[Field, Group]], 
-                    context: Dict[str, Any] = None) -> Dict[str, Any]:
+
+    def parse_fields(
+        self, data: bytes, fields: List[Union[Field, Group]], context: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
         """解析字段列表"""
         if context is None:
             context = {}
-        
+
         result = {}
         offset = 0
-        
+
         for field_item in fields:
             if isinstance(field_item, Field):
                 try:
@@ -95,39 +117,43 @@ class YamlFieldParser:
                     offset += field_item.len
                     continue
                 # 检查是否需要展平bitfield结果
-                if hasattr(field_item, 'flatten') and field_item.flatten and isinstance(field_result, dict):
+                if (
+                    hasattr(field_item, "flatten")
+                    and field_item.flatten
+                    and isinstance(field_result, dict)
+                ):
                     result.update(field_result)
                 else:
                     result[field_item.name] = field_result
-                
+
                 # 保存字段值到上下文（如果有ID）
                 if field_item.id:
                     context[field_item.id] = field_result
-                
+
                 offset += consumed
-                
+
             elif isinstance(field_item, Group):
                 # 解析字段组（循环）
                 group_result, consumed = self._parse_group(data[offset:], field_item, context)
                 result.update(group_result)
                 offset += consumed
-        
+
         return result
-    
+
     def _parse_field(self, data: bytes, field: Field, context: Dict[str, Any]) -> tuple:
         """解析单个字段"""
         if len(data) < field.len:
             raise FieldDataMissing(
                 f"Not enough data for field '{field.name}', need {field.len} bytes, got {len(data)}"
             )
-        
+
         # 获取类型定义
         if field.type not in self.config.types:
             raise ValueError(f"Unknown type '{field.type}' for field '{field.name}'")
-        
+
         type_def = self.config.types[field.type]
-        field_data = data[:field.len]
-        
+        field_data = data[: field.len]
+
         # 解析基础值
         try:
             raw_value = self._parse_by_type(field_data, type_def, field)
@@ -140,12 +166,12 @@ class YamlFieldParser:
         except Exception as e:
             logger.warning(f"Failed to parse field '{field.name}': {e}")
             return field_data.hex().upper(), field.len
-    
+
     def _parse_group(self, data: bytes, group: Group, context: Dict[str, Any]) -> tuple:
         """解析字段组（循环）"""
         result = {}
         offset = 0
-        
+
         # 确定循环次数
         if group.repeat_by:
             if group.repeat_by not in context:
@@ -155,17 +181,17 @@ class YamlFieldParser:
             repeat_count = group.repeat_const
         else:
             raise ValueError("Group must specify either repeat_by or repeat_const")
-        
+
         # 循环解析
         group_items = []
         for i in range(repeat_count):
             item_result = self.parse_fields(data[offset:], group.fields, context.copy())
             group_items.append(item_result)
-            
+
             # 计算这一轮消耗的字节数
             item_size = sum(self._calculate_field_size(f, context) for f in group.fields)
             offset += item_size
-        
+
         # 生成组结果键名（基于第一个字段名）
         if group.fields:
             first_field_name = self._get_first_field_name(group.fields[0])
@@ -178,9 +204,9 @@ class YamlFieldParser:
             else:
                 # 多个项目，创建数组
                 result[f"{first_field_name}_list"] = group_items
-        
+
         return result, offset
-    
+
     def _get_first_field_name(self, field_item: Union[Field, Group]) -> str:
         """获取第一个字段的名称"""
         if isinstance(field_item, Field):
@@ -189,80 +215,84 @@ class YamlFieldParser:
             return self._get_first_field_name(field_item.fields[0])
         else:
             return "unknown"
-    
-    def _calculate_field_size(self, field_item: Union[Field, Group], context: Dict[str, Any]) -> int:
+
+    def _calculate_field_size(
+        self, field_item: Union[Field, Group], context: Dict[str, Any]
+    ) -> int:
         """计算字段或组的大小"""
         if isinstance(field_item, Field):
             return field_item.len
         elif isinstance(field_item, Group):
             # 计算组内所有字段的大小
             item_size = sum(self._calculate_field_size(f, context) for f in field_item.fields)
-            
+
             # 乘以循环次数
             if field_item.repeat_by:
                 repeat_count = context.get(field_item.repeat_by, 1)
             else:
                 repeat_count = field_item.repeat_const or 1
-            
+
             return item_size * repeat_count
         else:
             return 0
-    
+
     def _parse_by_type(self, data: bytes, type_def: TypeDef, field: Field) -> Any:
         """根据类型定义解析数据"""
         parser = self.type_parsers.get(type_def.base)
         if not parser:
             raise ValueError(f"Unsupported type base: {type_def.base}")
-        
+
         return parser(data, type_def, field)
-    
+
     def _parse_uint(self, data: bytes, type_def: TypeDef, field: Field) -> int:
         """解析无符号整数"""
         endian = field.endian or self.config.meta.default_endian
 
         # 使用缓存的 struct 对象（性能优化）
         if len(data) == 1:
-            return self._get_struct(endian, 'B', 1).unpack(data)[0]
+            return self._get_struct(endian, "B", 1).unpack(data)[0]
         elif len(data) == 2:
-            return self._get_struct(endian, 'H', 2).unpack(data)[0]
+            return self._get_struct(endian, "H", 2).unpack(data)[0]
         elif len(data) == 4:
-            return self._get_struct(endian, 'L', 4).unpack(data)[0]
+            return self._get_struct(endian, "L", 4).unpack(data)[0]
         elif len(data) == 8:
-            return self._get_struct(endian, 'Q', 8).unpack(data)[0]
+            return self._get_struct(endian, "Q", 8).unpack(data)[0]
         else:
             raise ValueError(f"Unsupported uint size: {len(data)} bytes")
-    
+
     def _parse_int(self, data: bytes, type_def: TypeDef, field: Field) -> int:
         """解析有符号整数"""
         endian = field.endian or self.config.meta.default_endian
 
         # 使用缓存的 struct 对象（性能优化）
         if len(data) == 1:
-            return self._get_struct(endian, 'b', 1).unpack(data)[0]
+            return self._get_struct(endian, "b", 1).unpack(data)[0]
         elif len(data) == 2:
-            return self._get_struct(endian, 'h', 2).unpack(data)[0]
+            return self._get_struct(endian, "h", 2).unpack(data)[0]
         elif len(data) == 4:
-            return self._get_struct(endian, 'l', 4).unpack(data)[0]
+            return self._get_struct(endian, "l", 4).unpack(data)[0]
         elif len(data) == 8:
-            return self._get_struct(endian, 'q', 8).unpack(data)[0]
+            return self._get_struct(endian, "q", 8).unpack(data)[0]
         else:
             raise ValueError(f"Unsupported int size: {len(data)} bytes")
-    
+
     def _parse_str(self, data: bytes, type_def: TypeDef, field: Field) -> str:
         """解析字符串"""
-        encoding = type_def.encoding or 'ASCII'
+        encoding = type_def.encoding or "ASCII"
         try:
             # 移除末尾的空字节
-            clean_data = data.rstrip(b'\x00')
+            clean_data = data.rstrip(b"\x00")
             return clean_data.decode(encoding)
         except UnicodeDecodeError:
-            logger.warning(f"Failed to decode string field '{field.name}' with {encoding}, using hex")
-            return binascii.hexlify(data).decode('ascii')
-    
+            logger.warning(
+                f"Failed to decode string field '{field.name}' with {encoding}, using hex"
+            )
+            return binascii.hexlify(data).decode("ascii")
+
     def _parse_hex(self, data: bytes, type_def: TypeDef, field: Field) -> str:
         """解析十六进制字符串"""
-        return binascii.hexlify(data).decode('ascii').upper()
-    
+        return binascii.hexlify(data).decode("ascii").upper()
+
     def _parse_bcd(self, data: bytes, type_def: TypeDef, field: Field) -> str:
         """解析BCD码"""
         result = ""
@@ -274,41 +304,41 @@ class YamlFieldParser:
             if low <= 9:
                 result += str(low)
         return result
-    
+
     def _parse_cp56time2a(self, data: bytes, type_def: TypeDef, field: Field) -> str:
         """解析CP56Time2a时间格式"""
         if len(data) != 7:
             raise ValueError("CP56Time2a requires exactly 7 bytes")
-        
+
         try:
             # CP56Time2a格式：毫秒(2) + 分钟(1) + 小时(1) + 日(1) + 月(1) + 年(1)
-            ms = struct.unpack('<H', data[0:2])[0]
+            ms = struct.unpack("<H", data[0:2])[0]
             minute = data[2] & 0x3F  # 低6位
-            hour = data[3] & 0x1F   # 低5位
-            day = data[4] & 0x1F    # 低5位
+            hour = data[3] & 0x1F  # 低5位
+            day = data[4] & 0x1F  # 低5位
             month = data[5] & 0x0F  # 低4位
-            year = data[6] & 0x7F   # 低7位 (相对于2000年)
-            
+            year = data[6] & 0x7F  # 低7位 (相对于2000年)
+
             # 构造时间
             actual_year = 2000 + year
             second = ms // 1000
             millisecond = ms % 1000
-            
+
             dt = datetime(actual_year, month, day, hour, minute, second, millisecond * 1000)
             return dt.isoformat()
-            
+
         except (ValueError, OverflowError) as e:
             logger.warning(f"Failed to parse CP56Time2a: {e}, returning hex")
-            return binascii.hexlify(data).decode('ascii').upper()
-    
+            return binascii.hexlify(data).decode("ascii").upper()
+
     def _parse_bcd_time7(self, data: bytes, type_def: TypeDef, field: Field) -> str:
         """解析7字节BCD时间格式 (YYYYMMDDhhmmss，最后1字节为空)
-        
+
         格式: 年(2BCD) + 月(1BCD) + 日(1BCD) + 时(1BCD) + 分(1BCD) + 秒(1BCD)
         """
         if len(data) < 7:
             raise ValueError(f"BCD时间需要至少7字节，实际{len(data)}字节")
-        
+
         try:
             # 解析BCD码
             year = self._bcd_to_int(data[0:2])
@@ -317,93 +347,93 @@ class YamlFieldParser:
             hour = self._bcd_byte_to_int(data[4])
             minute = self._bcd_byte_to_int(data[5])
             second = self._bcd_byte_to_int(data[6])
-            
+
             dt = datetime(year, month, day, hour, minute, second)
-            return dt.strftime('%Y-%m-%d %H:%M:%S')
-            
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+
         except (ValueError, OverflowError) as e:
             logger.warning(f"解析BCD时间失败: {e}，返回原始hex")
-            return binascii.hexlify(data).decode('ascii').upper()
-    
+            return binascii.hexlify(data).decode("ascii").upper()
+
     def _parse_bcd_time8(self, data: bytes, type_def: TypeDef, field: Field) -> str:
         """解析8字节BCD时间格式 (YYYYMMDDhhmmss + 1字节空)
-        
+
         格式: 年(2BCD) + 月(1BCD) + 日(1BCD) + 时(1BCD) + 分(1BCD) + 秒(1BCD) + 空(1字节)
         """
         if len(data) < 8:
             raise ValueError(f"BCD时间需要8字节，实际{len(data)}字节")
-        
+
         # 忽略最后1字节空数据，复用7字节解析
         return self._parse_bcd_time7(data[:7], type_def, field)
-    
+
     def _parse_unix_time(self, data: bytes, type_def: TypeDef, field: Field) -> str:
         """解析Unix时间戳（秒）"""
         if len(data) != 4:
             raise ValueError(f"Unix时间戳需要4字节，实际{len(data)}字节")
-        
+
         try:
             endian = field.endian or self.config.meta.default_endian
-            fmt = '<L' if endian == 'LE' else '>L'
+            fmt = "<L" if endian == "LE" else ">L"
             timestamp = struct.unpack(fmt, data)[0]
-            
+
             if timestamp == 0:
                 return "1970-01-01 00:00:00"
-            
+
             dt = datetime.fromtimestamp(timestamp)
-            return dt.strftime('%Y-%m-%d %H:%M:%S')
-            
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+
         except (ValueError, OverflowError, OSError) as e:
             logger.warning(f"解析Unix时间戳失败: {e}，返回原始值")
-            return str(struct.unpack('<L', data)[0])
-    
+            return str(struct.unpack("<L", data)[0])
+
     def _parse_unix_time_ms(self, data: bytes, type_def: TypeDef, field: Field) -> str:
         """解析Unix时间戳（毫秒）"""
         if len(data) != 8:
             raise ValueError(f"Unix毫秒时间戳需要8字节，实际{len(data)}字节")
-        
+
         try:
             endian = field.endian or self.config.meta.default_endian
-            fmt = '<Q' if endian == 'LE' else '>Q'
+            fmt = "<Q" if endian == "LE" else ">Q"
             timestamp_ms = struct.unpack(fmt, data)[0]
-            
+
             if timestamp_ms == 0:
                 return "1970-01-01 00:00:00.000"
-            
+
             dt = datetime.fromtimestamp(timestamp_ms / 1000.0)
-            return dt.strftime('%Y-%m-%d %H:%M:%S.') + f"{timestamp_ms % 1000:03d}"
-            
+            return dt.strftime("%Y-%m-%d %H:%M:%S.") + f"{timestamp_ms % 1000:03d}"
+
         except (ValueError, OverflowError, OSError) as e:
             logger.warning(f"解析Unix毫秒时间戳失败: {e}，返回原始值")
-            return str(struct.unpack('<Q', data)[0])
-    
+            return str(struct.unpack("<Q", data)[0])
+
     def _parse_bin_time7(self, data: bytes, type_def: TypeDef, field: Field) -> str:
         """解析7字节BIN时间格式（协议附录D格式）
-        
+
         格式: 世纪(1) + 年(1) + 月(1) + 日(1) + 时(1) + 分(1) + 秒(1)
         例如: 0x14YYMMDDHHMMSS，其中0x14是世纪（20，表示2000-2099年）
         """
         if len(data) != 7:
             raise ValueError(f"BIN时间需要7字节，实际{len(data)}字节")
-        
+
         try:
             century = data[0]  # 世纪（20表示2000-2099年）
-            year = data[1]     # 年（0-99，相对于世纪）
-            month = data[2]    # 月（1-12）
-            day = data[3]       # 日（1-31）
-            hour = data[4]      # 时（0-23）
-            minute = data[5]    # 分（0-59）
-            second = data[6]    # 秒（0-59）
-            
+            year = data[1]  # 年（0-99，相对于世纪）
+            month = data[2]  # 月（1-12）
+            day = data[3]  # 日（1-31）
+            hour = data[4]  # 时（0-23）
+            minute = data[5]  # 分（0-59）
+            second = data[6]  # 秒（0-59）
+
             # 计算实际年份：世纪 * 100 + 年
             actual_year = century * 100 + year
-            
+
             dt = datetime(actual_year, month, day, hour, minute, second)
-            return dt.strftime('%Y-%m-%d %H:%M:%S')
-            
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+
         except (ValueError, OverflowError) as e:
             logger.warning(f"解析BIN时间失败: {e}，返回原始hex")
-            return binascii.hexlify(data).decode('ascii').upper()
-    
+            return binascii.hexlify(data).decode("ascii").upper()
+
     def _bcd_byte_to_int(self, byte: int) -> int:
         """单字节BCD转整数"""
         high = (byte >> 4) & 0x0F
@@ -411,59 +441,59 @@ class YamlFieldParser:
         if high > 9 or low > 9:
             raise ValueError(f"无效BCD字节: 0x{byte:02X}")
         return high * 10 + low
-    
+
     def _bcd_to_int(self, data: bytes) -> int:
         """多字节BCD转整数（大端序）"""
         result = 0
         for byte in data:
             result = result * 100 + self._bcd_byte_to_int(byte)
         return result
-    
+
     def _parse_binary_str(self, data: bytes, type_def: TypeDef, field: Field) -> str:
         """解析二进制字符串（作为十六进制显示）"""
-        return binascii.hexlify(data).decode('ascii').upper()
-    
+        return binascii.hexlify(data).decode("ascii").upper()
+
     def _parse_bitset(self, data: bytes, type_def: TypeDef, field: Field) -> Dict[str, bool]:
         """解析位段"""
         if not type_def.bits:
-            return {"raw": binascii.hexlify(data).decode('ascii').upper()}
-        
+            return {"raw": binascii.hexlify(data).decode("ascii").upper()}
+
         # 将字节转换为整数
         if len(data) == 1:
-            value = struct.unpack('B', data)[0]
+            value = struct.unpack("B", data)[0]
         elif len(data) == 2:
             endian = field.endian or self.config.meta.default_endian
-            fmt = '<H' if endian == 'LE' else '>H'
+            fmt = "<H" if endian == "LE" else ">H"
             value = struct.unpack(fmt, data)[0]
         else:
             # 对于更大的位段，当作十六进制处理
-            return {"raw": binascii.hexlify(data).decode('ascii').upper()}
-        
+            return {"raw": binascii.hexlify(data).decode("ascii").upper()}
+
         result = {}
         for i, bit_def in enumerate(type_def.bits):
             if i < len(data) * 8:  # 确保不超出数据范围
                 bit_value = (value >> i) & 1
-                result[bit_def['name']] = bool(bit_value)
-        
+                result[bit_def["name"]] = bool(bit_value)
+
         return result
-    
+
     def _parse_bitfield(self, data: bytes, type_def: TypeDef, field: Field) -> Dict[str, Any]:
         """解析位段字段"""
         # 优先使用字段级位段定义，回退到类型级定义（向后兼容）
         groups = field.get_bitfield_groups() if field.bit_groups else type_def.get_bitfield_groups()
-        
+
         if not groups:
-            return {"raw": binascii.hexlify(data).decode('ascii').upper()}
-        
+            return {"raw": binascii.hexlify(data).decode("ascii").upper()}
+
         # 将字节数据转换为整数（支持多字节）
         endian = field.endian or self.config.meta.default_endian
         value = self._bytes_to_int(data, endian)
-        
+
         result = {}
-        
+
         # 获取位序信息（优先从type_def，默认lsb0）
-        bit_order = getattr(type_def, 'order', 'lsb0')
-        
+        bit_order = getattr(type_def, "order", "lsb0")
+
         for group in groups:
             # 提取位段值
             if bit_order == "msb0":
@@ -473,11 +503,11 @@ class YamlFieldParser:
             else:
                 # LSB0: 最低位为第0位 (默认)
                 actual_start = group.start_bit
-            
+
             # 创建掩码并提取值
             mask = (1 << group.width) - 1
             group_value = (value >> actual_start) & mask
-            
+
             # 应用枚举映射
             if group.enum and group.enum in self.config.enums:
                 enum_def = self.config.enums[group.enum]
@@ -487,12 +517,12 @@ class YamlFieldParser:
                     result[group.name] = f"Unknown({group_value})"
             else:
                 result[group.name] = group_value
-        
+
         return result
-    
+
     def _bytes_to_int(self, data: bytes, endian: str) -> int:
         """将字节数据转换为整数"""
-        if endian == 'LE':
+        if endian == "LE":
             # 小端序
             value = 0
             for i, byte in enumerate(data):
@@ -503,21 +533,21 @@ class YamlFieldParser:
             for byte in data:
                 value = (value << 8) | byte
         return value
-    
+
     def _get_decimal_places(self, scale: float) -> int:
         """根据缩放因子确定小数位数"""
         if scale == 0:
             return 0
         # 将 scale 转换为字符串，计算小数位数
-        scale_str = f"{scale:.10f}".rstrip('0').rstrip('.')
-        if '.' in scale_str:
-            return len(scale_str.split('.')[1])
+        scale_str = f"{scale:.10f}".rstrip("0").rstrip(".")
+        if "." in scale_str:
+            return len(scale_str.split(".")[1])
         return 0
-    
+
     def _post_process_value(self, raw_value: Any, field: Field) -> Any:
         """后处理字段值（缩放、枚举映射等）"""
         processed_value = raw_value
-        
+
         # 应用缩放因子，使用 Decimal 进行精确计算
         if field.scale is not None and isinstance(raw_value, (int, float)):
             # 使用 Decimal 进行精确计算
@@ -525,18 +555,14 @@ class YamlFieldParser:
             # 根据 scale 确定小数位数并格式化
             decimal_places = self._get_decimal_places(field.scale)
             # 四舍五入到指定小数位数
-            processed_value = float(decimal_value.quantize(
-                Decimal(10) ** -decimal_places, 
-                rounding=ROUND_HALF_UP
-            ))
-        
+            processed_value = float(
+                decimal_value.quantize(Decimal(10) ** -decimal_places, rounding=ROUND_HALF_UP)
+            )
+
         # 应用枚举映射
         if field.enum and field.enum in self.config.enums:
             enum_def = self.config.enums[field.enum]
             if raw_value in enum_def.values:
-                processed_value = {
-                    'value': raw_value,
-                    'name': enum_def.values[raw_value]
-                }
-        
+                processed_value = {"value": raw_value, "name": enum_def.values[raw_value]}
+
         return processed_value

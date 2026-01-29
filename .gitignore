@@ -47,3 +47,5 @@ log_1.txt
 memory-bank
 *.log
 
+# Git worktrees
+.worktrees/

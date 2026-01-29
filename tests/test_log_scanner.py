@@ -7,10 +7,9 @@
 4. 多编码支持
 """
 
-import pytest
-import tempfile
-from pathlib import Path
 from datetime import datetime
+
+import pytest
 
 from src.log_scanner import LogScanner, LogScanResult, scan_log_file
 
@@ -21,8 +20,7 @@ class TestLogScanResult:
     def test_time_span_calculation(self):
         """测试时间跨度计算"""
         result = LogScanResult(
-            min_time=datetime(2024, 1, 1, 0, 0, 0),
-            max_time=datetime(2024, 1, 1, 1, 0, 0)
+            min_time=datetime(2024, 1, 1, 0, 0, 0), max_time=datetime(2024, 1, 1, 1, 0, 0)
         )
         assert result.time_span_seconds == 3600.0
         assert result.time_span_human == "1.0小时"
@@ -31,29 +29,25 @@ class TestLogScanResult:
         """测试人类可读时间格式"""
         # 秒
         result = LogScanResult(
-            min_time=datetime(2024, 1, 1, 0, 0, 0),
-            max_time=datetime(2024, 1, 1, 0, 0, 30)
+            min_time=datetime(2024, 1, 1, 0, 0, 0), max_time=datetime(2024, 1, 1, 0, 0, 30)
         )
         assert result.time_span_human == "30.0秒"
 
         # 分钟
         result = LogScanResult(
-            min_time=datetime(2024, 1, 1, 0, 0, 0),
-            max_time=datetime(2024, 1, 1, 0, 30, 0)
+            min_time=datetime(2024, 1, 1, 0, 0, 0), max_time=datetime(2024, 1, 1, 0, 30, 0)
         )
         assert result.time_span_human == "30.0分钟"
 
         # 小时
         result = LogScanResult(
-            min_time=datetime(2024, 1, 1, 0, 0, 0),
-            max_time=datetime(2024, 1, 1, 2, 30, 0)
+            min_time=datetime(2024, 1, 1, 0, 0, 0), max_time=datetime(2024, 1, 1, 2, 30, 0)
         )
         assert "2.5小时" in result.time_span_human
 
         # 天
         result = LogScanResult(
-            min_time=datetime(2024, 1, 1, 0, 0, 0),
-            max_time=datetime(2024, 1, 3, 0, 0, 0)
+            min_time=datetime(2024, 1, 1, 0, 0, 0), max_time=datetime(2024, 1, 3, 0, 0, 0)
         )
         assert result.time_span_human == "2.0天"
 
@@ -75,13 +69,14 @@ class TestLogScanResult:
         result = LogScanResult(file_size=1024 * 1024 * 1024)
         assert result.file_size_human == "1.0GB"
 
+        # TB
+        result = LogScanResult(file_size=1024 * 1024 * 1024 * 1024)
+        assert result.file_size_human == "1.0TB"
+
     def test_has_valid_range(self):
         """测试有效时间范围判断"""
         # 有效范围
-        result = LogScanResult(
-            min_time=datetime(2024, 1, 1),
-            max_time=datetime(2024, 1, 2)
-        )
+        result = LogScanResult(min_time=datetime(2024, 1, 1), max_time=datetime(2024, 1, 2))
         assert result.has_valid_range is True
 
         # 无效范围（无时间）
@@ -92,69 +87,73 @@ class TestLogScanResult:
         result = LogScanResult(min_time=datetime(2024, 1, 1))
         assert result.has_valid_range is False
 
+    def test_time_span_seconds_without_valid_range(self):
+        """测试无有效时间范围时的时间跨度计算"""
+        # 无有效范围
+        result = LogScanResult()
+        assert result.time_span_seconds == 0.0
+
+        # 只有开始时间
+        result = LogScanResult(min_time=datetime(2024, 1, 1))
+        assert result.time_span_seconds == 0.0
+
 
 class TestLogScanner:
     """测试日志扫描器"""
 
-    def test_scan_small_file(self):
+    def test_scan_small_file(self, tmp_path):
         """测试扫描小文件（全量扫描）"""
-        # 创建临时日志文件
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as f:
-            f.write("[2024-01-01 00:00:00.000] Test line 1\n")
-            f.write("[2024-01-01 00:00:01.000] Test line 2\n")
-            f.write("[2024-01-01 00:00:02.000] Test line 3\n")
-            temp_path = f.name
+        # 使用 tmp_path fixture 创建临时日志文件
+        log_file = tmp_path / "test.log"
+        log_file.write_text(
+            "[2024-01-01 00:00:00.000] Test line 1\n"
+            "[2024-01-01 00:00:01.000] Test line 2\n"
+            "[2024-01-01 00:00:02.000] Test line 3\n"
+        )
 
-        try:
-            scanner = LogScanner(temp_path)
-            result = scanner.scan()
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
 
-            assert result.min_time is not None
-            assert result.max_time is not None
-            assert result.total_lines == 3
-            assert result.scanned_lines == 3
-            assert result.time_span_seconds == 2.0
-        finally:
-            Path(temp_path).unlink()
+        assert result.min_time is not None
+        assert result.max_time is not None
+        assert result.total_lines == 3
+        assert result.scanned_lines == 3
+        assert result.time_span_seconds == 2.0
 
-    def test_scan_file_with_different_timestamp_formats(self):
+    def test_scan_file_with_different_timestamp_formats(self, tmp_path):
         """测试扫描包含不同时间戳格式的文件"""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as f:
+        log_file = tmp_path / "test.log"
+        log_file.write_text(
             # 格式1: 点分隔毫秒
-            f.write("[2024-01-01 00:00:00.000] Format 1\n")
+            "[2024-01-01 00:00:00.000] Format 1\n"
             # 格式2: 冒号分隔毫秒
-            f.write("[I 2024-01-01 00:00:01:000] Format 2\n")
+            "[I 2024-01-01 00:00:01:000] Format 2\n"
             # 格式3: 无毫秒（带毫秒占位符）
-            f.write("[2024-01-01 00:00:02.000] Format 3\n")
-            temp_path = f.name
+            "[2024-01-01 00:00:02.000] Format 3\n"
+        )
 
-        try:
-            scanner = LogScanner(temp_path)
-            result = scanner.scan()
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
 
-            assert result.has_valid_range is True
-            assert result.min_time == datetime(2024, 1, 1, 0, 0, 0, 0)
-            # 由于正则限制，只能匹配带毫秒的格式
-            assert result.max_time >= datetime(2024, 1, 1, 0, 0, 1, 0)
-        finally:
-            Path(temp_path).unlink()
+        assert result.has_valid_range is True
+        assert result.min_time == datetime(2024, 1, 1, 0, 0, 0, 0)
+        # 由于正则限制，只能匹配带毫秒的格式
+        assert result.max_time >= datetime(2024, 1, 1, 0, 0, 1, 0)
 
-    def test_scan_file_without_timestamps(self):
+    def test_scan_file_without_timestamps(self, tmp_path):
         """测试扫描没有时间戳的文件"""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as f:
-            f.write("Line without timestamp\n")
-            f.write("Another line without timestamp\n")
-            temp_path = f.name
+        log_file = tmp_path / "test.log"
+        log_file.write_text(
+            "Line without timestamp\n"
+            "Another line without timestamp\n"
+        )
 
-        try:
-            scanner = LogScanner(temp_path)
-            result = scanner.scan()
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
 
-            assert result.has_valid_range is False
-            assert result.min_time is None
-            assert result.max_time is None
-        finally:
-            Path(temp_path).unlink()
+        assert result.has_valid_range is False
+        assert result.min_time is None
+        assert result.max_time is None
 
     def test_scan_nonexistent_file(self):
         """测试扫描不存在的文件"""
@@ -162,20 +161,17 @@ class TestLogScanner:
         with pytest.raises(FileNotFoundError):
             scanner.scan()
 
-    def test_scan_empty_file(self):
+    def test_scan_empty_file(self, tmp_path):
         """测试扫描空文件"""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as f:
-            temp_path = f.name
+        log_file = tmp_path / "test.log"
+        log_file.write_text("")
 
-        try:
-            scanner = LogScanner(temp_path)
-            result = scanner.scan()
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
 
-            assert result.total_lines == 0
-            assert result.scanned_lines == 0
-            assert result.has_valid_range is False
-        finally:
-            Path(temp_path).unlink()
+        assert result.total_lines == 0
+        assert result.scanned_lines == 0
+        assert result.has_valid_range is False
 
     def test_timestamp_parsing_methods(self):
         """测试时间戳解析方法"""
@@ -202,82 +198,127 @@ class TestLogScanner:
 class TestConvenienceFunction:
     """测试便捷函数"""
 
-    def test_scan_log_file_function(self):
+    def test_scan_log_file_function(self, tmp_path):
         """测试 scan_log_file 便捷函数"""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as f:
-            f.write("[2024-01-01 00:00:00.000] Test\n")
-            f.write("[2024-01-01 00:00:01.000] Test\n")
-            temp_path = f.name
+        log_file = tmp_path / "test.log"
+        log_file.write_text(
+            "[2024-01-01 00:00:00.000] Test\n"
+            "[2024-01-01 00:00:01.000] Test\n"
+        )
 
-        try:
-            result = scan_log_file(temp_path)
+        result = scan_log_file(str(log_file))
 
-            assert isinstance(result, LogScanResult)
-            assert result.has_valid_range is True
-            assert result.total_lines == 2
-        finally:
-            Path(temp_path).unlink()
+        assert isinstance(result, LogScanResult)
+        assert result.has_valid_range is True
+        assert result.total_lines == 2
 
 
 class TestEdgeCases:
     """测试边界情况"""
 
-    def test_scan_large_file_performance(self):
+    def test_scan_large_file_performance(self, tmp_path):
         """测试大文件扫描性能（使用采样）"""
         # 创建一个大于 1MB 的文件
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as f:
-            # 写入足够多的行以超过 1MB
-            for i in range(20000):
-                f.write(f"[2024-01-01 00:{i:02d}:{i:02d}.000] Test line {i}\n")
-            temp_path = f.name
+        log_file = tmp_path / "test.log"
+        # 写入足够多的行以超过 1MB
+        lines = [f"[2024-01-01 00:{i:02d}:{i:02d}.000] Test line {i}\n" for i in range(20000)]
+        log_file.write_text("".join(lines))
 
-        try:
-            scanner = LogScanner(temp_path)
-            result = scanner.scan()
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
 
-            # 文件大小约 946KB，小于 1MB，所以全量扫描
-            # 但我们仍然验证性能
-            assert result.has_valid_range is True
-            assert result.scan_duration < 5.0  # 应该在 5 秒内完成
-        finally:
-            Path(temp_path).unlink()
+        # 文件大小约 946KB，小于 1MB，所以全量扫描
+        # 但我们仍然验证性能
+        assert result.has_valid_range is True
+        assert result.scan_duration < 5.0  # 应该在 5 秒内完成
 
-    def test_scan_with_mixed_encodings(self):
+    def test_scan_with_mixed_encodings(self, tmp_path):
         """测试不同编码的文件"""
         # UTF-8 编码
-        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False, suffix='.log') as f:
-            f.write("[2024-01-01 00:00:00.000] 测试中文\n")
-            f.write("[2024-01-01 00:00:01.000] Test English\n")
-            temp_path = f.name
+        log_file = tmp_path / "test.log"
+        log_file.write_text(
+            "[2024-01-01 00:00:00.000] 测试中文\n"
+            "[2024-01-01 00:00:01.000] Test English\n",
+            encoding="utf-8",
+        )
 
-        try:
-            scanner = LogScanner(temp_path)
-            result = scanner.scan()
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
 
-            assert result.has_valid_range is True
-            assert result.total_lines == 2
-        finally:
-            Path(temp_path).unlink()
+        assert result.has_valid_range is True
+        assert result.total_lines == 2
 
-    def test_scan_file_with_corrupted_lines(self):
+    def test_scan_file_with_corrupted_lines(self, tmp_path):
         """测试包含损坏行的文件"""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log') as f:
-            f.write("[2024-01-01 00:00:00.000] Valid line\n")
-            f.write("Invalid timestamp line\n")
-            f.write("[Invalid timestamp format]\n")
-            f.write("[2024-01-01 00:00:01.000] Another valid line\n")
-            temp_path = f.name
+        log_file = tmp_path / "test.log"
+        log_file.write_text(
+            "[2024-01-01 00:00:00.000] Valid line\n"
+            "Invalid timestamp line\n"
+            "[Invalid timestamp format]\n"
+            "[2024-01-01 00:00:01.000] Another valid line\n"
+        )
 
-        try:
-            scanner = LogScanner(temp_path)
-            result = scanner.scan()
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
 
-            # 应该只解析有效的时间戳
-            assert result.has_valid_range is True
-            assert result.min_time == datetime(2024, 1, 1, 0, 0, 0, 0)
-            assert result.max_time == datetime(2024, 1, 1, 0, 0, 1, 0)
-        finally:
-            Path(temp_path).unlink()
+        # 应该只解析有效的时间戳
+        assert result.has_valid_range is True
+        assert result.min_time == datetime(2024, 1, 1, 0, 0, 0, 0)
+        assert result.max_time == datetime(2024, 1, 1, 0, 0, 1, 0)
+
+    def test_scan_medium_file_with_sampling(self, tmp_path):
+        """测试中等大小文件的采样扫描（1-10MB）"""
+        # 创建一个大于 1MB 的文件以触发采样扫描
+        log_file = tmp_path / "test.log"
+        # 写入足够多的行以超过 1MB
+        lines = [f"[2024-01-01 00:{i % 60:02d}:{i % 60:02d}.000] Test line {i}\n" for i in range(25000)]
+        log_file.write_text("".join(lines), encoding="utf-8")
+
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
+
+        # 验证采样扫描的结果
+        assert result.has_valid_range is True
+        assert result.file_size > 1 * 1024 * 1024  # > 1MB
+        # 采样扫描应该只扫描部分行
+        assert result.scanned_lines < result.total_lines
+        assert result.scan_duration < 10.0  # 应该在 10 秒内完成
+
+    def test_scan_large_file_with_sampling(self, tmp_path):
+        """测试大文件的采样扫描（>10MB）"""
+        # 创建一个大于 10MB 的文件
+        log_file = tmp_path / "test.log"
+        # 写入足够多的行以超过 10MB
+        lines = [f"[2024-01-01 00:{i % 60:02d}:{i % 60:02d}.000] Test line {i}\n" for i in range(300000)]
+        log_file.write_text("".join(lines), encoding="utf-8")
+
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
+
+        # 验证采样扫描的结果
+        assert result.has_valid_range is True
+        assert result.file_size > 10 * 1024 * 1024  # > 10MB
+        # 对于超大文件，采样扫描应该只扫描少量行（可能是全部，取决于文件内容）
+        # 主要验证性能和正确性
+        assert result.scan_duration < 30.0  # 应该在 30 秒内完成
+        assert result.total_lines > 0  # 至少扫描了一些行
+
+    def test_scan_gbk_encoded_file(self, tmp_path):
+        """测试 GBK 编码的文件"""
+        # 创建 GBK 编码的文件
+        log_file = tmp_path / "test.log"
+        log_file.write_text(
+            "[2024-01-01 00:00:00.000] 测试中文GBK编码\n"
+            "[2024-01-01 00:00:01.000] 中文日志行\n",
+            encoding="gbk",
+        )
+
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
+
+        # 应该能正确解析 GBK 编码的文件
+        assert result.has_valid_range is True
+        assert result.total_lines == 2
 
 
 if __name__ == "__main__":

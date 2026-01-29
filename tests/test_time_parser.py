@@ -7,8 +7,10 @@
 4. 命令ID解析
 """
 
-import pytest
 from datetime import datetime, timedelta
+
+import pytest
+
 from src.time_parser import TimeParser, parse_command_ids
 
 
@@ -133,8 +135,7 @@ class TestTimeRange:
     def test_parse_time_range_with_start_and_end(self):
         """测试解析开始和结束时间"""
         result = TimeParser.parse_time_range(
-            time_start="2024-01-01 00:00:00",
-            time_end="2024-01-31 23:59:59"
+            time_start="2024-01-01 00:00:00", time_end="2024-01-31 23:59:59"
         )
         assert result is not None
         start_time, end_time = result
@@ -147,9 +148,7 @@ class TestTimeRange:
 
     def test_parse_time_range_with_start_only(self):
         """测试只提供开始时间"""
-        result = TimeParser.parse_time_range(
-            time_start="2024-01-01 00:00:00"
-        )
+        result = TimeParser.parse_time_range(time_start="2024-01-01 00:00:00")
         assert result is not None
         start_time, end_time = result
         assert start_time.year == 2024
@@ -157,9 +156,7 @@ class TestTimeRange:
 
     def test_parse_time_range_with_end_only(self):
         """测试只提供结束时间"""
-        result = TimeParser.parse_time_range(
-            time_end="2024-12-31 23:59:59"
-        )
+        result = TimeParser.parse_time_range(time_end="2024-12-31 23:59:59")
         assert result is not None
         start_time, end_time = result
         assert start_time.year == 1970
@@ -167,9 +164,7 @@ class TestTimeRange:
 
     def test_parse_time_range_with_last(self):
         """测试使用相对时间（--time-last）"""
-        result = TimeParser.parse_time_range(
-            time_last="24h"
-        )
+        result = TimeParser.parse_time_range(time_last="24h")
         assert result is not None
         start_time, end_time = result
         delta = end_time - start_time
@@ -183,10 +178,7 @@ class TestTimeRange:
 
         f = io.StringIO()
         with redirect_stdout(f):
-            result = TimeParser.parse_time_range(
-                time_start="2024-01-01",
-                time_last="24h"
-            )
+            result = TimeParser.parse_time_range(time_start="2024-01-01", time_last="24h")
         output = f.getvalue()
 
         assert result is None
@@ -200,10 +192,7 @@ class TestTimeRange:
 
         f = io.StringIO()
         with redirect_stdout(f):
-            result = TimeParser.parse_time_range(
-                time_start="2024-12-31",
-                time_end="2024-01-01"
-            )
+            result = TimeParser.parse_time_range(time_start="2024-12-31", time_end="2024-01-01")
         output = f.getvalue()
 
         assert result is None

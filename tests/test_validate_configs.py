@@ -59,6 +59,9 @@ cmds:
 
         assert result is True
         assert len(validator.errors) == 0
+        assert len(validator.warnings) == 0
+        # 验证验证器状态
+        assert validator is not None
 
     def test_validate_protocol_config_invalid_yaml(self, tmp_path):
         """测试验证无效的YAML语法"""
@@ -78,6 +81,10 @@ meta:
 
         assert result is False
         assert len(validator.errors) > 0
+        # 验证错误消息包含YAML语法错误提示
+        assert any("YAML" in error or "syntax" in error.lower() or "indent" in error.lower()
+                  or "mapping" in error.lower() or "allowed" in error.lower()
+                  for error in validator.errors)
 
     def test_validate_protocol_config_missing_required_fields(self, tmp_path):
         """测试缺少必需字段的配置"""
@@ -96,6 +103,9 @@ compatibility:
 
         assert result is False
         assert len(validator.errors) > 0
+        # 验证错误消息包含缺少必需字段的提示
+        assert any("required" in error.lower() or "missing" in error.lower() or "meta" in error.lower()
+                  for error in validator.errors)
 
     def test_validate_protocol_config_clears_previous_results(self, tmp_path):
         """测试验证时清除之前的错误和警告"""
@@ -190,6 +200,10 @@ cmds:
         result = validator.validate_protocol_config(config_file)
 
         assert result is True
+        assert len(validator.errors) == 0
+        assert len(validator.warnings) == 0
+        # 验证验证器状态
+        assert validator is not None
 
     def test_valid_endian_be(self, tmp_path):
         """测试有效的大端序"""
@@ -218,6 +232,10 @@ cmds:
         result = validator.validate_protocol_config(config_file)
 
         assert result is True
+        assert len(validator.errors) == 0
+        assert len(validator.warnings) == 0
+        # 验证验证器状态
+        assert validator is not None
 
     def test_command_id_out_of_range_warning(self, tmp_path):
         """测试命令ID超出范围的警告"""
@@ -280,6 +298,9 @@ cmds:
 
         assert result is True
         assert len(validator.warnings) == 0
+        assert len(validator.errors) == 0
+        # 验证验证器状态
+        assert validator is not None
 
 
 class TestConsistencyValidation:

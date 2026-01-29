@@ -63,10 +63,18 @@ class TestComLogger:
 
         # 测试打印功能
         with patch("builtins.print") as mock_print:
-            logger.com_print(b"\x01\x02\x03\x04", cmd=0x01, addr=1)
+            test_data = b"\x01\x02\x03\x04"
+            logger.com_print(test_data, cmd=0x01, addr=1)
 
             # 验证打印被调用
             assert mock_print.called
+            # 验证调用次数
+            assert mock_print.call_count >= 1
+            # 验证打印内容包含关键信息
+            call_args = str(mock_print.call_args)
+            assert "01 02 03 04" in call_args  # 十六进制数据
+            assert "cmd=1" in call_args  # 命令信息
+            assert "[1]" in call_args  # 地址信息
 
         logger.close_file()
 
@@ -78,13 +86,26 @@ class TestComLogger:
 
         # 测试通信日志打印
         test_data = b"\x01\x02\x03\x04\x05"
-        with patch("builtins.print"):
+        with patch("builtins.print") as mock_print:
             logger.com_print(test_data, cmd=0x01, addr=1)
+
+            # 验证打印被调用
+            assert mock_print.called
+            # 验证打印内容
+            call_args = str(mock_print.call_args)
+            assert "01 02 03 04 05" in call_args
 
         # 验证文件写入
         log_file = tmp_path / "log_3_com.txt"
         assert log_file.exists()
         assert log_file.stat().st_size > 0
+
+        # 验证文件内容
+        content = log_file.read_text(encoding="utf-8")
+        assert "01 02 03 04 05" in content  # 十六进制数据
+        assert "cmd=1" in content  # 命令信息
+        assert "[1]" in content  # 地址信息
+        assert "Bytes" in content  # 数据长度信息
 
         logger.close_file()
 
@@ -92,12 +113,16 @@ class TestComLogger:
         """测试 ComLogger 上下文管理器"""
         with ComLogger(log_file=4, log_dir=str(tmp_path)) as logger:
             assert logger is not None
+            assert logger.initialized is True
             # 在上下文中使用日志记录器
             logger.com_print(b"\x01\x02\x03", cmd=0x01, addr=1)
 
         # 验证文件已关闭
         log_file = tmp_path / "log_4_com.txt"
         assert log_file.exists()
+        # 验证文件内容
+        content = log_file.read_text(encoding="utf-8")
+        assert "01 02 03" in content
 
     def test_com_logger_rotate_log_file(self, tmp_path):
         """测试日志文件轮换"""
@@ -160,11 +185,20 @@ class TestMyLogger:
 
             # 验证打印被调用
             assert mock_print.call_count == 3
+            # 验证至少有一次调用包含日志内容
+            assert any("信息日志" in str(call) or "调试日志" in str(call) or "错误日志" in str(call)
+                      for call in mock_print.call_args_list)
 
         # 验证文件写入
         log_file = tmp_path / "log_3.txt"
         assert log_file.exists()
         assert log_file.stat().st_size > 0
+
+        # 验证文件内容包含所有日志级别
+        content = log_file.read_text(encoding="utf-8")
+        assert "信息日志" in content
+        assert "调试日志" in content
+        assert "错误日志" in content
 
         logger.close_file()
 
@@ -177,6 +211,12 @@ class TestMyLogger:
 
             # 验证打印被调用
             assert mock_print.called
+            # 验证打印内容包含错误信息
+            call_args = str(mock_print.call_args)
+            assert "错误信息1" in call_args
+            assert "错误信息2" in call_args
+            # 验证错误日志颜色标记存在
+            assert "[31m" in call_args  # 红色ANSI转义码
 
     def test_my_logger_debug_print(self):
         """测试调试日志打印"""
@@ -187,6 +227,9 @@ class TestMyLogger:
 
             # 验证打印被调用
             assert mock_print.called
+            # 验证打印内容
+            call_args = str(mock_print.call_args)
+            assert "调试信息" in call_args
 
     def test_my_logger_info_print(self):
         """测试信息日志打印"""
@@ -197,6 +240,10 @@ class TestMyLogger:
 
             # 验证打印被调用
             assert mock_print.called
+            # 验证信息日志颜色标记存在
+            call_args = str(mock_print.call_args)
+            assert "信息日志" in call_args
+            assert "[32m" in call_args  # 绿色ANSI转义码
 
     def test_my_logger_printf(self):
         """测试 printf 方法"""
@@ -216,11 +263,15 @@ class TestMyLogger:
         """测试 MyLogger 上下文管理器"""
         with MyLogger(log_file=4, log_dir=str(tmp_path), log_mode=LogMode.SAVE_ONLY) as logger:
             assert logger is not None
+            assert logger.initialized is True
             logger.i_print("测试日志")
 
         # 验证文件已关闭
         log_file = tmp_path / "log_4.txt"
         assert log_file.exists()
+        # 验证文件内容
+        content = log_file.read_text(encoding="utf-8")
+        assert "测试日志" in content
 
     def test_my_logger_rotate_log_file(self, tmp_path):
         """测试 MyLogger 日志文件轮换"""
@@ -233,8 +284,10 @@ class TestMyLogger:
             logger.printf(f"日志行 {i} " * 20)
 
         # 验证轮换后的文件
-        log_files = list(tmp_path.glob("log_5*.txt"))
+        log_files = sorted(tmp_path.glob("log_5*.txt"))
         assert len(log_files) >= 1
+        # 验证至少有一个文件有内容
+        assert any(log_file.stat().st_size > 0 for log_file in log_files)
 
         logger.close_file()
 
@@ -253,6 +306,10 @@ class TestMyLogger:
         # 验证文件内容已刷新
         log_file = tmp_path / "log_6.txt"
         assert log_file.exists()
+        # 验证文件内容
+        content = log_file.read_text(encoding="utf-8")
+        assert "测试日志" in content
+        assert "测试日志" in content  # 确保数据已写入磁盘
 
         logger.close_file()
 
@@ -289,6 +346,10 @@ class TestProgressBar:
             # 验证写入被调用
             assert mock_stdout.write.called
             assert mock_stdout.flush.called
+            # 验证写入内容包含进度信息
+            call_args = str(mock_stdout.write.call_args)
+            assert "50.50%" in call_args  # 进度百分比
+            assert "100.00" in call_args  # 速率
 
     def test_progress_bar_zero_progress(self):
         """测试零进度"""
@@ -297,6 +358,10 @@ class TestProgressBar:
 
             # 验证写入被调用
             assert mock_stdout.write.called
+            assert mock_stdout.flush.called
+            # 验证零进度显示
+            call_args = str(mock_stdout.write.call_args)
+            assert "0.00%" in call_args
 
     def test_progress_bar_full_progress(self):
         """测试完整进度"""
@@ -305,6 +370,11 @@ class TestProgressBar:
 
             # 验证写入被调用
             assert mock_stdout.write.called
+            assert mock_stdout.flush.called
+            # 验证完整进度显示
+            call_args = str(mock_stdout.write.call_args)
+            assert "100.00%" in call_args
+            assert "50.00" in call_args  # 速率
 
 
 class TestEdgeCases:
@@ -329,6 +399,9 @@ class TestEdgeCases:
 
             # 验证打印被调用
             assert mock_print.called
+            # 验证空消息也能正常打印
+            call_args = str(mock_print.call_args)
+            assert "[" in call_args  # 至少有时间戳
 
     def test_com_logger_large_data(self, tmp_path):
         """测试 ComLogger 大数据处理"""
@@ -338,6 +411,11 @@ class TestEdgeCases:
         large_data = b"\x01" * 10000
         with patch("builtins.print"):
             logger.com_print(large_data, cmd=0xFF, addr=255)
+
+        # 验证文件写入大数据
+        log_file = tmp_path / "log_10_com.txt"
+        assert log_file.exists()
+        assert log_file.stat().st_size > 10000  # 应该包含所有数据
 
         logger.close_file()
 

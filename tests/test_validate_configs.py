@@ -25,6 +25,9 @@ class TestConfigValidatorInit:
         validator = ConfigValidator()
         assert validator.errors == []
         assert validator.warnings == []
+        # 验证列表类型
+        assert isinstance(validator.errors, list)
+        assert isinstance(validator.warnings, list)
 
 
 class TestBasicValidation:
@@ -134,11 +137,14 @@ cmds:
         validator.errors.append("Previous error")
         validator.warnings.append("Previous warning")
 
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
 
         # 验证之前的错误和警告被清除
         assert "Previous error" not in validator.errors
         assert "Previous warning" not in validator.warnings
+        # 验证验证结果为True
+        assert result is True
+        assert len(validator.errors) == 0
 
 
 class TestProtocolSpecificValidation:
@@ -168,10 +174,14 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
 
         # 验证端序错误
         assert any("Invalid default_endian" in error for error in validator.errors)
+        # 验证至少有一个错误
+        assert len(validator.errors) > 0
+        # 验证验证失败
+        assert result is False
 
     def test_valid_endian_le(self, tmp_path):
         """测试有效的小端序"""
@@ -263,10 +273,14 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
 
         # 验证命令ID范围警告
         assert any("outside typical range" in warning for warning in validator.warnings)
+        # 验证有两个命令ID超出范围
+        assert len(validator.warnings) >= 2
+        # 验证验证仍成功(警告不阻塞)
+        assert result is True
 
     def test_command_id_within_range(self, tmp_path):
         """测试命令ID在正常范围内"""
@@ -330,10 +344,16 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
 
         # 验证长度不匹配错误
         assert any("doesn't match type" in error for error in validator.errors)
+        # 验证错误消息包含字段名
+        assert any("test_field" in error for error in validator.errors)
+        # 验证至少有一个错误
+        assert len(validator.errors) > 0
+        # 验证验证失败
+        assert result is False
 
     def test_field_length_match_type_definition(self, tmp_path):
         """测试字段长度与类型定义匹配"""
@@ -387,10 +407,16 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
 
         # 验证缩放因子警告
         assert any("Scale factor on non-numeric field" in warning for warning in validator.warnings)
+        # 验证警告消息包含字段名
+        assert any("test_field" in warning for warning in validator.warnings)
+        # 验证至少有一个警告
+        assert len(validator.warnings) > 0
+        # 验证有缩放因子的警告
+        assert any("scale" in warning.lower() for warning in validator.warnings)
 
     def test_scale_on_numeric_field_valid(self, tmp_path):
         """测试数值字段使用缩放因子"""
@@ -450,11 +476,16 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
 
         # 验证未使用类型警告
         assert any("Unused type definitions" in warning for warning in validator.warnings)
-        assert "uint16" in validator.warnings[0]
+        # 验证未使用的类型名
+        assert any("uint16" in warning for warning in validator.warnings)
+        # 验证至少有一个警告
+        assert len(validator.warnings) > 0
+        # 验证验证成功(警告不阻塞)
+        assert result is True
 
     def test_all_types_used(self, tmp_path):
         """测试所有类型都被使用"""
@@ -480,10 +511,14 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
 
         # 验证没有未使用类型警告
         assert not any("Unused type definitions" in warning for warning in validator.warnings)
+        # 验证没有警告
+        assert len(validator.warnings) == 0
+        # 验证验证成功
+        assert result is True
 
     def test_unused_enum_definition_warning(self, tmp_path):
         """测试未使用的枚举定义警告"""
@@ -514,10 +549,16 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
 
         # 验证未使用枚举警告
         assert any("Unused enum definitions" in warning for warning in validator.warnings)
+        # 验证未使用的枚举名
+        assert any("status" in warning for warning in validator.warnings)
+        # 验证至少有一个警告
+        assert len(validator.warnings) > 0
+        # 验证验证成功(警告不阻塞)
+        assert result is True
 
     def test_all_enums_used(self, tmp_path):
         """测试所有枚举都被使用"""
@@ -548,10 +589,14 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
 
         # 验证没有未使用枚举警告
         assert not any("Unused enum definitions" in warning for warning in validator.warnings)
+        # 验证没有警告
+        assert len(validator.warnings) == 0
+        # 验证验证成功
+        assert result is True
 
 
 class TestGroupValidation:
@@ -583,10 +628,16 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
 
         # 验证组内字段类型一致性错误
         assert any("doesn't match type" in error for error in validator.errors)
+        # 验证错误消息包含字段名
+        assert any("field1" in error for error in validator.errors)
+        # 验证至少有一个错误
+        assert len(validator.errors) > 0
+        # 验证验证失败
+        assert result is False
 
     def test_group_unused_type_collection(self, tmp_path):
         """测试字段组内使用的类型收集"""
@@ -616,10 +667,14 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
 
         # 验证所有类型都被使用（不应有未使用类型警告）
         assert not any("Unused type definitions" in warning for warning in validator.warnings)
+        # 验证没有警告
+        assert len(validator.warnings) == 0
+        # 验证验证成功
+        assert result is True
 
 
 class TestEdgeCases:
@@ -651,6 +706,8 @@ cmds: {}
 
         # 空命令列表是合法的
         assert result is True
+        assert len(validator.errors) == 0
+        # 注意:空命令时可能有未使用类型的警告,这是正常的
 
     def test_no_types_defined(self, tmp_path):
         """测试未定义类型"""
@@ -679,6 +736,10 @@ cmds:
 
         # 类型未定义应该导致错误
         assert result is False
+        # 验证有错误
+        assert len(validator.errors) > 0
+        # 验证错误消息包含类型未定义信息
+        assert any("uint8" in error or "type" in error.lower() for error in validator.errors)
 
     def test_nonexistent_file(self, tmp_path):
         """测试不存在的文件"""
@@ -688,7 +749,10 @@ cmds:
         result = validator.validate_protocol_config(config_file)
 
         assert result is False
+        assert len(validator.errors) > 0
         assert any("Failed to load config" in error for error in validator.errors)
+        # 验证有加载错误
+        assert any("load" in error.lower() for error in validator.errors)
 
     def test_file_with_special_characters(self, tmp_path):
         """测试包含特殊字符的配置"""
@@ -724,6 +788,9 @@ cmds:
 
         # 中文和特殊字符应该能正确处理
         assert result is True
+        assert len(validator.errors) == 0
+        # 验证没有错误
+        assert len(validator.errors) == 0
 
 
 class TestPrintResults:
@@ -753,7 +820,7 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
         validator.print_results(config_file)
 
         captured = capsys.readouterr()
@@ -786,7 +853,7 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
         validator.print_results(config_file)
 
         captured = capsys.readouterr()
@@ -821,7 +888,7 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
         validator.print_results(config_file)
 
         captured = capsys.readouterr()
@@ -1250,7 +1317,7 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
 
         # 验证端序错误消息
         assert any("Invalid default_endian" in error for error in validator.errors)
@@ -1281,7 +1348,7 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
 
         # 验证警告消息内容
         assert any("Command ID 0 outside typical range" in warning for warning in validator.warnings)
@@ -1311,7 +1378,7 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
 
         # 验证错误消息包含具体信息
         assert any("doesn't match type" in error for error in validator.errors)
@@ -1342,7 +1409,7 @@ cmds:
         config_file.write_text(config_content, encoding="utf-8")
 
         validator = ConfigValidator()
-        validator.validate_protocol_config(config_file)
+        result = validator.validate_protocol_config(config_file)
 
         # 验证警告消息包含未使用的类型名
         assert any("Unused type definitions" in warning for warning in validator.warnings)

@@ -50,6 +50,7 @@ python main.py xiaoju          # 解析小桔协议
 python main.py yunwei          # 解析运维协议
 python main.py sinexcel        # 解析 Sinexcel 协议
 python main.py yunkuaichong    # 解析云快充协议
+python main.py beijingSanyou   # 解析北京三友协议
 
 # 列出所有可用协议
 python main.py --list

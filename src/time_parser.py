@@ -60,12 +60,14 @@ class TimeParser:
                     # 根据匹配的组数确定时间格式
                     if len(groups) == 6:  # YYYY-MM-DD HH:MM:SS
                         year, month, day, hour, minute, second = groups
-                        return datetime(
-                            int(year), int(month), int(day), int(hour), int(minute), int(second)
-                        )
+                        year, month, day = int(year), int(month), int(day)
+                        hour, minute, second = int(hour), int(minute), int(second)
+                        return datetime(year, month, day, hour, minute, second)
                     elif len(groups) == 5:  # YYYY-MM-DD HH:MM
                         year, month, day, hour, minute = groups
-                        return datetime(int(year), int(month), int(day), int(hour), int(minute), 0)
+                        year, month, day = int(year), int(month), int(day)
+                        hour, minute = int(hour), int(minute)
+                        return datetime(year, month, day, hour, minute, 0)
                     elif len(groups) == 3:  # YYYY-MM-DD
                         year, month, day = groups
                         return datetime(int(year), int(month), int(day), 0, 0, 0)

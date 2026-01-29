@@ -7,7 +7,7 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import List
 
 from yaml_config import ProtocolConfig, yaml_loader
 
@@ -108,7 +108,7 @@ class ConfigValidator:
         if unused_enums:
             self.warnings.append(f"Unused enum definitions: {', '.join(unused_enums)}")
 
-    def _collect_used_types(self, fields, used_types: set):
+    def _collect_used_types(self, fields, used_types: set) -> None:
         """收集使用的类型"""
         from yaml_config import Field, Group
 
@@ -118,7 +118,7 @@ class ConfigValidator:
             elif isinstance(field_item, Group):
                 self._collect_used_types(field_item.fields, used_types)
 
-    def _collect_used_enums(self, fields, used_enums: set):
+    def _collect_used_enums(self, fields, used_enums: set) -> None:
         """收集使用的枚举"""
         from yaml_config import Field, Group
 
@@ -129,7 +129,7 @@ class ConfigValidator:
             elif isinstance(field_item, Group):
                 self._collect_used_enums(field_item.fields, used_enums)
 
-    def print_results(self, config_path: Path):
+    def print_results(self, config_path: Path) -> None:
         """打印验证结果"""
         print(f"\n=== Validation Results for {config_path.name} ===")
 
@@ -186,7 +186,7 @@ def validate_all_configs(configs_dir: Path) -> bool:
     return all_valid
 
 
-def main():
+def main() -> None:
     """主函数"""
     parser = argparse.ArgumentParser(description="Validate protocol configurations")
     parser.add_argument(

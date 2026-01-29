@@ -1,19 +1,22 @@
 # 添加模块文档字符串
 """
-这是一个日志记录模块。
-
-该模块提供了两个主要的日志记录类：ComLogger 和 MyLogger。
-ComLogger 用于记录通信相关的日志，而 MyLogger 用于记录一般的应用程序日志。
-模块还包含了日志模式的枚举类 LogMode，以及一个用于显示进度条的辅助函数。
+文件名称: m_print.py
+内容摘要: 日志记录模块，提供通信日志和通用日志记录功能
+当前版本: v1.1.0
+创建日期: 2024-01-01
 
 主要功能：
-1. 支持多种日志记录模式（仅保存、仅打印、保存并打印）
-2. 自动日志文件轮换
-3. 线程安全的日志记录
-4. 支持彩色日志输出
-5. 提供详细的调用者信息
+1. ComLogger: 通信报文日志记录器（十六进制格式）
+2. MyLogger: 通用日志记录器（支持 INFO/DEBUG/ERROR 级别）
+3. LogMode: 日志模式枚举（仅保存/仅打印/保存并打印）
+4. progress_bar: 进度条显示辅助函数
 
-版本：1.0
+特性：
+- 支持多种日志模式（仅保存、仅打印、保存并打印）
+- 自动日志文件轮换
+- 线程安全的日志记录
+- 彩色终端输出
+- 详细的调用者信息追踪
 """
 
 import atexit
@@ -25,6 +28,14 @@ import sys
 import threading
 import time
 from enum import Enum
+from typing import Union, Optional
+
+
+# 模块级常量
+DEFAULT_MAX_LOG_SIZE = 1024 * 1024  # 默认最大日志文件大小（1MB）
+DEFAULT_MAX_LOG_FILES = 3  # 默认最大保留日志文件数
+DEFAULT_FLUSH_INTERVAL = 60  # 默认刷新间隔（秒）
+HEX_LINE_WIDTH = 75  # 十六进制数据每行字符数
 
 
 class LogMode(Enum):
@@ -47,8 +58,13 @@ class ComLogger:
     _lock = threading.Lock()
 
     def __new__(
-        cls, log_file=0, log_mode=LogMode.SAVE_ONLY, log_dir=None, max_size=1024 * 1024, max_files=3
-    ):
+        cls,
+        log_file: Union[int, str] = 0,
+        log_mode: LogMode = LogMode.SAVE_ONLY,
+        log_dir: Optional[str] = None,
+        max_size: int = DEFAULT_MAX_LOG_SIZE,
+        max_files: int = DEFAULT_MAX_LOG_FILES,
+    ) -> "ComLogger":
         """
         创建或返回现有的 ComLogger 实例。
         :param log_file: 日志文件名，生成的文件名为log_{log_file}_com.txt
@@ -62,22 +78,24 @@ class ComLogger:
         file_name = f"log_{log_file}_com.txt"
         file_path = os.path.join(log_dir, file_name)
 
-        # 检查是否已经存在相同路径的实例
-        if file_path in cls._file_paths:
-            raise ValueError(f"日志文件路径 '{file_path}' 已存在。")
+        # 使用类锁保护检查和创建过程，防止竞态条件
+        with cls._lock:
+            # 检查是否已经存在相同路径的实例
+            if file_path in cls._file_paths:
+                raise ValueError(f"日志文件路径 '{file_path}' 已存在。")
 
-        # 创建新实例并存储路径
-        instance = super(ComLogger, cls).__new__(cls)
-        cls._file_paths.add(file_path)
-        return instance
+            # 创建新实例并存储路径
+            instance = super(ComLogger, cls).__new__(cls)
+            cls._file_paths.add(file_path)
+            return instance
 
     def __init__(
         self,
-        log_file=0,
-        log_mode=LogMode.SAVE_ONLY,
-        log_dir=None,
-        max_size=1024 * 1024,
-        max_files=3,
+        log_file: Union[int, str] = 0,
+        log_mode: LogMode = LogMode.SAVE_ONLY,
+        log_dir: Optional[str] = None,
+        max_size: int = DEFAULT_MAX_LOG_SIZE,
+        max_files: int = DEFAULT_MAX_LOG_FILES,
     ):
         """
         初始化通信日志记录器
@@ -104,7 +122,7 @@ class ComLogger:
         self.com_file = None
         self.open_com_file()
         if not ComLogger._exit_handler_registered:
-            atexit.register(self._exit_handler)
+            atexit.register(ComLogger._exit_handler)
             ComLogger._exit_handler_registered = True
 
         # 标记初始化完成
@@ -197,7 +215,7 @@ class ComLogger:
         try:
             log_message = self._create_log_message(tx_data, cmd, addr)
             hex_data = " ".join([f"{b:02X}" for b in tx_data])
-            hex_lines = [hex_data[i : i + 75] for i in range(0, len(hex_data), 75)]
+            hex_lines = [hex_data[i : i + HEX_LINE_WIDTH] for i in range(0, len(hex_data), HEX_LINE_WIDTH)]
             log_message += "\n".join(hex_lines) + "\n"
 
             with self._lock:
@@ -273,12 +291,12 @@ class MyLogger:
 
     def __new__(
         cls,
-        log_file=0,
-        log_mode=LogMode.PRINT_ONLY,
-        log_dir=None,
-        max_size=1024 * 1024,
-        max_files=3,
-    ):
+        log_file: Union[int, str] = 0,
+        log_mode: LogMode = LogMode.PRINT_ONLY,
+        log_dir: Optional[str] = None,
+        max_size: int = DEFAULT_MAX_LOG_SIZE,
+        max_files: int = DEFAULT_MAX_LOG_FILES,
+    ) -> "MyLogger":
         """
         创建或返回现有的 MyLogger 实例。
         :param log_file: 日志文件名，生成的文件名为log_{log_file}.txt
@@ -296,22 +314,24 @@ class MyLogger:
         file_name = f"log_{log_file}.txt"
         file_path = os.path.join(log_dir, file_name)
 
-        # 检查是否已经存在相同路径的实例
-        if file_path in cls._file_paths:
-            raise ValueError(f"日志文件路径 '{file_path}' 已存在。")
+        # 使用类锁保护检查和创建过程，防止竞态条件
+        with cls._lock:
+            # 检查是否已经存在相同路径的实例
+            if file_path in cls._file_paths:
+                raise ValueError(f"日志文件路径 '{file_path}' 已存在。")
 
-        # 创建新实例并存储路径
-        instance = super(MyLogger, cls).__new__(cls)
-        cls._file_paths.add(file_path)
-        return instance
+            # 创建新实例并存储路径
+            instance = super(MyLogger, cls).__new__(cls)
+            cls._file_paths.add(file_path)
+            return instance
 
     def __init__(
         self,
-        log_file=0,
-        log_mode=LogMode.PRINT_ONLY,
-        log_dir=None,
-        max_size=1024 * 1024,
-        max_files=3,
+        log_file: Union[int, str] = 0,
+        log_mode: LogMode = LogMode.PRINT_ONLY,
+        log_dir: Optional[str] = None,
+        max_size: int = DEFAULT_MAX_LOG_SIZE,
+        max_files: int = DEFAULT_MAX_LOG_FILES,
     ):
         """
         初始化日志记录器
@@ -340,10 +360,10 @@ class MyLogger:
             self.file_path = os.path.join(self.config["log_dir"], self.file_name)
             self.file = None
             self.last_flush_time = time.time()
-            self.flush_interval = 60
+            self.flush_interval = DEFAULT_FLUSH_INTERVAL
             self.open_file()
             if not MyLogger._exit_handler_registered:
-                atexit.register(self._exit_handler)
+                atexit.register(MyLogger._exit_handler)
                 MyLogger._exit_handler_registered = True
         else:
             # PRINT_ONLY模式下不创建文件相关资源
@@ -388,9 +408,9 @@ class MyLogger:
                 # pylint: disable=R1732
                 self.file = open(self.file_path, "a", encoding="utf-8")
                 # pylint: enable=R1732
-            except Exception as e:
+            except IOError as e:
                 print(f"无法打开日志文件 {self.file_path}: {e}")
-                raise
+                raise IOError(f"无法打开日志文件 {self.file_path}: {str(e)}") from e
 
     def close_file(self):
         """
@@ -563,7 +583,7 @@ class MyLogger:
 
 
 # 进度条显示
-def progress_bar(progress, rate=0):
+def progress_bar(progress: float, rate: float = 0) -> None:
     """
     进度条显示
     :param rate: 速率

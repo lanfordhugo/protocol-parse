@@ -7,9 +7,8 @@
 4. 进度条显示功能
 """
 
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -359,10 +358,10 @@ class TestComLoggerExceptionHandling:
             mock_file.return_value.write.side_effect = IOError("磁盘已满")
             with patch('builtins.print') as mock_print:
                 try:
-                    logger.com_print(b"", cmd=1, addr=1)
+                    logger.com_print(b"\x01\x02", cmd=1, addr=1)
                 except:
                     pass  # 异常应该被处理
-        
+
         logger.close_file()
 
 

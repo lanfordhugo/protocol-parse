@@ -11,15 +11,16 @@
 
 import re
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Tuple
-from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 
 @dataclass
 class LogScanResult:
     """日志扫描结果数据类"""
+
     min_time: Optional[datetime] = None  # 最小时间戳
     max_time: Optional[datetime] = None  # 最大时间戳
     total_lines: int = 0  # 日志总行数
@@ -59,7 +60,7 @@ class LogScanResult:
     def file_size_human(self) -> str:
         """人类可读的文件大小"""
         size = self.file_size
-        for unit in ['B', 'KB', 'MB', 'GB']:
+        for unit in ["B", "KB", "MB", "GB"]:
             if size < 1024.0:
                 return f"{size:.1f}{unit}"
             size /= 1024.0
@@ -79,9 +80,7 @@ class LogScanner:
     # 时间戳正则表达式（支持多种格式）
     # 格式1: [2025-06-30 08:51:52.804]
     # 格式2: [I 2024-10-23 20:41:16:364]
-    TIMESTAMP_RE = re.compile(
-        r"\[(?:I\s+)?(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:|\.]\d{2,3})\]"
-    )
+    TIMESTAMP_RE = re.compile(r"\[(?:I\s+)?(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}[:|\.]\d{2,3})\]")
 
     def __init__(self, log_path: str):
         """
@@ -135,11 +134,11 @@ class LogScanner:
         total_lines = 0
 
         # 尝试不同编码
-        encodings = ['utf-8', 'gbk', 'latin-1']
+        encodings = ["utf-8", "gbk", "latin-1"]
 
         for encoding in encodings:
             try:
-                with open(self.log_path, 'r', encoding=encoding, errors='ignore') as f:
+                with open(self.log_path, "r", encoding=encoding, errors="ignore") as f:
                     for line in f:
                         total_lines += 1
                         ts = self._parse_timestamp(line)
@@ -163,7 +162,7 @@ class LogScanner:
             max_time=max_time,
             total_lines=total_lines,
             scanned_lines=total_lines,
-            file_size=file_size
+            file_size=file_size,
         )
 
     def _scan_sample(self, file_size: int) -> LogScanResult:
@@ -194,11 +193,11 @@ class LogScanner:
             middle_samples = 10
 
         # 尝试不同编码
-        encodings = ['utf-8', 'gbk', 'latin-1']
+        encodings = ["utf-8", "gbk", "latin-1"]
 
         for encoding in encodings:
             try:
-                with open(self.log_path, 'r', encoding=encoding, errors='ignore') as f:
+                with open(self.log_path, "r", encoding=encoding, errors="ignore") as f:
                     # 1. 扫描头部
                     for i, line in enumerate(f):
                         if i >= sample_lines:
@@ -297,7 +296,7 @@ class LogScanner:
             max_time=max_time,
             total_lines=total_lines,
             scanned_lines=scanned_lines,
-            file_size=file_size
+            file_size=file_size,
         )
 
     def _parse_timestamp(self, line: str) -> Optional[datetime]:
@@ -323,14 +322,14 @@ class LogScanner:
 
         try:
             # 格式1: 2025-06-30 08:51:52.804（点分隔毫秒）
-            if '.' in ts_str:
+            if "." in ts_str:
                 return datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S.%f")
 
             # 格式2: 2024-10-23 20:41:16:364（冒号分隔毫秒）
-            elif ts_str.count(':') == 3:
-                parts = ts_str.split(':')
+            elif ts_str.count(":") == 3:
+                parts = ts_str.split(":")
                 # 将最后一部分（毫秒）转为点分隔格式
-                ts_str = ':'.join(parts[:3]) + '.' + parts[3]
+                ts_str = ":".join(parts[:3]) + "." + parts[3]
                 return datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S.%f")
 
             # 格式3: 2025-06-30 08:51:52（无毫秒）

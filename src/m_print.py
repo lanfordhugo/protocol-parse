@@ -16,34 +16,40 @@ ComLogger 用于记录通信相关的日志，而 MyLogger 用于记录一般的
 版本：1.0
 """
 
+import atexit
 import datetime
+import glob
 import inspect
-import sys
 import os
+import sys
 import threading
 import time
-import atexit
 import weakref
 from enum import Enum
-import glob
+
 
 class LogMode(Enum):
     """
     日志模式枚举类。
     """
+
     SAVE_ONLY = 1  # 仅保存，不打印
     PRINT_ONLY = 2  # 仅打印，不保存
     PRINT_AND_SAVE = 3  # 打印并保存
+
 
 class ComLogger:
     """
     通信日志记录器类。
     """
+
     _file_paths = set()
     _exit_handler_registered = False
     _lock = threading.Lock()
 
-    def __new__(cls, log_file=0, log_mode=LogMode.SAVE_ONLY, log_dir=None, max_size=1024*1024, max_files=3):
+    def __new__(
+        cls, log_file=0, log_mode=LogMode.SAVE_ONLY, log_dir=None, max_size=1024 * 1024, max_files=3
+    ):
         """
         创建或返回现有的 ComLogger 实例。
         :param log_file: 日志文件名，生成的文件名为log_{log_file}_com.txt
@@ -66,12 +72,14 @@ class ComLogger:
         cls._file_paths.add(file_path)
         return instance
 
-    def __init__(self, 
-                 log_file=0, 
-                 log_mode=LogMode.SAVE_ONLY, 
-                 log_dir=None, 
-                 max_size=1024*1024, 
-                 max_files=3):
+    def __init__(
+        self,
+        log_file=0,
+        log_mode=LogMode.SAVE_ONLY,
+        log_dir=None,
+        max_size=1024 * 1024,
+        max_files=3,
+    ):
         """
         初始化通信日志记录器
         :param log_file: 日志文件名，生成的文件名为log_{log_file}_com.txt
@@ -81,19 +89,19 @@ class ComLogger:
         :param max_files: 最大保留的日志文件数量
         """
         # 确保初始化只执行一次
-        if hasattr(self, 'initialized') and self.initialized:
+        if hasattr(self, "initialized") and self.initialized:
             return
 
         self.config = {
-            'max_files': max_files,
-            'base_file_name': f"log_{log_file}_com",
-            'log_dir': log_dir or "log",
-            'log_mode': log_mode,
-            'max_size': max_size
+            "max_files": max_files,
+            "base_file_name": f"log_{log_file}_com",
+            "log_dir": log_dir or "log",
+            "log_mode": log_mode,
+            "max_size": max_size,
         }
         self.file_name = f"{self.config['base_file_name']}.txt"
-        os.makedirs(self.config['log_dir'], exist_ok=True)
-        self.com_file_path = os.path.join(self.config['log_dir'], self.file_name)
+        os.makedirs(self.config["log_dir"], exist_ok=True)
+        self.com_file_path = os.path.join(self.config["log_dir"], self.file_name)
         self.com_file = None
         self.open_com_file()
         if not ComLogger._exit_handler_registered:
@@ -112,7 +120,7 @@ class ComLogger:
             if os.path.exists(file_path):
                 try:
                     # 尝试打开文件并关闭它
-                    with open(file_path, 'a', encoding='utf-8') as f:
+                    with open(file_path, "a", encoding="utf-8") as f:
                         f.close()
                     cls._file_paths.remove(file_path)
                 except Exception as e:
@@ -128,7 +136,7 @@ class ComLogger:
         if self.com_file is None or self.com_file.closed:
             try:
                 # pylint: disable=R1732
-                self.com_file = open(self.com_file_path, 'a', encoding='utf-8')
+                self.com_file = open(self.com_file_path, "a", encoding="utf-8")
                 # pylint: enable=R1732
             except IOError as e:
                 raise IOError(f"无法打开日志文件 {self.com_file_path}: {str(e)}") from e
@@ -165,17 +173,17 @@ class ComLogger:
         """
         self.close_file()
         # 获取所有相关的日志文件
-        file_pattern = os.path.join(self.config['log_dir'], f"{self.config['base_file_name']}*.txt")
+        file_pattern = os.path.join(self.config["log_dir"], f"{self.config['base_file_name']}*.txt")
         existing_files = glob.glob(file_pattern)
         existing_files.sort(key=os.path.getmtime, reverse=True)
         # 如果文件数量超过限制，删除最旧的文件
-        while len(existing_files) >= self.config['max_files']:
+        while len(existing_files) >= self.config["max_files"]:
             os.remove(existing_files.pop())
         # 重命名当前文件
         # 使用毫秒级时间戳避免同一秒内的文件名冲突
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # 保留毫秒前3位
         new_file_name = f"{self.config['base_file_name']}_{timestamp}.txt"
-        new_file_path = os.path.join(self.config['log_dir'], new_file_name)
+        new_file_path = os.path.join(self.config["log_dir"], new_file_name)
         os.rename(self.com_file_path, new_file_path)
         # 创建新的日志文件
         self.open_com_file()
@@ -189,19 +197,19 @@ class ComLogger:
         """
         try:
             log_message = self._create_log_message(tx_data, cmd, addr)
-            hex_data = ' '.join([f'{b:02X}' for b in tx_data])
-            hex_lines = [hex_data[i:i+75] for i in range(0, len(hex_data), 75)]
-            log_message += '\n'.join(hex_lines) + '\n'
-            
+            hex_data = " ".join([f"{b:02X}" for b in tx_data])
+            hex_lines = [hex_data[i : i + 75] for i in range(0, len(hex_data), 75)]
+            log_message += "\n".join(hex_lines) + "\n"
+
             with self._lock:
-                if self.config['log_mode'] in [LogMode.SAVE_ONLY, LogMode.PRINT_AND_SAVE]:
+                if self.config["log_mode"] in [LogMode.SAVE_ONLY, LogMode.PRINT_AND_SAVE]:
                     self.open_com_file()
                     if self.com_file:
                         self.com_file.write(log_message)
                         self.com_file.flush()
-                        if self.com_file.tell() >= self.config['max_size']:
+                        if self.com_file.tell() >= self.config["max_size"]:
                             self.rotate_log_file()
-                if self.config['log_mode'] in [LogMode.PRINT_ONLY, LogMode.PRINT_AND_SAVE]:
+                if self.config["log_mode"] in [LogMode.PRINT_ONLY, LogMode.PRINT_AND_SAVE]:
                     print(log_message)
 
         except Exception as e:  # pylint: disable=W0718
@@ -244,25 +252,34 @@ class ComLogger:
         print(f"com_print 发生异常: {e}")
         error_message = f"打印通信日志时发生异常: {e}\n"
         error_detail = f"异常详情: cmd={cmd}, tx_data长度={len(tx_data)}\n"
-        if self.config['log_mode'] in [LogMode.SAVE_ONLY, LogMode.PRINT_AND_SAVE]:
+        if self.config["log_mode"] in [LogMode.SAVE_ONLY, LogMode.PRINT_AND_SAVE]:
             self.open_com_file()
             if self.com_file:
                 self.com_file.write(error_message)
                 self.com_file.write(error_detail)
                 self.com_file.flush()
-        if self.config['log_mode'] in [LogMode.PRINT_ONLY, LogMode.PRINT_AND_SAVE]:
+        if self.config["log_mode"] in [LogMode.PRINT_ONLY, LogMode.PRINT_AND_SAVE]:
             print(error_message)
             print(error_detail)
+
 
 class MyLogger:
     """
     日志记录器类。
     """
+
     _file_paths = set()
     _exit_handler_registered = False
     _lock = threading.Lock()
 
-    def __new__(cls, log_file=0, log_mode=LogMode.PRINT_ONLY, log_dir=None, max_size=1024*1024, max_files=3):
+    def __new__(
+        cls,
+        log_file=0,
+        log_mode=LogMode.PRINT_ONLY,
+        log_dir=None,
+        max_size=1024 * 1024,
+        max_files=3,
+    ):
         """
         创建或返回现有的 MyLogger 实例。
         :param log_file: 日志文件名，生成的文件名为log_{log_file}.txt
@@ -275,7 +292,7 @@ class MyLogger:
         # PRINT_ONLY模式下不需要检查文件路径冲突
         if log_mode == LogMode.PRINT_ONLY:
             return super(MyLogger, cls).__new__(cls)
-            
+
         log_dir = log_dir or "log"
         file_name = f"log_{log_file}.txt"
         file_path = os.path.join(log_dir, file_name)
@@ -289,11 +306,14 @@ class MyLogger:
         cls._file_paths.add(file_path)
         return instance
 
-    def __init__(self, log_file=0, 
-                 log_mode=LogMode.PRINT_ONLY, 
-                 log_dir=None, 
-                 max_size=1024*1024, 
-                 max_files=3):
+    def __init__(
+        self,
+        log_file=0,
+        log_mode=LogMode.PRINT_ONLY,
+        log_dir=None,
+        max_size=1024 * 1024,
+        max_files=3,
+    ):
         """
         初始化日志记录器
         :param log_file: 日志文件名，生成的文件名为log_{log_file}.txt
@@ -303,22 +323,22 @@ class MyLogger:
         :param max_files: 最大保留的日志文件数量
         """
         # 确保初始化只执行一次
-        if hasattr(self, 'initialized') and self.initialized:
+        if hasattr(self, "initialized") and self.initialized:
             return
 
         self.config = {
-            'max_files': max_files,
-            'base_file_name': f"log_{log_file}",
-            'log_dir': log_dir or "log",
-            'log_mode': log_mode,
-            'max_size': max_size
+            "max_files": max_files,
+            "base_file_name": f"log_{log_file}",
+            "log_dir": log_dir or "log",
+            "log_mode": log_mode,
+            "max_size": max_size,
         }
-        
+
         # 只有在需要保存文件的模式下才创建文件相关资源
         if log_mode in [LogMode.SAVE_ONLY, LogMode.PRINT_AND_SAVE]:
             self.file_name = f"{self.config['base_file_name']}.txt"
-            os.makedirs(self.config['log_dir'], exist_ok=True)
-            self.file_path = os.path.join(self.config['log_dir'], self.file_name)
+            os.makedirs(self.config["log_dir"], exist_ok=True)
+            self.file_path = os.path.join(self.config["log_dir"], self.file_name)
             self.file = None
             self.last_flush_time = time.time()
             self.flush_interval = 60
@@ -346,7 +366,7 @@ class MyLogger:
             if os.path.exists(file_path):
                 try:
                     # 尝试打开文件并关闭它
-                    with open(file_path, 'a', encoding='utf-8') as f:
+                    with open(file_path, "a", encoding="utf-8") as f:
                         f.close()
                     cls._file_paths.remove(file_path)
                 except Exception as e:
@@ -360,14 +380,14 @@ class MyLogger:
         打开日志文件。如果文件未打开或已关闭，则重新打开。
         只有在需要保存文件的模式下才执行。
         """
-        if self.config['log_mode'] == LogMode.PRINT_ONLY:
+        if self.config["log_mode"] == LogMode.PRINT_ONLY:
             return  # PRINT_ONLY模式下不操作文件
-            
+
         print("打开日志文件:", self.file_path)
         if self.file is None or self.file.closed:
             try:
                 # pylint: disable=R1732
-                self.file = open(self.file_path, 'a', encoding='utf-8')
+                self.file = open(self.file_path, "a", encoding="utf-8")
                 # pylint: enable=R1732
             except Exception as e:
                 print(f"无法打开日志文件 {self.file_path}: {e}")
@@ -407,9 +427,9 @@ class MyLogger:
         """
         检查是否需要刷新文件，如果距离上次刷新时间超过设定间隔，则刷新文件。
         """
-        if self.config['log_mode'] == LogMode.PRINT_ONLY:
+        if self.config["log_mode"] == LogMode.PRINT_ONLY:
             return  # PRINT_ONLY模式下不操作文件
-            
+
         current_time = time.time()
         if current_time - self.last_flush_time > self.flush_interval:
             if self.file:
@@ -420,20 +440,20 @@ class MyLogger:
         """
         滚动日志文件。
         """
-        if self.config['log_mode'] == LogMode.PRINT_ONLY:
+        if self.config["log_mode"] == LogMode.PRINT_ONLY:
             return  # PRINT_ONLY模式下不操作文件
-            
+
         self.close_file()
         print(f"关闭文件: {self.file_path}")
 
         # 获取所有相关的日志文件
-        file_pattern = os.path.join(self.config['log_dir'], f"{self.config['base_file_name']}*.txt")
+        file_pattern = os.path.join(self.config["log_dir"], f"{self.config['base_file_name']}*.txt")
         existing_files = glob.glob(file_pattern)
         existing_files.sort(key=os.path.getmtime, reverse=True)
         print(f"现有日志文件: {existing_files}")
 
         # 如果文件数量超过限制，删除最旧的文件
-        while len(existing_files) >= self.config['max_files']:
+        while len(existing_files) >= self.config["max_files"]:
             oldest_file = existing_files.pop()
             try:
                 os.remove(oldest_file)
@@ -445,7 +465,7 @@ class MyLogger:
         # 使用毫秒级时间戳避免同一秒内的文件名冲突
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # 保留毫秒前3位
         new_file_name = f"{self.config['base_file_name']}_{timestamp}.txt"
-        new_file_path = os.path.join(self.config['log_dir'], new_file_name)
+        new_file_path = os.path.join(self.config["log_dir"], new_file_name)
         try:
             os.rename(self.file_path, new_file_path)
             print(f"重命名文件: {self.file_path} -> {new_file_path}")
@@ -468,15 +488,17 @@ class MyLogger:
         now = datetime.datetime.now()
         milliseconds = now.microsecond // 1000
         current_time = now.strftime(f"%Y-%m-%d %H:%M:%S.{milliseconds:03d}")
-        output = f'{color}[{current_time}] {message} [{caller_info}]\033[0m\n'  # 在每行结束时添加重置颜色的 ANSI 转义序列
+        output = (
+            f"{color}[{current_time}] {message} [{caller_info}]\033[0m\n"  # 在每行结束时添加重置颜色的 ANSI 转义序列
+        )
         with self._lock:
-            if self.config['log_mode'] in [LogMode.PRINT_ONLY, LogMode.PRINT_AND_SAVE]:
-                print(output, end='')
-            if self.config['log_mode'] in [LogMode.SAVE_ONLY, LogMode.PRINT_AND_SAVE]:
+            if self.config["log_mode"] in [LogMode.PRINT_ONLY, LogMode.PRINT_AND_SAVE]:
+                print(output, end="")
+            if self.config["log_mode"] in [LogMode.SAVE_ONLY, LogMode.PRINT_AND_SAVE]:
                 if self.file:
                     self.file.write(output)
                     self.file.flush()
-                    if self.file.tell() >= self.config['max_size']:
+                    if self.file.tell() >= self.config["max_size"]:
                         self.rotate_log_file()
 
     def e_print(self, *args: object) -> None:
@@ -484,12 +506,12 @@ class MyLogger:
         打印错误日志。
         :param args: 要打印的参数
         """
-        color = '\033[31m'  # 红色
+        color = "\033[31m"  # 红色
         caller_frame = inspect.stack()[1]
         caller_module = inspect.getmodule(caller_frame[0])
         func_name = caller_frame[3]
         line = caller_frame[2]
-        message = ' '.join(map(str, args))
+        message = " ".join(map(str, args))
         caller_module_name = caller_module.__name__ if caller_module else "UnknownModule"
         caller_info = f"{caller_module_name}.{func_name}():{line}"
         self._log(color, message, caller_info)
@@ -499,12 +521,12 @@ class MyLogger:
         打印调试日志。
         :param args: 要打印的参数
         """
-        color = '\033[0m'  # 白色
+        color = "\033[0m"  # 白色
         caller_frame = inspect.stack()[1]
         caller_module = inspect.getmodule(caller_frame[0])
         func_name = caller_frame[3]
         line = caller_frame[2]
-        message = ' '.join(map(str, args))
+        message = " ".join(map(str, args))
         caller_module_name = caller_module.__name__ if caller_module else "UnknownModule"
         caller_info = f"{caller_module_name}.{func_name}():{line}"
         self._log(color, message, caller_info)
@@ -514,30 +536,30 @@ class MyLogger:
         打印信息日志。
         :param args: 要打印的参数
         """
-        color = '\033[32m'  # 绿色
+        color = "\033[32m"  # 绿色
         caller_frame = inspect.stack()[1]
         caller_module = inspect.getmodule(caller_frame[0])
         func_name = caller_frame[3]
         line = caller_frame[2]
-        message = ' '.join(map(str, args))
+        message = " ".join(map(str, args))
         caller_module_name = caller_module.__name__ if caller_module else "UnknownModule"
         caller_info = f"{caller_module_name}.{func_name}():{line}"
         self._log(color, message, caller_info)
-        
+
     def printf(self, *args: object) -> None:
         """
         打印信息日志。
         :param args: 要打印的参数
         """
-        message = ' '.join(map(str, args))
+        message = " ".join(map(str, args))
         with self._lock:
-            if self.config['log_mode'] in [LogMode.PRINT_ONLY, LogMode.PRINT_AND_SAVE]:
+            if self.config["log_mode"] in [LogMode.PRINT_ONLY, LogMode.PRINT_AND_SAVE]:
                 print(message)
-            if self.config['log_mode'] in [LogMode.SAVE_ONLY, LogMode.PRINT_AND_SAVE]:
+            if self.config["log_mode"] in [LogMode.SAVE_ONLY, LogMode.PRINT_AND_SAVE]:
                 if self.file:
-                    self.file.write(message + '\n')
+                    self.file.write(message + "\n")
                     self.file.flush()
-                    if self.file.tell() >= self.config['max_size']:
+                    if self.file.tell() >= self.config["max_size"]:
                         self.rotate_log_file()
 
 
@@ -548,11 +570,10 @@ def progress_bar(progress, rate=0):
     :param rate: 速率
     :param progress: 进度比例
     """
-    color = '\033[0m'
+    color = "\033[0m"
     now = datetime.datetime.now()
     milliseconds = now.microsecond // 1000  # 截断为三位微秒（毫秒）
     current_time = now.strftime(f"%Y-%m-%d %H:%M:%S.{milliseconds:03d}")
-    sys.stdout.write('\r')
-    sys.stdout.write(f'{color}[{current_time}] Progress: [{progress:.2f}%][{rate:.2f}k/s]\033[0m')
+    sys.stdout.write("\r")
+    sys.stdout.write(f"{color}[{current_time}] Progress: [{progress:.2f}%][{rate:.2f}k/s]\033[0m")
     sys.stdout.flush()
-    

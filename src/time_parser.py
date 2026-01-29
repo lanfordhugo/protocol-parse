@@ -20,22 +20,22 @@ class TimeParser:
     # 绝对时间格式（支持多种变体）
     ABSOLUTE_TIME_PATTERNS = [
         # YYYY-MM-DD HH:MM:SS
-        re.compile(r'^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$'),
+        re.compile(r"^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$"),
         # YYYY-MM-DD HH:MM
-        re.compile(r'^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$'),
+        re.compile(r"^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$"),
         # YYYY-MM-DD
-        re.compile(r'^(\d{4})-(\d{2})-(\d{2})$'),
+        re.compile(r"^(\d{4})-(\d{2})-(\d{2})$"),
     ]
 
     # 相对时间格式（数字+单位）
-    RELATIVE_TIME_PATTERN = re.compile(r'^(\d+)([smhd])$', re.IGNORECASE)
+    RELATIVE_TIME_PATTERN = re.compile(r"^(\d+)([smhd])$", re.IGNORECASE)
 
     # 时间单位映射（单位 -> 秒数）
     TIME_UNITS = {
-        's': 1,           # 秒
-        'm': 60,          # 分钟
-        'h': 3600,        # 小时
-        'd': 86400,       # 天
+        "s": 1,  # 秒
+        "m": 60,  # 分钟
+        "h": 3600,  # 小时
+        "d": 86400,  # 天
     }
 
     @staticmethod
@@ -60,12 +60,12 @@ class TimeParser:
                     # 根据匹配的组数确定时间格式
                     if len(groups) == 6:  # YYYY-MM-DD HH:MM:SS
                         year, month, day, hour, minute, second = groups
-                        return datetime(int(year), int(month), int(day),
-                                       int(hour), int(minute), int(second))
+                        return datetime(
+                            int(year), int(month), int(day), int(hour), int(minute), int(second)
+                        )
                     elif len(groups) == 5:  # YYYY-MM-DD HH:MM
                         year, month, day, hour, minute = groups
-                        return datetime(int(year), int(month), int(day),
-                                       int(hour), int(minute), 0)
+                        return datetime(int(year), int(month), int(day), int(hour), int(minute), 0)
                     elif len(groups) == 3:  # YYYY-MM-DD
                         year, month, day = groups
                         return datetime(int(year), int(month), int(day), 0, 0, 0)
@@ -115,9 +115,11 @@ class TimeParser:
         return start_time, end_time
 
     @staticmethod
-    def parse_time_range(time_start: Optional[str] = None,
-                        time_end: Optional[str] = None,
-                        time_last: Optional[str] = None) -> Optional[Tuple[datetime, datetime]]:
+    def parse_time_range(
+        time_start: Optional[str] = None,
+        time_end: Optional[str] = None,
+        time_last: Optional[str] = None,
+    ) -> Optional[Tuple[datetime, datetime]]:
         """
         解析时间范围参数（支持绝对时间和相对时间）
 
@@ -230,7 +232,7 @@ def parse_command_ids(cmd_str: str) -> list:
     try:
         # 分割字符串并转换为整数
         cmd_ids = []
-        for part in cmd_str.split(','):
+        for part in cmd_str.split(","):
             part = part.strip()
             if part:
                 cmd_id = int(part)

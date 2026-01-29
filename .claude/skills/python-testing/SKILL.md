@@ -32,11 +32,13 @@ description: Use when verifying Python module functionality with pytest after AI
 
 | 任务 | 方法 | 参考 |
 | :--- | :--- | :--- |
-| 编写测试 | AAA 模式、参数化测试 | [PATTERNS.md](references/PATTERNS.md) |
-| 运行测试 | pytest 命令组合 | [EXECUTION.md](references/EXECUTION.md) |
-| Mock 依赖 | unittest.mock、pytest fixture | [PATTERNS.md](references/PATTERNS.md) |
-| 诊断问题 | 需求理解→基础设施→技术实现 | [DIAGNOSTICS.md](references/DIAGNOSTICS.md) |
-| 文件组织 | 命名规则、目录结构 | [TEST_STRUCTURE.md](references/TEST_STRUCTURE.md) |
+| 编写测试 | AAA 模式、测试金字塔、TDD 工作流 | [patterns.md](references/patterns.md) |
+| 运行测试 | pytest 命令组合、覆盖率检查 | [execution.md](references/execution.md) |
+| Mock 依赖 | unittest.mock、pytest fixture | [patterns.md](references/patterns.md) |
+| 测试可维护性 | 测试数据管理、性能优化 | [patterns.md](references/patterns.md) |
+| 异步测试 | pytest-asyncio 使用 | [patterns.md](references/patterns.md) |
+| 诊断问题 | 需求理解→基础设施→技术实现 | [diagnostics.md](references/diagnostics.md) |
+| 文件组织 | 命名规则、目录结构 | [test_structure.md](references/test_structure.md) |
 
 ## Core Constraints
 
@@ -80,23 +82,72 @@ description: Use when verifying Python module functionality with pytest after AI
 | 分支覆盖率 | > 80% |
 | **整体覆盖率** | **> 85%** |
 
+### 覆盖率的局限性
+
+**覆盖率不能保证：**
+
+- ❌ 测试质量（通过的测试不等于好测试）
+- ❌ 边界条件覆盖（100% 覆盖率也可能遗漏边界）
+- ❌ 业务逻辑正确性（验证的是代码路径，非业务需求）
+- ❌ 异常场景处理（正常路径覆盖不代表异常处理正确）
+
+**覆盖率应该：**
+
+- ✅ 作为最低质量基线（85%）
+- ✅ 结合代码审查使用
+- ✅ 关注分支覆盖率而不仅是行覆盖率
+- ✅ 定期审查未覆盖代码是否需要测试
+
+**高覆盖率的陷阱：**
+
+```python
+# 100% 覆盖率但测试质量差
+def calculate_discount(price, user_type):
+    if user_type == "vip":
+        return price * 0.8
+    return price
+
+# ❌ 测试覆盖了所有分支，但未验证业务逻辑
+def test_calculate_discount():
+    assert calculate_discount(100, "vip") == 80  # 分支1
+    assert calculate_discount(100, "normal") == 100  # 分支2
+    # 未验证：折扣比例、边界条件、异常输入
+
+# ✅ 好的测试验证业务价值
+def test_calculate_discount():
+    # 验证 VIP 用户享受 8 折
+    assert calculate_discount(100, "vip") == 80
+    assert calculate_discount(200, "vip") == 160
+
+    # 验证普通用户无折扣
+    assert calculate_discount(100, "normal") == 100
+
+    # 验证边界条件
+    assert calculate_discount(0, "vip") == 0
+    assert calculate_discount(99.99, "vip") == 79.992
+
+    # 验证异常输入
+    with pytest.raises(ValueError):
+        calculate_discount(-100, "vip")
+```
+
 ## Detailed References
 
 **测试模式和最佳实践：**
 
-- **[PATTERNS.md](references/PATTERNS.md)** - AAA 模式、测试策略、Mock/Fixture 使用、参数化测试
+- **[patterns.md](references/patterns.md)** - AAA 模式、测试金字塔、TDD 工作流、Mock/Fixture、测试可维护性、异步测试
 
 **诊断流程：**
 
-- **[DIAGNOSTICS.md](references/DIAGNOSTICS.md)** - 需求理解诊断、基础设施诊断、技术实现诊断
+- **[diagnostics.md](references/diagnostics.md)** - 需求理解诊断、基础设施诊断、技术实现诊断
 
 **测试文件组织：**
 
-- **[TEST_STRUCTURE.md](references/TEST_STRUCTURE.md)** - 文件命名、目录结构、pytest 配置、conftest.py 使用
+- **[test_structure.md](references/test_structure.md)** - 文件命名、目录结构、pytest 配置、conftest.py 使用
 
 **执行命令：**
 
-- **[EXECUTION.md](references/EXECUTION.md)** - 测试执行命令、覆盖率检查、标记过滤、并行执行
+- **[execution.md](references/execution.md)** - 测试执行命令、覆盖率检查、标记过滤、并行执行
 
 ## Common Mistakes
 
@@ -121,6 +172,7 @@ description: Use when verifying Python module functionality with pytest after AI
 ## Testing Commands
 
 **快速验证：**
+
 ```bash
 pytest -x -v tests/unit/                    # 第一个失败后停止
 pytest --cov=src --cov-report=html          # 生成覆盖率报告
@@ -128,8 +180,9 @@ pytest -m "not slow" -n auto                # 并行运行（跳过慢速测试�
 ```
 
 **完整验证：**
+
 ```bash
 pytest --cov=src --cov-report=html --cov-report=term-missing --cov-fail-under=85 -v
 ```
 
-详见 [EXECUTION.md](references/EXECUTION.md) 获取完整命令参考。
+详见 [execution.md](references/execution.md) 获取完整命令参考。

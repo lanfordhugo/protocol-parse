@@ -62,7 +62,17 @@
       "Bash(isort:*)",
       "Skill(user-code-review)",
       "Skill(user-code-review:*)",
-      "Bash(git check-ignore:*)"
+      "Bash(git check-ignore:*)",
+      "Bash(PYTHONPATH=. python:*)",
+      "Bash(/usr/bin/python:*)",
+      "Bash(python3:*)",
+      "Bash(git rm:*)",
+      "Bash(/c/Program Files/Python311/python.exe:*)",
+      "Bash(\"C:/Program Files/Python311/python.exe\" test_logpanel_interface.py)",
+      "Bash(PYTHONPATH=. python -m pytest:*)",
+      "Skill(thinking)",
+      "Bash(git checkout:*)",
+      "Bash(git pull:*)"
     ]
   }
 }

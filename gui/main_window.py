@@ -25,7 +25,7 @@ from PySide6.QtGui import QCloseEvent, QAction, QActionGroup, QDragEnterEvent, Q
 from .protocol_panel import ProtocolPanel
 from .detail_panel import DetailPanel
 from .log_panel import LogPanel
-from .themes import get_theme, get_log_panel_style
+from .themes import get_theme, get_log_panel_style  # 从新的主题模块导入
 from .workers import ValidateWorker, ParseWorker
 from gui.shared import get_app_dir, open_directory, open_file
 

@@ -21,6 +21,7 @@ from .widgets.datetime_picker import DateTimePickerWidget
 from .widgets.multi_select_combo import MultiSelectComboBox
 from .widgets.log_time_scanner import LogTimeScanner, TimeScanResult
 from gui.shared.time_utils import format_time_range_smart
+from gui.views import IDetailPanelView
 
 
 class ProtocolDetailWidget(QGroupBox):
@@ -166,7 +167,11 @@ class ProtocolDetailWidget(QGroupBox):
 
 class FilterWidget(QGroupBox):
     """过滤设置组件"""
-    
+
+    # 信号：通知过滤器变化
+    time_range_changed = Signal(object, object)  # (start, end)
+    command_filter_changed = Signal(object, object)  # (include_cmds, exclude_cmds)
+
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__("过滤设置（可选）", parent)
 
@@ -272,16 +277,39 @@ class FilterWidget(QGroupBox):
             self.open_visual_picker_btn.setEnabled(True)
         else:
             self.open_visual_picker_btn.setEnabled(False)
-    
+
+        # 发射信号（禁用时传递 None）
+        if not checked:
+            self.time_range_changed.emit(None, None)
+
     def _on_cmd_filter_toggled(self, checked: bool):
         """命令过滤启用状态变化"""
         self.include_cmd_combo.setEnabled(checked)
         self.exclude_cmd_combo.setEnabled(checked)
+
+        # 发射信号（禁用时传递 None）
+        if not checked:
+            self.command_filter_changed.emit(None, None)
     
     def set_commands(self, commands: List[Tuple[str, str]]):
         """设置可用的命令列表 [(cmd_id, display_text), ...]"""
         self.include_cmd_combo.set_items(commands)
         self.exclude_cmd_combo.set_items(commands)
+
+        # 连接选择变化信号
+        self.include_cmd_combo.selection_changed.connect(
+            lambda: self._emit_command_filter_changed()
+        )
+        self.exclude_cmd_combo.selection_changed.connect(
+            lambda: self._emit_command_filter_changed()
+        )
+
+    def _emit_command_filter_changed(self):
+        """发射命令过滤变化信号"""
+        if self.cmd_filter_check.isChecked():
+            include = self.get_include_cmds()
+            exclude = self.get_exclude_cmds()
+            self.command_filter_changed.emit(include, exclude)
     
     def get_time_filter(self) -> Optional[Tuple[datetime, datetime]]:
         """获取时间过滤条件"""
@@ -442,6 +470,8 @@ class FilterWidget(QGroupBox):
             # 显示当前选择（智能格式化）
             range_str = format_time_range_smart(start, end)
             self.current_range_label.setText(range_str)
+            # 发射信号
+            self.time_range_changed.emit(start, end)
         else:
             self.current_range_label.setText("未选择")
 
@@ -534,18 +564,34 @@ class ActionWidget(QGroupBox):
             self.validate_btn.setEnabled(True)
 
 
-class DetailPanel(QWidget):
-    """右侧详情面板"""
+class DetailPanel(QWidget, IDetailPanelView):
+    """右侧详情面板
 
-    # 信号
+    实现 IDetailPanelView 接口，组合三个子组件：
+    - ProtocolDetailWidget: 协议详情显示
+    - FilterWidget: 过滤设置
+    - ActionWidget: 操作按钮
+
+    多重继承：
+    - QWidget: 提供 Qt 组件功能
+    - IDetailPanelView: 定义接口契约
+    """
+
+    # 信号：由 IDetailPanelView 接口定义
+    # 注意：需要连接子组件的信号到这些信号
     parse_clicked = Signal()
-    stop_clicked = Signal()  # 新增：停止信号
+    stop_clicked = Signal()
     validate_clicked = Signal()
     open_output_dir_clicked = Signal()
-    select_log_clicked = Signal()  # 选择日志文件
-    
+    select_log_clicked = Signal()
+    time_range_changed = Signal(object, object)  # (start, end)
+    command_filter_changed = Signal(list)  # (include_cmds, exclude_cmds)
+    terminal_filter_changed = Signal(str)  # terminal_id
+
     def __init__(self, parent: Optional[QWidget] = None):
-        super().__init__(parent)
+        # 多重继承：先初始化 QWidget，再初始化 IDetailPanelView
+        QWidget.__init__(self, parent)
+        IDetailPanelView.__init__(self)
         self._setup_ui()
         self._connect_signals()
     
@@ -582,17 +628,27 @@ class DetailPanel(QWidget):
     
     def _connect_signals(self):
         """连接信号"""
+        # ActionWidget 信号
         self.action_widget.parse_clicked.connect(self.parse_clicked.emit)
-        self.action_widget.stop_clicked.connect(self.stop_clicked.emit)  # 新增
+        self.action_widget.stop_clicked.connect(self.stop_clicked.emit)
         self.action_widget.validate_clicked.connect(self.validate_clicked.emit)
         self.action_widget.open_output_dir_clicked.connect(
             self.open_output_dir_clicked.emit
         )
-        # 日志选择按钮
+
+        # ProtocolDetailWidget 信号
         self.detail_widget.select_log_btn.clicked.connect(
             self.select_log_clicked.emit
         )
-    
+
+        # FilterWidget 信号
+        self.filter_widget.time_range_changed.connect(self.time_range_changed.emit)
+        self.filter_widget.command_filter_changed.connect(
+            self._on_command_filter_changed
+        )
+
+    # === IDetailPanelView 接口方法实现 ===
+
     def update_protocol_info(
         self,
         name: str,
@@ -605,8 +661,8 @@ class DetailPanel(QWidget):
         enum_count: int = 0,
         type_count: int = 0,
         commands: Optional[List[Tuple[str, str]]] = None
-    ):
-        """更新协议信息"""
+    ) -> None:
+        """更新协议详情显示（接口方法）"""
         self.detail_widget.update_info(
             name, config_path, config_valid,
             log_path, log_exists, log_size,
@@ -620,24 +676,71 @@ class DetailPanel(QWidget):
         # 传递日志路径到 FilterWidget，触发自动扫描
         if log_path and log_exists:
             self.filter_widget.set_log_path(log_path)
-    
+
+    def set_parse_button_enabled(self, enabled: bool) -> None:
+        """启用/禁用解析按钮（接口方法）"""
+        self.action_widget.parse_btn.setEnabled(enabled)
+
+    def set_stop_button_enabled(self, enabled: bool) -> None:
+        """启用/禁用停止按钮（接口方法）"""
+        self.action_widget.stop_btn.setEnabled(enabled)
+
+    def set_progress(self, current: int, total: int) -> None:
+        """设置解析进度（接口方法）
+
+        TODO: Phase 2 实现进度显示
+        当前实现：暂无进度条组件
+        """
+        # TODO: Phase 2 添加进度条组件
+        pass
+
     def get_filter_settings(self) -> Dict[str, Any]:
-        """获取过滤设置"""
+        """获取当前过滤设置（接口方法）"""
         return {
             'time_range': self.filter_widget.get_time_filter(),
             'include_cmds': self.filter_widget.get_include_cmds(),
             'exclude_cmds': self.filter_widget.get_exclude_cmds(),
         }
-    
-    def set_parsing(self, parsing: bool):
-        """设置解析状态"""
+
+    def set_log_path(self, path: str) -> None:
+        """设置日志文件路径（接口方法）"""
+        self.filter_widget.set_log_path(path)
+
+    def set_commands(self, commands: List[Tuple[str, str]]) -> None:
+        """设置命令列表（接口方法）"""
+        self.filter_widget.set_commands(commands)
+
+    def reset_progress(self) -> None:
+        """重置进度条（接口方法）
+
+        TODO: Phase 2 实现进度显示
+        """
+        # TODO: Phase 2 添加进度条组件
+        pass
+
+    # === 私有方法 ===
+
+    def _on_command_filter_changed(self, include: Optional[List[str]], exclude: Optional[List[str]]) -> None:
+        """处理命令过滤变化信号
+
+        将 FilterWidget 的双参数信号转换为接口要求的单参数信号
+        """
+        filter_data = {
+            'include_cmds': include,
+            'exclude_cmds': exclude
+        }
+        self.command_filter_changed.emit(filter_data)
+
+    def set_parsing(self, parsing: bool) -> None:
+        """设置解析状态（遗留方法，保留向后兼容）"""
         self.action_widget.set_parsing(parsing)
-    
-    def clear(self):
-        """清空面板"""
+
+    def clear(self) -> None:
+        """清空面板（遗留方法，保留向后兼容）"""
         self.detail_widget.clear()
         self.filter_widget.clear()
 
-    def cleanup(self):
-        """清理资源"""
+    def cleanup(self) -> None:
+        """清理资源（遗留方法，保留向后兼容）"""
         self.filter_widget.cleanup()
+

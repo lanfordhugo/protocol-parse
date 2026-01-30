@@ -1,9 +1,10 @@
 """
 文件名称: unified_main_window.py
-内容摘要: 统一主窗口 - 带侧边栏导航的整合窗口
-当前版本: v1.0.0
+内容摘要: 统一主窗口 - 带侧边栏导航的整合窗口（MVP 架构）
+当前版本: v2.0.0
 作者: lanford
 创建日期: 2025-01-10
+更新日期: 2026-01-29（集成 MVP 架构）
 """
 
 from pathlib import Path
@@ -20,6 +21,10 @@ from .normal_parse_page import NormalParsePage
 from shared import get_unified_theme
 from tcp_log.server_panel import TcpServerPage
 from gui.shared import ThemeManagerMixin, WindowStateMixin, DialogHelperMixin
+
+# MVP 架构导入
+from gui.managers import ProtocolManager, ParseManager, ValidationManager
+from gui.presenters import NormalParsePagePresenter
 
 
 class UnifiedMainWindow(
@@ -42,7 +47,17 @@ class UnifiedMainWindow(
         self._setup_window_state_manager(self._settings)
         self._setup_theme_manager(self._settings, get_unified_theme, "dark")
 
-        # 创建页面
+        # === MVP 架构：创建 Manager 层 ===
+        from gui.shared import get_app_dir
+        app_dir = get_app_dir()
+        configs_dir = app_dir / "configs"
+        output_dir = app_dir / "parsed_log"
+
+        self.protocol_manager = ProtocolManager(configs_dir)
+        self.parse_manager = ParseManager(output_dir)
+        self.validation_manager = ValidationManager()
+
+        # 创建页面（先创建 View）
         self._normal_page = None
         self._tcp_server_page = None
 
@@ -82,10 +97,24 @@ class UnifiedMainWindow(
         # 页面堆叠（切换显示）
         self._stacked_widget = QStackedWidget()
 
-        # 页面 1：普通解析
-        self._normal_page = NormalParsePage()
+        # === MVP 架构：创建普通解析页面 ===
+        # 1. 先创建 View（不传入 Presenter，使用关键字参数）
+        self._normal_page = NormalParsePage(presenter=None, parent=None)
         self._normal_page.set_settings(self._settings)
         self._normal_page.status_changed.connect(self._update_status)
+
+        # 2. 创建 Presenter（传入 View 和 Manager）
+        self.presenter = NormalParsePagePresenter(
+            view=self._normal_page,
+            parse_manager=self.parse_manager
+        )
+
+        # 3. 将 Presenter 设置回 View
+        self._normal_page._presenter = self.presenter
+
+        # 4. 调用 Presenter 初始化方法
+        self.presenter.initialize()
+
         self._stacked_widget.addWidget(self._normal_page)
 
         # 页面 2：TCP 服务端

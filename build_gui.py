@@ -54,7 +54,9 @@ HIDDEN_IMPORTS = [
     "gui.protocol_panel",
     "gui.detail_panel",
     "gui.log_panel",
-    "gui.themes",
+    "gui.themes.color_schemes",
+    "gui.themes.theme_manager",
+    "gui.themes.theme_mixins",
     # gui 共享模块
     "gui.shared.app_helpers",
     "gui.shared.time_utils",

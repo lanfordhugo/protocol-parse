@@ -39,10 +39,15 @@ class TestComLogger:
         assert logger.config["max_size"] == 1024
         assert logger.config["max_files"] == 3
         assert logger.initialized is True
+        assert logger.com_file_path == str(tmp_path / "log_1_com.txt")
+        assert logger.com_file is not None
+        assert logger.com_file_path.endswith("log_1_com.txt")
+        assert logger.config["base_file_name"] == "log_1_com"
 
         # 验证文件已创建
         log_file = tmp_path / "log_1_com.txt"
         assert log_file.exists()
+        assert log_file.is_file()
 
         # 清理
         logger.close_file()
@@ -61,6 +66,10 @@ class TestComLogger:
         """测试 ComLogger 仅打印模式"""
         logger = ComLogger(log_file=2, log_mode=LogMode.PRINT_ONLY, log_dir=str(tmp_path))
 
+        # 验证初始化状态
+        assert logger.config["log_mode"] == LogMode.PRINT_ONLY
+        assert logger.initialized is True
+
         # 测试打印功能
         with patch("builtins.print") as mock_print:
             test_data = b"\x01\x02\x03\x04"
@@ -75,6 +84,7 @@ class TestComLogger:
             assert "01 02 03 04" in call_args  # 十六进制数据
             assert "cmd=1" in call_args  # 命令信息
             assert "[1]" in call_args  # 地址信息
+            assert "4 Bytes" in call_args  # 数据长度
 
         logger.close_file()
 
@@ -156,7 +166,10 @@ class TestMyLogger:
         # 验证初始化
         assert logger.config["log_mode"] == LogMode.PRINT_ONLY
         assert logger.file_path is None  # PRINT_ONLY 模式不创建文件
+        assert logger.file is None
+        assert logger.file_name is None
         assert logger.initialized is True
+        assert logger.config["base_file_name"] == "log_1"
 
     def test_my_logger_init_save_only(self, tmp_path):
         """测试 MyLogger 初始化（仅保存模式）"""
@@ -165,11 +178,15 @@ class TestMyLogger:
         # 验证初始化
         assert logger.config["log_mode"] == LogMode.SAVE_ONLY
         assert logger.file_path is not None
+        assert logger.file_path.endswith("log_2.txt")
+        assert logger.file is not None
         assert logger.initialized is True
+        assert logger.config["base_file_name"] == "log_2"
 
         # 验证文件已创建
         log_file = tmp_path / "log_2.txt"
         assert log_file.exists()
+        assert log_file.is_file()
 
         logger.close_file()
 
@@ -211,12 +228,15 @@ class TestMyLogger:
 
             # 验证打印被调用
             assert mock_print.called
+            assert mock_print.call_count == 1
             # 验证打印内容包含错误信息
             call_args = str(mock_print.call_args)
             assert "错误信息1" in call_args
             assert "错误信息2" in call_args
+            assert "错误信息1 错误信息2" in call_args  # 验证消息合并
             # 验证错误日志颜色标记存在
             assert "[31m" in call_args  # 红色ANSI转义码
+            assert "[0m" in call_args  # 重置颜色
 
     def test_my_logger_debug_print(self):
         """测试调试日志打印"""
@@ -240,10 +260,14 @@ class TestMyLogger:
 
             # 验证打印被调用
             assert mock_print.called
+            assert mock_print.call_count == 1
             # 验证信息日志颜色标记存在
             call_args = str(mock_print.call_args)
             assert "信息日志" in call_args
             assert "[32m" in call_args  # 绿色ANSI转义码
+            assert "[0m" in call_args  # 重置颜色
+            # 验证时间戳格式
+            assert "[" in call_args  # 时间戳括号
 
     def test_my_logger_printf(self):
         """测试 printf 方法"""
@@ -346,10 +370,12 @@ class TestProgressBar:
             # 验证写入被调用
             assert mock_stdout.write.called
             assert mock_stdout.flush.called
+            assert mock_stdout.write.call_count >= 1
             # 验证写入内容包含进度信息
             call_args = str(mock_stdout.write.call_args)
             assert "50.50%" in call_args  # 进度百分比
             assert "100.00" in call_args  # 速率
+            assert "Progress:" in call_args  # 进度标签
 
     def test_progress_bar_zero_progress(self):
         """测试零进度"""
@@ -385,8 +411,15 @@ class TestEdgeCases:
         logger = ComLogger(log_file=9, log_dir=str(tmp_path), log_mode=LogMode.SAVE_ONLY)
 
         # 写入空数据
-        with patch("builtins.print"):
+        with patch("builtins.print") as mock_print:
             logger.com_print(b"", cmd=0x00, addr=0)
+
+            # 验证空数据也能正确处理
+            assert mock_print.called is False  # SAVE_ONLY 模式不应该打印
+
+        # 验证文件创建
+        log_file = tmp_path / "log_9_com.txt"
+        assert log_file.exists()
 
         logger.close_file()
 
@@ -399,9 +432,12 @@ class TestEdgeCases:
 
             # 验证打印被调用
             assert mock_print.called
+            assert mock_print.call_count == 1
             # 验证空消息也能正常打印
             call_args = str(mock_print.call_args)
             assert "[" in call_args  # 至少有时间戳
+            assert "]" in call_args  # 结束括号
+            assert "[32m" in call_args  # 信息日志绿色
 
     def test_com_logger_large_data(self, tmp_path):
         """测试 ComLogger 大数据处理"""

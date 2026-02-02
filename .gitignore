@@ -15,6 +15,7 @@ __pycache__/
 *$py.class
 .pytest_cache/
 .coverage
+coverage.json
 htmlcov/
 
 # PyInstaller 打包相关

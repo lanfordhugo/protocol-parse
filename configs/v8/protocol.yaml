@@ -141,10 +141,11 @@ cmds:
 
   # cmd4 - 服务器心跳包
   4:
-    - {len: 4, name: 当前时间, type: uint32}
-    - {len: 8, name: MCU 1枪告警状态, type: binary_str_8bytes}
-    - {len: 8, name: MCU 2枪告警状态, type: binary_str_8bytes}
-    - {len: 4, name: MCU对枪的禁用状态, type: binary_str_4bytes}
+    - {len: 4, name: 当前时间, type: uint32, notes: "UNIX时间戳"}
+    - {len: 2, name: MCU 1枪最高告警code, type: uint16, notes: "参见附录文件，枚举"}
+    - {len: 2, name: MCU 2枪最高告警code, type: uint16, notes: "参见附录文件，枚举"}
+    - {len: 12, name: 预留, type: hex, notes: "预留"}
+    - {len: 4, name: MCU对枪的禁用状态, type: binary_str_4bytes, notes: "Bit0-Bit27有效，0-正常状态，1-禁用状态"}
 
   # cmd5 - 启动充电命令
   5:

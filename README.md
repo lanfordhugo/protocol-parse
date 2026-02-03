@@ -759,6 +759,174 @@ Claude Code 会自动加载相关技能和规则,无需手动配置。详见 [`.
 - 📋 基础报文格式解析
 - 🔍 命令过滤功能
 
+## ❓ 常见问题 (FAQ)
+
+### 解析相关
+
+**Q: 如何添加新协议支持？**
+
+A: 只需创建 YAML 配置文件，无需修改代码：
+
+1. 在 `configs/` 下创建协议目录
+2. 创建 `protocol.yaml` 配置文件
+3. 将日志文件放到 `input_logs/<protocol_name>.log`
+4. 运行 `python main.py <protocol_name>`
+
+详细步骤见 [添加新协议](#添加新协议) 章节。
+
+**Q: 解析结果保存在哪里？**
+
+A: 解析结果保存在 `parsed_log/` 目录，文件名格式：
+```
+parsed_<protocol>_log_YYYY-MM-DD HH-MM-SS.txt
+```
+
+**Q: 如何只解析特定命令？**
+
+A: 使用命令过滤器：
+
+```python
+from src.yaml_unified_protocol import YamlUnifiedProtocol
+
+parser = YamlUnifiedProtocol("your_protocol")
+parser.set_include_cmds([0x01, 0x02])  # 只解析命令 0x01 和 0x02
+parser.run()
+```
+
+**Q: 如何按时间范围筛选日志？**
+
+A: 使用时间筛选：
+
+```python
+parser.set_time_range(
+    start_time="2024-01-01 00:00:00",
+    end_time="2024-01-31 23:59:59"
+)
+```
+
+或使用相对时间：
+
+```python
+parser.set_time_range(
+    start_time="-1h",  # 最近1小时
+    end_time="now"      # 到现在
+)
+```
+
+### 配置相关
+
+**Q: YAML 配置文件结构是什么？**
+
+A: `protocol.yaml` 包含以下主要部分：
+
+- `meta`: 协议元数据（名称、版本、字节序）
+- `types`: 类型定义（uint、ascii、bcd 等）
+- `enums`: 枚举映射
+- `cmds`: 命令格式定义
+- `filters`: 过滤器配置
+
+详见 [YAML配置详解](#yaml配置详解) 章节。
+
+**Q: 如何验证配置文件是否正确？**
+
+A: 运行配置验证：
+
+```bash
+python main.py --validate
+# 或
+python src/validate_configs.py configs/your_protocol/protocol.yaml
+```
+
+**Q: 支持哪些数据类型？**
+
+A: 支持以下类型：
+
+- `uint/int`: 整数类型（可指定字节长度）
+- `str`: 字符串类型（支持多种编码）
+- `hex`: 十六进制字符串
+- `bcd`: BCD 编码
+- `time.*`: 时间格式（cp56time2a、bcd_time、unix_time 等）
+- `binary_str`: 二进制字符串
+- `bitset`: 位集合
+- `bitfield`: 位字段
+
+### GUI 相关
+
+**Q: 如何启动 GUI 版本？**
+
+A: 运行：
+
+```bash
+python main_gui.py
+```
+
+**Q: GUI 和 CLI 版本有什么区别？**
+
+A:
+
+- **CLI 版本**: 适合批量处理和自动化脚本
+- **GUI 版本**: 提供可视化界面，支持实时 TCP 监控
+
+**Q: 如何打包 GUI 应用？**
+
+A: 运行打包脚本：
+
+```bash
+python build_gui.py
+```
+
+打包后的应用在 `dist/` 目录。
+
+### 错误排查
+
+**Q: 提示 "协议配置不存在" 怎么办？**
+
+A: 检查以下几点：
+
+1. `configs/<protocol_name>/protocol.yaml` 是否存在
+2. `input_logs/<protocol_name>.log` 是否存在
+3. 配置文件格式是否正确（运行 `--validate` 检查）
+
+**Q: 解析结果为空或数据不完整？**
+
+A: 可能的原因：
+
+1. 日志文件格式不正确（应为：时间戳 + 十六进制数据）
+2. 协议头/尾配置不匹配
+3. 字段长度定义错误
+4. 字节序配置错误
+
+建议使用 `--validate` 检查配置。
+
+**Q: 测试失败怎么办？**
+
+A: 运行测试并查看详细输出：
+
+```bash
+python -m pytest tests/ -v --tb=short
+```
+
+查看具体失败的测试用例和错误信息。
+
+### 性能相关
+
+**Q: 如何提高解析速度？**
+
+A:
+
+1. 使用 `pytest-xdist` 并行运行测试
+2. 减少不必要的日志输出
+3. 使用命令过滤减少解析数据量
+4. 优化 YAML 配置，减少复杂嵌套
+
+**Q: 大文件解析很慢？**
+
+A: 尝试：
+
+1. 使用时间筛选减少数据量
+2. 使用命令过滤只解析需要的命令
+3. 增加日志文件轮换大小
+
 ## 📜 许可证
 
 本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
@@ -773,4 +941,4 @@ Claude Code 会自动加载相关技能和规则,无需手动配置。详见 [`.
 
 **V8Parse** - 现代化的多协议通信报文解析工具 🚀
 
-*最后更新时间: 2025-01-28*
+*最后更新时间: 2025-02-02*

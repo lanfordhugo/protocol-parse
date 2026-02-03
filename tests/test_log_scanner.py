@@ -8,6 +8,7 @@
 """
 
 from datetime import datetime
+from unittest.mock import patch, mock_open
 
 import pytest
 
@@ -319,6 +320,139 @@ class TestEdgeCases:
         # 应该能正确解析 GBK 编码的文件
         assert result.has_valid_range is True
         assert result.total_lines == 2
+
+
+class TestExceptionsAndEdgeCases:
+    """测试异常情况和边界条件"""
+
+    def test_scan_nonexistent_file(self):
+        """测试扫描不存在的文件"""
+        scanner = LogScanner("/nonexistent/file.log")
+        # 应该抛出 FileNotFoundError
+        with pytest.raises(FileNotFoundError):
+            scanner.scan()
+
+    def test_scan_empty_file(self, tmp_path):
+        """测试扫描空文件"""
+        log_file = tmp_path / "empty.log"
+        log_file.write_text("")
+
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
+
+        assert result.has_valid_range is False
+        assert result.total_lines == 0
+
+    def test_scan_file_with_only_invalid_lines(self, tmp_path):
+        """测试只有无效行的文件"""
+        log_file = tmp_path / "invalid.log"
+        log_file.write_text(
+            "这只是一行普通文本\n"
+            "another line without timestamp\n"
+            "yet another invalid line\n"
+        )
+
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
+
+        assert result.has_valid_range is False
+        assert result.total_lines == 3
+
+    def test_scan_file_with_mixed_valid_invalid_lines(self, tmp_path):
+        """测试混合有效和无效行的文件"""
+        log_file = tmp_path / "mixed.log"
+        log_file.write_text(
+            "invalid line\n"
+            "[2024-01-01 00:00:00.000] AA BB CC DD\n"
+            "another invalid line\n"
+            "[2024-01-01 00:00:01.000] AA BB CC DD\n"
+        )
+
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
+
+        assert result.has_valid_range is True
+        assert result.total_lines == 4
+
+    def test_scan_file_with_corrupted_encoding(self, tmp_path):
+        """测试编码损坏的文件"""
+        log_file = tmp_path / "corrupted.log"
+        # 写入一些二进制数据
+        log_file.write_bytes(b"\xff\xfe\xfd\x00\x01\x02\x03")
+
+        scanner = LogScanner(str(log_file))
+        # 应该能处理而不崩溃
+        result = scanner.scan()
+
+        assert result.total_lines >= 0
+
+    def test_scan_very_long_line(self, tmp_path):
+        """测试超长行"""
+        log_file = tmp_path / "longline.log"
+        # 创建一个超长的十六进制数据行
+        long_hex = "AA" * 10000
+        log_file.write_text(f"[2024-01-01 00:00:00.000] {long_hex}\n")
+
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
+
+        # 应该能处理超长行
+        assert result.has_valid_range is True
+        assert result.total_lines == 1
+
+    def test_scan_file_with_invalid_timestamp(self, tmp_path):
+        """测试包含无效时间戳的文件"""
+        log_file = tmp_path / "bad_timestamp.log"
+        log_file.write_text(
+            "[2024-13-01 00:00:00.000] AA BB\n"  # 无效月份
+            "[2024-01-01 25:00:00.000] AA BB\n"  # 无效小时
+            "[2024-01-01 00:00:00.000] AA BB\n"  # 有效行
+        )
+
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
+
+        # 应该至少有一行有效
+        assert result.total_lines == 3
+
+
+class TestMockFileOperations:
+    """使用 Mock 测试文件操作"""
+
+    def test_scan_with_mocked_file_read(self, tmp_path):
+        """使用 Mock 测试文件读取 - 使用实际文件"""
+        # 由于 LogScanner 在 scan() 开始就检查文件存在性，
+        # Mock open 不能直接工作。使用实际文件测试
+        log_file = tmp_path / "mock_test.log"
+        log_file.write_text("[2024-01-01 00:00:00.000] AA BB CC DD\n")
+
+        scanner = LogScanner(str(log_file))
+        result = scanner.scan()
+
+        assert result.has_valid_range is True
+        assert result.total_lines == 1
+
+    def test_scan_with_permission_error(self):
+        """测试文件权限错误"""
+        # LogScanner 在 scan() 中会调用 stat() 和 open()
+        # 需要同时 mock 两个方法
+        # 注意：实际代码会捕获 PermissionError 并抛出 RuntimeError
+        mock_stat_result = __import__('os').stat_result((33206, 0, 0, 0, 0, 0, 100, 0, 0, 0))
+        with patch("pathlib.Path.exists", return_value=True):
+            with patch("pathlib.Path.stat", return_value=mock_stat_result):
+                with patch("builtins.open", side_effect=PermissionError("Permission denied")):
+                    scanner = LogScanner("restricted.log")
+                    # 实际代码抛出 RuntimeError
+                    with pytest.raises(RuntimeError, match="读取文件失败"):
+                        scanner.scan()
+
+    def test_scan_with_io_error(self):
+        """测试 IO 错误"""
+        with patch("pathlib.Path.exists", return_value=True):
+            with patch("builtins.open", side_effect=IOError("Disk error")):
+                scanner = LogScanner("error.log")
+                with pytest.raises(IOError):
+                    scanner.scan()
 
 
 if __name__ == "__main__":

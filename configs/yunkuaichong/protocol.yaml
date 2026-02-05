@@ -49,6 +49,9 @@ types:
   bcd_time8:  { base: time.bcd8, bytes: 8 }   # BCD时间 YYYYMMDDhhmmss + 空字节 (8字节)
   unix_time:  { base: time.unix, bytes: 4 }   # Unix时间戳（秒）
   unix_time_ms: { base: time.unix_ms, bytes: 8 }  # Unix时间戳（毫秒）
+
+  # 二进制字符串类型
+  binary_str_2bytes: { base: binary_str, bytes: 2 }  # 2字节二进制字符串
   
 
 # 枚举定义

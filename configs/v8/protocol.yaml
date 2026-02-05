@@ -433,7 +433,43 @@ cmds:
     - {len: 4, name: 时间, type: uint32}
     - {len: 2, name: 时间ms, type: uint16}
     - {len: 4, name: MCU告警信息, type: binary_str_4bytes}
-    - {len: 4, name: 运营后台连接情况, type: uint32}
+    - len: 4
+      name: 运营后台连接情况
+      type: bitfield32
+      bit_groups:
+        - {name: "1号终端", start_bit: 0, width: 1}
+        - {name: "2号终端", start_bit: 1, width: 1}
+        - {name: "3号终端", start_bit: 2, width: 1}
+        - {name: "4号终端", start_bit: 3, width: 1}
+        - {name: "5号终端", start_bit: 4, width: 1}
+        - {name: "6号终端", start_bit: 5, width: 1}
+        - {name: "7号终端", start_bit: 6, width: 1}
+        - {name: "8号终端", start_bit: 7, width: 1}
+        - {name: "9号终端", start_bit: 8, width: 1}
+        - {name: "10号终端", start_bit: 9, width: 1}
+        - {name: "11号终端", start_bit: 10, width: 1}
+        - {name: "12号终端", start_bit: 11, width: 1}
+        - {name: "13号终端", start_bit: 12, width: 1}
+        - {name: "14号终端", start_bit: 13, width: 1}
+        - {name: "15号终端", start_bit: 14, width: 1}
+        - {name: "16号终端", start_bit: 15, width: 1}
+        - {name: "17号终端", start_bit: 16, width: 1}
+        - {name: "18号终端", start_bit: 17, width: 1}
+        - {name: "19号终端", start_bit: 18, width: 1}
+        - {name: "20号终端", start_bit: 19, width: 1}
+        - {name: "21号终端", start_bit: 20, width: 1}
+        - {name: "22号终端", start_bit: 21, width: 1}
+        - {name: "23号终端", start_bit: 22, width: 1}
+        - {name: "24号终端", start_bit: 23, width: 1}
+        - {name: "25号终端", start_bit: 24, width: 1}
+        - {name: "26号终端", start_bit: 25, width: 1}
+        - {name: "27号终端", start_bit: 26, width: 1}
+        - {name: "28号终端", start_bit: 27, width: 1}
+        - {name: "29号终端", start_bit: 28, width: 1}
+        - {name: "30号终端", start_bit: 29, width: 1}
+        - {name: "31号终端", start_bit: 30, width: 1}
+        - {name: "32号终端", start_bit: 31, width: 1}
+      notes: 0-离线, 1-在线
     - {len: 1, name: 是否需要M2签到, type: uint8}
     - {len: 1, name: MCU掉电紧急停机, type: uint8}
     - {len: 4, name: 组网带宽, type: uint32}

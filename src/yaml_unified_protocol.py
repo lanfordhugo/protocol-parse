@@ -151,7 +151,10 @@ class YamlUnifiedProtocol:
         Returns:
             输出文件的绝对路径，如果没有数据则返回 None
         """
-        return self.formatter.format_and_save(parse_data, self.perf_stats)
+        return self.formatter.format_and_save(
+            parse_data, self.perf_stats,
+            progress_callback=self._progress_callback,
+        )
 
     def extract_data_from_file(self, file_path: str) -> List[Dict[str, str]]:
         """从文件中提取数据（向后兼容接口）
@@ -201,15 +204,14 @@ class YamlUnifiedProtocol:
             if self._check_should_stop():
                 return None
 
-            # 筛选并打印结果
+            # 筛选并打印结果（进度 80-98% 由 formatter 内部线性发射）
             screen_start = perf_counter()
-            self._emit_progress(85, 100)  # 开始输出
             output_path = self.screen_parse_data(parsed_data)
             screen_duration = perf_counter() - screen_start
             self._record_phase("screen", screen_duration)
             self._record_phase("total", perf_counter() - total_start)
 
-            self._emit_progress(100, 100)  # 完成
+            self._emit_progress(100, 100)  # 文件写入完成
             return output_path
 
         except Exception as e:

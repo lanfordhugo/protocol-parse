@@ -35,6 +35,7 @@ class ProtocolOutputFormatter:
         parse_data: List[Dict[str, Any]],
         perf_stats: Dict[str, Any],
         output_dir: str = "parsed_log",
+        progress_callback: Optional[callable] = None,
     ) -> Optional[str]:
         """格式化并保存解析结果
 
@@ -42,6 +43,7 @@ class ProtocolOutputFormatter:
             parse_data: 解析后的数据列表
             perf_stats: 性能统计数据
             output_dir: 输出目录
+            progress_callback: 进度回调函数，签名为 callback(current: int, total: int)
 
         Returns:
             输出文件的绝对路径，如果没有数据则返回 None
@@ -60,10 +62,12 @@ class ProtocolOutputFormatter:
         # 确保输出目录存在
         os.makedirs(output_dir, exist_ok=True)
 
-        # 准备输出内容
-        output_lines = self._build_output_lines(parse_data, protocol_info, perf_stats)
+        # 准备输出内容（80-98% 用于格式化阶段）
+        output_lines = self._build_output_lines(
+            parse_data, protocol_info, perf_stats, progress_callback
+        )
 
-        # 写入文件
+        # 写入文件（98-100%）
         try:
             with open(output_path, "w", encoding="utf-8") as f:
                 for line in output_lines:
@@ -78,6 +82,7 @@ class ProtocolOutputFormatter:
         parse_data: List[Dict[str, Any]],
         protocol_info: Dict[str, Any],
         perf_stats: Dict[str, Any],
+        progress_callback: Optional[callable] = None,
     ) -> List[str]:
         """构建输出行列表
 
@@ -85,6 +90,7 @@ class ProtocolOutputFormatter:
             parse_data: 解析后的数据列表
             protocol_info: 协议信息
             perf_stats: 性能统计数据
+            progress_callback: 进度回调函数，签名为 callback(current: int, total: int)
 
         Returns:
             输出行列表
@@ -107,8 +113,17 @@ class ProtocolOutputFormatter:
         for cmd, count in sorted(cmd_stats.items()):
             output_lines.append(f"  cmd{cmd}: {count} 条")
 
-        # 详细输出所有数据
+        # 详细输出所有数据（80-98% 进度区间）
+        total_count = len(parse_data)
         for i, item in enumerate(parse_data):
+            # 发送格式化进度（80-98%，每处理1%数据量更新一次，避免信号过于频繁）
+            if progress_callback and total_count > 0 and i % max(1, total_count // 100) == 0:
+                progress = 80 + int((i / total_count) * 18)
+                try:
+                    progress_callback(progress, 100)
+                except Exception:
+                    pass
+
             output_lines.append(f"\n=== 数据项 {i+1} ===")
             output_lines.append(f"时间: {item.get('timestamp', 'N/A')}")
             output_lines.append(f"方向: {item.get('direction', 'N/A')}")

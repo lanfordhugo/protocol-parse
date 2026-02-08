@@ -88,7 +88,7 @@ class LogTimeScanner(QThread):
 
     # 信号
     progress = Signal(int, int)  # (current_line, total_lines) 进度更新
-    finished = Signal(object)     # TimeScanResult 扫描完成
+    scan_finished = Signal(object)  # TimeScanResult 扫描完成
     error = Signal(str)           # 错误信息
 
     # 时间戳正则表达式（支持两种格式）
@@ -138,7 +138,7 @@ class LogTimeScanner(QThread):
             scan_duration = time.time() - start_time
             result.scan_duration = scan_duration
 
-            self.finished.emit(result)
+            self.scan_finished.emit(result)
 
         except Exception as e:
             self.error.emit(f"扫描失败: {str(e)}")

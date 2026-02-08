@@ -355,6 +355,11 @@ class FilterWidget(QGroupBox):
             if self._last_scanned_path == self._log_path:
                 return
 
+        # 停止之前的扫描线程（防止线程泄漏）
+        if self._scanner and self._scanner.isRunning():
+            self._scanner.stop()
+            self._scanner.wait(2000)
+
         # 更新 UI 状态：正在扫描
         self.log_range_label.setText("🔄 正在扫描日志时间范围...")
         self.log_range_label.setStyleSheet("color: #f39c12; font-size: 11px;")
@@ -363,7 +368,7 @@ class FilterWidget(QGroupBox):
         # 启动后台扫描线程
         self._scanner = LogTimeScanner(self._log_path, self)
         self._scanner.progress.connect(self._on_scan_progress)
-        self._scanner.finished.connect(self._on_scan_finished)
+        self._scanner.scan_finished.connect(self._on_scan_finished)
         self._scanner.error.connect(self._on_scan_error)
         self._scanner.start()
 

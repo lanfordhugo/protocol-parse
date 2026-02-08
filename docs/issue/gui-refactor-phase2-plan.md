@@ -1,28 +1,49 @@
 # GUI 重构阶段2：组件重构层重构计划
 
-**文档版本**: v1.0
+**文档版本**: v2.0（已修订为 MVP 模式）
 **创建日期**: 2025-02-02
-**预计工期**: 5天
-**前置依赖**: 阶段1完成
-**风险等级**: 中等
+**完成日期**: 2025-02-08
+**状态**: ✅ 已完成
+
+## 修订说明
+
+v1.0 计划将 TcpServerPage 拆分为多个 UI 子组件，v2.0 修正为 **MVP 拆分**：
+- 业务逻辑提取到 `TcpServerModel`（纯 Python）
+- 交互协调提取到 `TcpServerPresenter`
+- `server_panel.py` 仅保留 UI 代码（View 实现）
+- `SignalBridge` 保留在 View 中（Qt 线程适配器，非业务逻辑）
 
 ## 一、阶段目标
 
-重构大文件，统一信号和线程管理，提高代码可维护性。
+按 MVP 模式拆分 TcpServerPage，实现 UI 与业务逻辑分离。
 
 ### 核心目标
-1. ✅ 拆分 TCP 服务端页面（796行 → 3-4个文件）
-2. ✅ 统一信号管理，防止信号泄漏
-3. ✅ 统一工作线程管理模式
-4. ✅ 减少代码重复，提取通用模式
+
+1. ✅ 提取业务逻辑到 TcpServerModel（协议扫描/解析/统计/保存）
+2. ✅ 创建 TcpServerPresenter 协调 View 和 Model
+3. ✅ server_panel.py 仅保留 UI 代码
+4. ✅ Model 层纯 Python，无 Qt 依赖
 
 ### 验证标准
-- [ ] 单文件代码量 <600行
-- [ ] 所有信号正确连接和断开（无泄漏）
-- [ ] 工作线程正常创建和销毁
-- [ ] 圈复杂度 <10（关键函数）
-- [ ] 代码重复率 <5%
-- [ ] 所有现有功能正常工作
+
+- [x] 单文件代码量 <600行
+- [x] 所有信号正确连接（SignalBridge → Presenter → Model/View）
+- [x] Model 层无 Qt 依赖
+- [x] 所有现有功能正常工作
+- [ ] 单元测试（Phase 3 补充）
+
+### 实际产出文件
+
+```text
+tcp_log/models/__init__.py                  # Model 层包
+tcp_log/models/tcp_server_model.py          # TCP 业务模型（纯 Python）
+tcp_log/views/__init__.py                   # View 接口包
+tcp_log/views/i_tcp_server_view.py          # View 接口（typing.Protocol）
+tcp_log/presenters/__init__.py              # Presenter 包
+tcp_log/presenters/tcp_server_presenter.py  # TcpServerPage Presenter
+tcp_log/server_panel.py                     # 重构：View 实现
+gui/unified_main_window.py                  # 修改：增加 TCP MVP 组装
+```
 - [ ] 内存泄漏检查通过（长时间运行稳定性）
 
 ---

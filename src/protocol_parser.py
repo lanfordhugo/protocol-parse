@@ -43,22 +43,27 @@ class ProtocolParser:
             "errors": 0,
         }
 
+    _UNSET = object()  # 哨兵值，区分"未传参"和"传了None"
+
     def set_filters(
         self,
-        include_cmds: Optional[List[int]] = None,
-        exclude_cmds: Optional[List[int]] = None,
-        time_range: Optional[tuple[datetime, datetime]] = None,
+        include_cmds=_UNSET,
+        exclude_cmds=_UNSET,
+        time_range=_UNSET,
     ) -> None:
-        """设置解析过滤条件
+        """设置解析过滤条件（只更新显式传入的参数，不影响其他已设置的过滤条件）
 
         Args:
             include_cmds: 包含的命令ID列表，只解析这些命令
             exclude_cmds: 排除的命令ID列表，不解析这些命令
             time_range: 时间范围 (start_time, end_time)
         """
-        self._include_cmds = include_cmds
-        self._exclude_cmds = exclude_cmds
-        self._time_range = time_range
+        if include_cmds is not self._UNSET:
+            self._include_cmds = include_cmds
+        if exclude_cmds is not self._UNSET:
+            self._exclude_cmds = exclude_cmds
+        if time_range is not self._UNSET:
+            self._time_range = time_range
 
     def parse_data_groups(
         self,

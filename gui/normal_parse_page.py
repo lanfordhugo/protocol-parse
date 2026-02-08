@@ -1,57 +1,63 @@
 """
 文件名称: normal_parse_page.py
-内容摘要: 普通解析页面组件（封装原 MainWindow 逻辑）
-当前版本: v1.0.0
+内容摘要: 普通解析页面组件（MVP 模式中的 View 实现）
+当前版本: v2.0.0
 作者: lanford
 创建日期: 2025-01-10
+修改日期: 2025-02-08
+修改说明: 重构为 MVP 模式，实现 INormalParsePageView 接口，
+          业务逻辑委托给 NormalParsePresenter
 """
 
-from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple
-from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout,
-    QSplitter, QMessageBox, QApplication, QFileDialog
+    QSplitter, QMessageBox, QFileDialog
 )
-from PySide6.QtCore import Qt, Signal, Slot, QThread, QObject
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 
 from .protocol_panel import ProtocolPanel
 from .detail_panel import DetailPanel
 from .log_panel import LogPanel
-from gui.workers import ValidateWorker, ParseWorker
-from gui.shared import get_app_dir, open_directory, open_file
+from .widgets.searchable_list import ProtocolItem
+from gui.models.protocol_model import ProtocolDetail, ProtocolInfo
 
 
 class NormalParsePage(QWidget):
-    """普通解析页面 - 封装普通解析功能"""
+    """
+    普通解析页面 - MVP 模式中的 View 实现
+
+    职责：
+    - UI 组件的创建和布局
+    - 将用户交互事件转发给 Presenter
+    - 实现 INormalParsePageView 接口供 Presenter 更新 UI
+    """
 
     # 信号：状态变化（通知主窗口更新状态栏）
     status_changed = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._app_dir = get_app_dir()
-        self._configs_dir = self._app_dir / "configs"
-        self._output_dir = self._app_dir / "parsed_log"
-
-        self._parse_thread: Optional[QThread] = None
-        self._parse_worker: Optional[ParseWorker] = None
-        self._validate_thread: Optional[QThread] = None
-        self._validate_worker: Optional[ValidateWorker] = None
-
-        self._settings = None  # 由主窗口传入
+        self._presenter = None  # 由外部注入
 
         self._setup_ui()
-        self._connect_signals()
-        self._load_protocols()
 
         # 启用拖拽支持
         self.setAcceptDrops(True)
 
-        # 默认选择 sinexcel 协议
-        self._select_default_protocol("sinexcel")
+    def set_presenter(self, presenter) -> None:
+        """
+        注入 Presenter（MVP 组装时调用）
+
+        Args:
+            presenter: NormalParsePresenter 实例
+        """
+        self._presenter = presenter
+        self._connect_signals()
+        # Presenter 初始化（加载协议列表、选择默认协议）
+        self._presenter.initialize()
 
     def _setup_ui(self):
         """初始化UI"""
@@ -88,273 +94,152 @@ class NormalParsePage(QWidget):
 
         layout.addWidget(main_splitter)
 
-    def set_settings(self, settings):
-        """设置 QSettings（由主窗口传入）"""
-        self._settings = settings
-
     def _connect_signals(self):
-        """连接信号"""
-        self.protocol_panel.protocol_selected.connect(self._on_protocol_selected)
-        self.detail_panel.parse_clicked.connect(self._on_parse_clicked)
-        self.detail_panel.stop_clicked.connect(self._on_stop_clicked)  # 新增
-        self.detail_panel.validate_clicked.connect(self._on_validate_clicked)
-        self.detail_panel.open_output_dir_clicked.connect(self._open_output_dir)
-        self.detail_panel.select_log_clicked.connect(self._on_select_log_clicked)
-
-    def _load_protocols(self):
-        """加载协议列表"""
-        self.protocol_panel.load_protocols(self._configs_dir)
-
-    def _on_protocol_selected(self, protocol_name: str):
-        """协议选择变化"""
-        info = self.protocol_panel.get_protocol_info(protocol_name)
-        if not info:
-            return
-
-        # 尝试恢复上次使用的日志文件路径
-        if not info['log_path'] and self._settings:
-            last_log = self._settings.value(f"last_log/{protocol_name}", "")
-            if last_log and Path(last_log).exists():
-                self.protocol_panel.set_log_path(protocol_name, last_log)
-                info = self.protocol_panel.get_protocol_info(protocol_name)
-                self.log_panel.log_info(f"已恢复上次使用的日志文件: {last_log}")
-
-        # 校验当前选中的协议
-        self._validate_single_protocol(protocol_name, info['config_path'])
-
-        # 加载协议配置获取统计信息
-        cmd_count = 0
-        enum_count = 0
-        type_count = 0
-        commands: List[Tuple[str, str]] = []
-
-        try:
-            from src.yaml_config import YamlConfigLoader
-            loader = YamlConfigLoader()
-            config = loader.load_protocol_config(info['config_path'])
-
-            if config:
-                cmd_count = len(config.cmds) if config.cmds else 0
-                enum_count = len(config.enums) if config.enums else 0
-                type_count = len(config.types) if config.types else 0
-
-                if config.cmds:
-                    for cmd_id in config.cmds.keys():
-                        commands.append((str(cmd_id), str(cmd_id)))
-        except Exception as e:
-            self.log_panel.log_warning(f"加载配置统计失败: {e}")
-
-        # 更新详情面板
-        self.detail_panel.update_protocol_info(
-            name=protocol_name,
-            config_path=info['config_path'],
-            config_valid=info.get('config_valid', True),
-            log_path=info['log_path'],
-            log_exists=info['log_exists'],
-            log_size=info['log_size'],
-            cmd_count=cmd_count,
-            enum_count=enum_count,
-            type_count=type_count,
-            commands=commands
+        """连接 UI 信号到 Presenter 方法"""
+        self.protocol_panel.protocol_selected.connect(
+            self._presenter.on_protocol_selected
+        )
+        self.detail_panel.parse_clicked.connect(
+            self._presenter.on_parse_clicked
+        )
+        self.detail_panel.stop_clicked.connect(
+            self._presenter.on_stop_clicked
+        )
+        self.detail_panel.validate_clicked.connect(
+            self._presenter.on_validate_clicked
+        )
+        self.detail_panel.open_output_dir_clicked.connect(
+            self._presenter.on_open_output_dir
+        )
+        self.detail_panel.select_log_clicked.connect(
+            self._presenter.on_select_log_clicked
         )
 
-        self.status_changed.emit(f"选中协议: {protocol_name}")
+    # ============== INormalParsePageView 接口实现 ==============
 
-    def _on_parse_clicked(self):
-        """开始解析"""
-        protocol_name = self.protocol_panel.get_selected_protocol()
-        if not protocol_name:
-            QMessageBox.warning(self, "提示", "请先选择要解析的协议")
-            return
-
-        info = self.protocol_panel.get_protocol_info(protocol_name)
-        if not info:
-            return
-
-        if not info['log_exists'] or info['log_size'] == 0:
-            QMessageBox.warning(
-                self, "提示",
-                f"日志文件不存在或为空:\n{info['log_path']}\n\n"
-                "请先将日志内容拷贝到该文件。"
+    def display_protocols(self, protocols: List[ProtocolInfo]) -> None:
+        """显示协议列表"""
+        protocol_items = [
+            ProtocolItem(
+                name=p.name,
+                config_valid=p.config_valid,
+                log_exists=p.log_exists,
+                log_size=p.log_size,
             )
-            return
+            for p in protocols
+        ]
+        self.protocol_panel.protocol_list.set_protocols(protocol_items)
 
-        filter_settings = self.detail_panel.get_filter_settings()
-
-        # 创建工作线程
-        self._parse_thread = QThread()
-        self._parse_worker = ParseWorker(
-            protocol_name,
-            info['config_path'],
-            info['log_path'],
-            filter_settings
+    def update_protocol_list_item(self, info: ProtocolInfo) -> None:
+        """更新单个协议列表项的显示状态"""
+        item = ProtocolItem(
+            name=info.name,
+            config_valid=info.config_valid,
+            log_exists=info.log_exists,
+            log_size=info.log_size,
         )
-        self._parse_worker.moveToThread(self._parse_thread)
+        self.protocol_panel.protocol_list.refresh_item(item)
 
-        # 连接信号
-        self._parse_thread.started.connect(self._parse_worker.run)
-        self._parse_worker.log_info.connect(self.log_panel.log_info)
-        self._parse_worker.log_success.connect(self.log_panel.log_success)
-        self._parse_worker.log_warning.connect(self.log_panel.log_warning)
-        self._parse_worker.log_error.connect(self.log_panel.log_error)
-        self._parse_worker.progress.connect(self.log_panel.set_progress)
-        self._parse_worker.finished.connect(self._on_parse_finished)
-
-        # 更新UI状态
-        self.detail_panel.set_parsing(True)
-        self.log_panel.reset_progress()
-        self.status_changed.emit(f"正在解析: {protocol_name}")
-
-        # 启动线程
-        self._parse_thread.start()
-
-    def _on_stop_clicked(self):
-        """停止解析"""
-        if self._parse_worker:
-            self._parse_worker.stop()
-            self.log_panel.log_warning("正在停止解析...")
-            self.status_changed.emit("正在停止解析...")
-
-    def _on_parse_finished(self, success: bool, message: str, output_path: str):
-        """解析完成"""
-        self.detail_panel.set_parsing(False)
-
-        if self._parse_thread:
-            self._parse_thread.quit()
-            self._parse_thread.wait()
-            self._parse_thread = None
-            self._parse_worker = None
-
-        protocol_name = self.protocol_panel.get_selected_protocol() or ""
-        if success:
-            self.status_changed.emit(
-                f"✅ 解析完成 | {protocol_name} | "
-                f"{datetime.now().strftime('%Y-%m-%d %H:%M')}"
-            )
-            if output_path:
-                reply = QMessageBox.question(
-                    self,
-                    "解析完成",
-                    f"解析结果已保存到:\n{output_path}\n\n是否立即打开查看？",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.Yes
-                )
-                if reply == QMessageBox.Yes:
-                    open_file(output_path)
-        else:
-            self.status_changed.emit(f"❌ 解析失败 | {protocol_name}")
-
-    def _on_validate_clicked(self):
-        """验证配置"""
-        protocol_name = self.protocol_panel.get_selected_protocol()
-        if not protocol_name:
-            QMessageBox.warning(self, "提示", "请先选择要验证的协议")
-            return
-
-        info = self.protocol_panel.get_protocol_info(protocol_name)
-        if not info:
-            return
-
-        self.log_panel.log_info(f"开始验证协议 {protocol_name} 的配置...")
-
-        try:
-            from src.yaml_config import YamlConfigLoader
-            loader = YamlConfigLoader()
-            config = loader.load_protocol_config(info['config_path'])
-
-            if config:
-                self.log_panel.log_success(f"协议 {protocol_name} 配置验证通过")
-                self.protocol_panel.update_protocol_status(
-                    protocol_name, config_valid=True
-                )
-                self._on_protocol_selected(protocol_name)
-            else:
-                self.log_panel.log_error(f"协议 {protocol_name} 配置加载失败")
-                self.protocol_panel.update_protocol_status(
-                    protocol_name, config_valid=False
-                )
-        except Exception as e:
-            self.log_panel.log_error(f"验证失败: {e}")
-            self.protocol_panel.update_protocol_status(
-                protocol_name, config_valid=False
-            )
-
-    def _on_select_log_clicked(self):
-        """选择日志文件"""
-        protocol_name = self.protocol_panel.get_selected_protocol()
-        if not protocol_name:
-            QMessageBox.warning(self, "提示", "请先选择协议")
-            return
-
-        if not self._settings:
-            # 如果没有设置，使用默认目录
-            last_dir = str(Path.home())
-        else:
-            last_dir = self._settings.value("last_log_dir", str(Path.home()))
-
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            f"选择 {protocol_name} 协议的日志文件",
-            last_dir,
-            "日志文件 (*.log *.txt);;所有文件 (*.*)"
-        )
-
-        if file_path:
-            if self._settings:
-                self._settings.setValue("last_log_dir", str(Path(file_path).parent))
-                self._settings.setValue(f"last_log/{protocol_name}", file_path)
-
-            self.protocol_panel.set_log_path(protocol_name, file_path)
-            self._on_protocol_selected(protocol_name)
-            self.log_panel.log_info(f"已选择日志文件: {file_path}")
-
-    def _open_output_dir(self):
-        """打开输出目录"""
-        self._output_dir.mkdir(parents=True, exist_ok=True)
-        open_directory(self._output_dir)
-
-    def _validate_single_protocol(self, protocol_name: str, config_path: str):
-        """校验单个协议配置"""
-        try:
-            import sys
-            src_path = str(self._app_dir / "src")
-            if src_path not in sys.path:
-                sys.path.insert(0, src_path)
-
-            from validate_configs import ConfigValidator
-            validator = ConfigValidator()
-            is_valid = validator.validate_protocol_config(Path(config_path))
-
-            if is_valid:
-                if validator.warnings:
-                    self.log_panel.log_warning(
-                        f"协议 {protocol_name} 校验通过（{len(validator.warnings)} 个警告）"
-                    )
-                    for warning in validator.warnings:
-                        self.log_panel.log_warning(f"  ↳ {warning}")
-                else:
-                    self.log_panel.log_success(f"协议 {protocol_name} 校验通过")
-            else:
-                self.log_panel.log_error(
-                    f"协议 {protocol_name} 校验失败（{len(validator.errors)} 个错误）"
-                )
-                for error in validator.errors:
-                    self.log_panel.log_error(f"  ↳ {error}")
-            return is_valid
-        except Exception as e:
-            self.log_panel.log_warning(f"校验失败: {e}")
-            return True
-
-    def _select_default_protocol(self, protocol_name: str):
-        """选择默认协议"""
+    def select_protocol_by_name(self, name: str) -> None:
+        """在列表中选中指定协议"""
         list_widget = self.protocol_panel.protocol_list.list_widget
         for i in range(list_widget.count()):
             item = list_widget.item(i)
-            if item.data(Qt.UserRole) == protocol_name:
+            if item.data(Qt.UserRole) == name:
                 list_widget.setCurrentRow(i)
                 return
+        # 如果没找到指定协议，选中第一个
         if list_widget.count() > 0:
             list_widget.setCurrentRow(0)
+
+    def get_selected_protocol_name(self) -> Optional[str]:
+        """获取当前选中的协议名称"""
+        return self.protocol_panel.get_selected_protocol()
+
+    def display_protocol_detail(self, detail: ProtocolDetail) -> None:
+        """显示协议详细信息"""
+        self.detail_panel.update_protocol_info(
+            name=detail.name,
+            config_path=detail.config_path,
+            config_valid=detail.config_valid,
+            log_path=detail.log_path,
+            log_exists=detail.log_exists,
+            log_size=detail.log_size,
+            cmd_count=detail.cmd_count,
+            enum_count=detail.enum_count,
+            type_count=detail.type_count,
+            commands=detail.commands,
+        )
+
+    def get_filter_settings(self) -> Dict[str, Any]:
+        """获取当前的过滤设置"""
+        return self.detail_panel.get_filter_settings()
+
+    def set_parsing_state(self, is_parsing: bool) -> None:
+        """设置解析状态"""
+        self.detail_panel.set_parsing(is_parsing)
+
+    @Slot(str)
+    def log_info(self, message: str) -> None:
+        """显示信息日志"""
+        self.log_panel.log_info(message)
+
+    @Slot(str)
+    def log_success(self, message: str) -> None:
+        """显示成功日志"""
+        self.log_panel.log_success(message)
+
+    @Slot(str)
+    def log_warning(self, message: str) -> None:
+        """显示警告日志"""
+        self.log_panel.log_warning(message)
+
+    @Slot(str)
+    def log_error(self, message: str) -> None:
+        """显示错误日志"""
+        self.log_panel.log_error(message)
+
+    def reset_progress(self) -> None:
+        """重置进度条"""
+        self.log_panel.reset_progress()
+
+    @Slot(int, int)
+    def set_progress(self, current: int, total: int) -> None:
+        """设置进度"""
+        self.log_panel.set_progress(current, total)
+
+    def show_warning(self, title: str, message: str) -> None:
+        """显示警告对话框"""
+        QMessageBox.warning(self, title, message)
+
+    def show_parse_complete_dialog(self, output_path: str) -> bool:
+        """显示解析完成确认对话框"""
+        reply = QMessageBox.question(
+            self,
+            "解析完成",
+            f"解析结果已保存到:\n{output_path}\n\n是否立即打开查看？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        return reply == QMessageBox.Yes
+
+    def show_file_dialog(
+        self,
+        title: str,
+        directory: str,
+        file_filter: str,
+    ) -> Optional[str]:
+        """显示文件选择对话框"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, title, directory, file_filter
+        )
+        return file_path if file_path else None
+
+    def emit_status_changed(self, message: str) -> None:
+        """发送状态变化信号"""
+        self.status_changed.emit(message)
+
+    # ============== Qt 事件处理（仅转发给 Presenter） ==============
 
     def dragEnterEvent(self, event: QDragEnterEvent):
         """拖拽进入事件"""
@@ -367,37 +252,21 @@ class NormalParsePage(QWidget):
         event.ignore()
 
     def dropEvent(self, event: QDropEvent):
-        """拖拽放下事件"""
-        protocol_name = self.protocol_panel.get_selected_protocol()
-        if not protocol_name:
-            QMessageBox.warning(self, "提示", "请先选择一个协议，再拖入日志文件")
+        """拖拽放下事件 - 委托给 Presenter"""
+        if not self._presenter:
             return
 
         for url in event.mimeData().urls():
             file_path = url.toLocalFile()
             if file_path.endswith(('.log', '.txt')):
-                self.protocol_panel.set_log_path(protocol_name, file_path)
-                if self._settings:
-                    self._settings.setValue(f"last_log/{protocol_name}", file_path)
-                self._on_protocol_selected(protocol_name)
-                self.log_panel.log_info(f"已通过拖拽加载日志文件: {file_path}")
+                self._presenter.on_log_file_dropped(file_path)
                 break
 
     def cleanup(self) -> None:
-        """清理资源(停止工作线程)"""
-        # 停止校验线程
-        if self._validate_worker:
-            self._validate_worker.stop()
-        if self._validate_thread and self._validate_thread.isRunning():
-            self._validate_thread.quit()
-            self._validate_thread.wait(1000)
-
-        # 停止解析线程
-        if self._parse_worker:
-            self._parse_worker.stop()
-        if self._parse_thread and self._parse_thread.isRunning():
-            self._parse_thread.quit()
-            self._parse_thread.wait(1000)
+        """清理资源"""
+        # 委托给 Presenter 清理工作线程
+        if self._presenter:
+            self._presenter.cleanup()
 
         # 清理详情面板的扫描线程
         self.detail_panel.cleanup()

@@ -1,9 +1,11 @@
 """
 文件名称: unified_main_window.py
-内容摘要: 统一主窗口 - 带侧边栏导航的整合窗口
-当前版本: v1.0.0
+内容摘要: 统一主窗口 - 带侧边栏导航的整合窗口（MVP 组装点）
+当前版本: v2.0.0
 作者: lanford
 创建日期: 2025-01-10
+修改日期: 2025-02-08
+修改说明: 添加 MVP 组装逻辑
 """
 
 from pathlib import Path
@@ -20,6 +22,12 @@ from .normal_parse_page import NormalParsePage
 from shared import get_unified_theme
 from tcp_log.server_panel import TcpServerPage
 from gui.shared import ThemeManagerMixin, WindowStateMixin, DialogHelperMixin
+from gui.config import CONFIGS_DIR, TCP_OUTPUT_DIR
+from gui.models.protocol_model import ProtocolModel
+from gui.models.parse_model import ParseModel
+from gui.presenters.normal_parse_presenter import NormalParsePresenter
+from tcp_log.models.tcp_server_model import TcpServerModel
+from tcp_log.presenters.tcp_server_presenter import TcpServerPresenter
 
 
 class UnifiedMainWindow(
@@ -84,7 +92,6 @@ class UnifiedMainWindow(
 
         # 页面 1：普通解析
         self._normal_page = NormalParsePage()
-        self._normal_page.set_settings(self._settings)
         self._normal_page.status_changed.connect(self._update_status)
         self._stacked_widget.addWidget(self._normal_page)
 
@@ -97,10 +104,38 @@ class UnifiedMainWindow(
 
         main_layout.addWidget(content_widget, 1)  # 拉伸因子 1
 
-        # 状态栏（共享）
+        # 状态栏（共享）—— 必须在 MVP 组装之前创建，因为 Presenter 初始化会触发状态更新
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self._update_status("就绪")
+
+        # MVP 组装：创建 Model 和 Presenter，注入 View（放在 status_bar 之后）
+        self._setup_mvp()
+
+    def _setup_mvp(self):
+        """组装 MVP 架构：创建 Model 和 Presenter，注入 View"""
+        # NormalParsePage MVP
+        protocol_model = ProtocolModel(CONFIGS_DIR)
+        parse_model = ParseModel()
+        self._normal_presenter = NormalParsePresenter(
+            view=self._normal_page,
+            protocol_model=protocol_model,
+            parse_model=parse_model,
+            settings=self._settings,
+        )
+        self._normal_page.set_presenter(self._normal_presenter)
+
+        # TcpServerPage MVP
+        tcp_model = TcpServerModel(
+            configs_dir=CONFIGS_DIR,
+            save_dir=TCP_OUTPUT_DIR,
+        )
+        self._tcp_presenter = TcpServerPresenter(
+            view=self._tcp_server_page,
+            model=tcp_model,
+            server=self._tcp_server_page._server,
+        )
+        self._tcp_server_page.set_presenter(self._tcp_presenter)
 
     def _setup_menu(self):
         """设置菜单栏"""

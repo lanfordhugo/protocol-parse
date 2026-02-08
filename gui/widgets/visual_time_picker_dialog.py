@@ -180,7 +180,7 @@ class VisualTimePickerDialog(QDialog):
         # 启动后台扫描
         self._scanner = LogTimeScanner(self._log_path, self)
         self._scanner.progress.connect(self._on_scan_progress)
-        self._scanner.finished.connect(self._on_scan_finished)
+        self._scanner.scan_finished.connect(self._on_scan_finished)
         self._scanner.error.connect(self._on_scan_error)
 
         self.progress_bar.setVisible(True)

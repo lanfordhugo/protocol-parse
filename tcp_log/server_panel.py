@@ -1,15 +1,16 @@
 """
 文件名称: server_panel.py
-内容摘要: TCP 服务端页面组件（嵌入统一窗口使用）
-当前版本: v1.0.0
+内容摘要: TCP 服务端页面组件（MVP 模式中的 View 实现）
+当前版本: v2.0.0
 作者: lanford
 创建日期: 2025-01-10
+修改日期: 2025-02-08
+修改说明: 重构为 MVP 模式，业务逻辑移至 TcpServerModel/TcpServerPresenter
 """
 
 import sys
 from pathlib import Path
-from datetime import datetime
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
@@ -19,15 +20,13 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QObject, QStringListModel
 from PySide6.QtGui import QFont, QColor
-import json
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from tcp_log.tcp_server import TcpLogServer, ClientInfo
-from tcp_log.log_entry_parser import LogEntry
-from src.yaml_cmdformat import YamlCmdFormat
+from tcp_log.tcp_server import TcpLogServer
+from tcp_log.models.tcp_server_model import TcpServerModel, EntryData, StatsData, CmdStatsItem
 
 
 class SignalBridge(QObject):
@@ -41,36 +40,30 @@ class SignalBridge(QObject):
 
 
 class TcpServerPage(QWidget):
-    """TCP 服务端页面组件"""
+    """
+    TCP 服务端页面 - MVP 模式中的 View 实现
+
+    职责：
+    - UI 组件的创建和布局
+    - 将用户交互事件转发给 Presenter
+    - 实现 ITcpServerPageView 接口供 Presenter 更新 UI
+    """
 
     # 信号：状态变化（通知主窗口更新状态栏）
     status_changed = Signal(str)
 
-    # 保存目录
-    SAVE_DIR = project_root / "tcp_output"
-
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._presenter = None  # 由外部注入
+
+        # 创建基础设施（服务器 + 信号桥接）
         self._server = TcpLogServer()
         self._signal_bridge = SignalBridge()
-        self._protocols = {}
-        self._current_protocol: Optional[YamlCmdFormat] = None
-        self._entry_count = 0
-        self._success_count = 0
-        self._fail_count = 0
-        self._cmd_stats: Dict[int, int] = {}
-        self._all_entries = []
-        self._current_filter_cmd: Optional[int] = None
 
-        self._log_file = None
-        self._result_file = None
-        self._session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        self._max_cache_entries = 1000
+        # UI 初始显示用的缓存上限（实际值由 Model 管理）
+        self._max_cache_display = 1000
 
         self._setup_ui()
-        self._setup_connections()
-        self._scan_protocols()
 
     def _setup_ui(self):
         """设置UI"""
@@ -219,7 +212,7 @@ class TcpServerPage(QWidget):
         self._stats_label = QLabel("总计: 0 条  |  成功: 0  |  失败: 0")
         stats_summary_layout.addWidget(self._stats_label)
 
-        self._cache_label = QLabel(f"缓存: 0/{self._max_cache_entries}")
+        self._cache_label = QLabel(f"缓存: 0/{self._max_cache_display}")
         self._cache_label.setStyleSheet("color: #888;")
         stats_summary_layout.addWidget(self._cache_label)
 
@@ -268,496 +261,94 @@ class TcpServerPage(QWidget):
         self._save_result_check = QCheckBox("保存解析结果")
         save_layout.addWidget(self._save_result_check)
 
-        self._save_path_label = QLabel(f"保存位置: {self.SAVE_DIR}")
+        self._save_path_label = QLabel(f"保存位置: {project_root / 'tcp_output'}")
         self._save_path_label.setStyleSheet("color: #888; font-size: 11px;")
         save_layout.addWidget(self._save_path_label)
 
         save_layout.addStretch()
         layout.addWidget(save_widget)
 
+    def set_presenter(self, presenter) -> None:
+        """
+        注入 Presenter（MVP 组装时调用）
+
+        Args:
+            presenter: TcpServerPresenter 实例
+        """
+        self._presenter = presenter
+        self._setup_connections()
+        self._presenter.initialize()
+
     def _setup_connections(self):
-        """设置信号连接"""
-        self._start_btn.clicked.connect(self._on_start)
-        self._stop_btn.clicked.connect(self._on_stop)
-        self._clear_table_btn.clicked.connect(self._clear_results)
-        self._reset_stats_btn.clicked.connect(self._reset_stats)
+        """连接 UI 信号到 Presenter 方法"""
+        self._start_btn.clicked.connect(self._presenter.on_start_clicked)
+        self._stop_btn.clicked.connect(self._presenter.on_stop_clicked)
+        self._clear_table_btn.clicked.connect(self._presenter.on_clear_results)
+        self._reset_stats_btn.clicked.connect(self._presenter.on_reset_stats)
 
         self._result_table.itemSelectionChanged.connect(self._on_selection_changed)
+        self._protocol_combo.currentTextChanged.connect(
+            self._presenter.on_protocol_changed
+        )
+        self._filter_combo.currentTextChanged.connect(
+            lambda _: self._presenter.on_filter_changed()
+        )
+        self._toggle_stats_btn.clicked.connect(self._on_toggle_stats)
+        self._copy_detail_btn.clicked.connect(self._copy_detail)
 
-        self._protocol_combo.currentTextChanged.connect(self._on_protocol_changed)
-        self._filter_combo.currentTextChanged.connect(self._on_filter_changed)
+        # 信号桥接 → Presenter
+        self._signal_bridge.state_changed.connect(
+            self._presenter.on_server_state_changed
+        )
+        self._signal_bridge.client_connected.connect(
+            self._presenter.on_client_connected
+        )
+        self._signal_bridge.client_disconnected.connect(
+            self._presenter.on_client_disconnected
+        )
+        self._signal_bridge.entry_received.connect(
+            self._presenter.on_entry_received
+        )
+        self._signal_bridge.log_message.connect(
+            self._presenter.on_log_message
+        )
+        self._signal_bridge.error_message.connect(
+            self._presenter.on_error_message
+        )
 
-        self._save_log_check.stateChanged.connect(self._on_save_option_changed)
-        self._save_result_check.stateChanged.connect(self._on_save_option_changed)
-
-        self._toggle_stats_btn.clicked.connect(self._toggle_stats_detail)
-
-        # 信号桥接
-        self._signal_bridge.state_changed.connect(self._update_state)
-        self._signal_bridge.client_connected.connect(self._on_client_connected)
-        self._signal_bridge.client_disconnected.connect(self._on_client_disconnected)
-        self._signal_bridge.entry_received.connect(self._on_entry_received)
-        self._signal_bridge.log_message.connect(self._show_log)
-        self._signal_bridge.error_message.connect(self._show_error)
-
-        # 设置服务器回调
+        # 设置服务器回调 → 信号桥接
         self._server.set_callbacks(
             on_state_changed=lambda s: self._signal_bridge.state_changed.emit(s.value),
             on_client_connected=lambda c: self._signal_bridge.client_connected.emit(c),
             on_client_disconnected=lambda: self._signal_bridge.client_disconnected.emit(),
             on_entry_received=lambda e: self._signal_bridge.entry_received.emit(e),
             on_log=lambda m: self._signal_bridge.log_message.emit(m),
-            on_error=lambda m: self._signal_bridge.error_message.emit(m)
+            on_error=lambda m: self._signal_bridge.error_message.emit(m),
         )
 
-    def _scan_protocols(self):
-        """扫描协议配置"""
-        configs_dir = project_root / "configs"
-        self._protocols.clear()
-        self._protocol_combo.clear()
-
-        if not configs_dir.exists():
-            return
-
-        for protocol_dir in configs_dir.iterdir():
-            if protocol_dir.is_dir():
-                yaml_config = protocol_dir / "protocol.yaml"
-                if yaml_config.exists():
-                    self._protocols[protocol_dir.name] = str(yaml_config)
-
-        protocol_names = sorted(self._protocols.keys())
-        self._protocol_combo.addItems(protocol_names)
-
-        model = QStringListModel(protocol_names)
-        self._protocol_completer.setModel(model)
-
-        if self._protocols:
-            self._protocol_combo.setCurrentIndex(0)
-
-    def _on_protocol_changed(self, protocol_name: str):
-        """协议选择改变"""
-        if protocol_name in self._protocols:
-            try:
-                yaml_path = self._protocols[protocol_name]
-                self._current_protocol = YamlCmdFormat(yaml_path)
-                self.status_changed.emit(f"已加载协议: {protocol_name}")
-            except Exception as e:
-                self._current_protocol = None
-                self.status_changed.emit(f"加载协议失败: {e}")
-
-    def _on_start(self):
-        """启动服务"""
-        host = self._host_input.text().strip()
-        port = self._port_input.value()
-
-        if not self._current_protocol:
-            QMessageBox.warning(self, "警告", "请先选择协议")
-            return
-
-        self._server.start(host, port)
-
-    def _on_stop(self):
-        """停止服务"""
-        self._server.stop()
-
-    def _update_state(self, state_text: str):
-        """更新状态显示"""
-        state_colors = {
-            "已停止": ("#888888", False),
-            "启动中": ("#FFA500", False),
-            "监听中": ("#4CAF50", True),
-            "已连接": ("#00CED1", True),
-            "错误": ("#F44336", False),
-        }
-
-        color, running = state_colors.get(state_text, ("gray", False))
-        self._status_label.setText(f"状态: ● {state_text}")
-        self._status_label.setStyleSheet(f"color: {color};")
-
-        self._start_btn.setEnabled(not running)
-        self._stop_btn.setEnabled(running)
-        self._protocol_combo.setEnabled(not running)
-
-    def _on_client_connected(self, client_info: ClientInfo):
-        """客户端连接"""
-        self.status_changed.emit(f"客户端已连接: {client_info.address}:{client_info.port}")
-
-    def _on_client_disconnected(self):
-        """客户端断开"""
-        self.status_changed.emit("客户端已断开")
-
-    def _on_entry_received(self, entry: LogEntry):
-        """收到日志条目"""
-        self._entry_count += 1
-
-        parsed_result = None
-        parse_success = False
-
-        if self._current_protocol:
-            try:
-                hex_str = entry.hex_data.replace(' ', '')
-                if hex_str:
-                    byte_data = bytes.fromhex(hex_str)
-                    config = self._current_protocol.config
-                    if len(byte_data) > config.head_len:
-                        content_data = byte_data[config.head_len:-config.tail_len] if config.tail_len > 0 else byte_data[config.head_len:]
-                        parsed_result = self._current_protocol.parse_cmd_data(entry.cmd_id, content_data)
-                        parse_success = True
-            except Exception as e:
-                parsed_result = {"error": str(e)}
-
-        if parse_success:
-            self._success_count += 1
-        else:
-            self._fail_count += 1
-
-        self._cmd_stats[entry.cmd_id] = self._cmd_stats.get(entry.cmd_id, 0) + 1
-        self._update_stats()
-        self._update_filter_combo(entry.cmd_id)
-
-        entry_data = {
-            "entry": entry,
-            "parsed": parsed_result,
-            "success": parse_success
-        }
-        self._all_entries.append(entry_data)
-
-        if len(self._all_entries) > self._max_cache_entries:
-            remove_count = max(1, self._max_cache_entries // 10)
-            del self._all_entries[:remove_count]
-            for _ in range(remove_count):
-                if self._result_table.rowCount() > 0:
-                    self._result_table.removeRow(0)
-
-        self._update_cache_label()
-
-        if self._save_log_check.isChecked():
-            self._save_log_entry(entry)
-
-        if self._save_result_check.isChecked():
-            self._save_parsed_result(entry, parsed_result, parse_success)
-
-        if self._should_show_entry(entry.cmd_id, parse_success):
-            self._add_result_row(entry, parsed_result, parse_success)
-
-    def _add_result_row(self, entry: LogEntry, parsed_result: Optional[dict], success: bool):
-        """添加结果行"""
-        row = self._result_table.rowCount()
-        self._result_table.insertRow(row)
-
-        time_item = QTableWidgetItem(entry.timestamp.split()[-1] if ' ' in entry.timestamp else entry.timestamp)
-        self._result_table.setItem(row, 0, time_item)
-
-        dir_item = QTableWidgetItem(entry.direction)
-        dir_item.setTextAlignment(Qt.AlignCenter)
-        self._result_table.setItem(row, 1, dir_item)
-
-        cmd_item = QTableWidgetItem(str(entry.cmd_id))
-        cmd_item.setTextAlignment(Qt.AlignCenter)
-        self._result_table.setItem(row, 2, cmd_item)
-
-        # 终端ID列
-        terminal_text = str(entry.terminal_id) if entry.terminal_id is not None else ""
-        terminal_item = QTableWidgetItem(terminal_text)
-        terminal_item.setTextAlignment(Qt.AlignCenter)
-        self._result_table.setItem(row, 3, terminal_item)
-
-        if parsed_result:
-            summary = self._generate_summary(parsed_result)
-        else:
-            summary = f"[原始] {entry.hex_data[:50]}..."
-
-        summary_item = QTableWidgetItem(summary)
-        if not success:
-            summary_item.setForeground(QColor("red"))
-        self._result_table.setItem(row, 4, summary_item)
-
-        time_item.setData(Qt.UserRole, {
-            "entry": entry,
-            "parsed": parsed_result,
-            "success": success
-        })
-
-        if self._auto_scroll_check.isChecked():
-            self._result_table.scrollToBottom()
-
-        while self._result_table.rowCount() > 1000:
-            self._result_table.removeRow(0)
-
-    def _generate_summary(self, parsed: dict) -> str:
-        """生成摘要"""
-        if not parsed:
-            return ""
-
-        if "error" in parsed:
-            return f"[错误] {parsed['error']}"
-
-        items = []
-        for key, value in list(parsed.items())[:4]:
-            if isinstance(value, dict):
-                if 'value' in value and 'name' in value:
-                    items.append(f"{key}={value['name']}")
-                else:
-                    items.append(f"{key}=...")
-            elif isinstance(value, list):
-                items.append(f"{key}=[{len(value)}项]")
-            else:
-                items.append(f"{key}={value}")
-
-        return ", ".join(items)
+    # ============== 内部 UI 事件（转发给 Presenter） ==============
 
     def _on_selection_changed(self):
-        """表格选择改变"""
+        """表格选择改变 - 通知 Presenter"""
         rows = self._result_table.selectedItems()
         if not rows:
             return
-
         row = rows[0].row()
         item = self._result_table.item(row, 0)
-        if not item:
-            return
+        if item:
+            entry_index = item.data(Qt.UserRole)
+            if entry_index is not None:
+                self._presenter.on_selection_changed(entry_index)
 
-        data = item.data(Qt.UserRole)
-        if not data:
-            return
-
-        entry = data["entry"]
-        parsed = data["parsed"]
-        success = data["success"]
-
-        lines = []
-        lines.append("=== 数据项 ===")
-        lines.append(f"时间: {entry.timestamp}")
-        lines.append(f"方向: {entry.direction}")
-        lines.append(f"命令: cmd{entry.cmd_id}")
-        lines.append(f"字节数: {entry.byte_count}")
-        if entry.terminal_id is not None:
-            lines.append(f"终端ID: {entry.terminal_id}")
-        lines.append(f"源信息: {entry.source_info}")
-        lines.append("")
-
-        if parsed and success:
-            lines.append("解析内容:")
-            self._format_parsed(parsed, lines, indent=2)
-        elif parsed and "error" in parsed:
-            lines.append(f"解析错误: {parsed['error']}")
-
-        lines.append("")
-        lines.append("原始数据:")
-        lines.append(entry.hex_data)
-
-        self._detail_text.setText("\n".join(lines))
-
-    def _format_parsed(self, data: dict, lines: list, indent: int = 0):
-        """格式化解析结果"""
-        prefix = " " * indent
-
-        for key, value in data.items():
-            if isinstance(value, dict):
-                if 'value' in value and 'name' in value:
-                    lines.append(f"{prefix}{key}: {value['value']} ({value['name']})")
-                else:
-                    lines.append(f"{prefix}{key}:")
-                    self._format_parsed(value, lines, indent + 2)
-            elif isinstance(value, list):
-                lines.append(f"{prefix}{key}: [{len(value)} 项]")
-                for i, item in enumerate(value[:3]):
-                    if isinstance(item, dict):
-                        lines.append(f"{prefix}  [{i}]:")
-                        self._format_parsed(item, lines, indent + 4)
-                    else:
-                        lines.append(f"{prefix}  [{i}]: {item}")
-                if len(value) > 3:
-                    lines.append(f"{prefix}  ... 还有 {len(value) - 3} 项")
-            else:
-                lines.append(f"{prefix}{key}: {value}")
-
-    def _update_stats(self):
-        """更新统计信息"""
-        success_rate = (self._success_count / self._entry_count * 100) if self._entry_count > 0 else 0
-
-        cmd_count = len(self._cmd_stats)
-        self._stats_label.setText(
-            f"📊 总计: {self._entry_count} 条  |  "
-            f"✅ 成功: {self._success_count} ({success_rate:.1f}%)  |  "
-            f"❌ 失败: {self._fail_count}  |  "
-            f"📋 命令种类: {cmd_count}"
-        )
-
-        if self._stats_detail_table.isVisible():
-            self._update_stats_detail_table()
-
-    def _toggle_stats_detail(self):
-        """切换统计详情显示"""
+    def _on_toggle_stats(self):
+        """切换统计详情 - 通知 Presenter"""
         is_visible = self._stats_detail_table.isVisible()
         self._stats_detail_table.setVisible(not is_visible)
-
         if not is_visible:
             self._toggle_stats_btn.setText("收起详情 ▲")
-            self._update_stats_detail_table()
+            self._presenter.on_toggle_stats_detail(True)
         else:
             self._toggle_stats_btn.setText("展开详情 ▼")
-
-    def _update_stats_detail_table(self):
-        """更新统计详情表格"""
-        self._stats_detail_table.setRowCount(0)
-
-        cmd_success = {}
-        for entry_data in self._all_entries:
-            cmd_id = entry_data["entry"].cmd_id
-            success = entry_data["success"]
-            if cmd_id not in cmd_success:
-                cmd_success[cmd_id] = {"total": 0, "success": 0}
-            cmd_success[cmd_id]["total"] += 1
-            if success:
-                cmd_success[cmd_id]["success"] += 1
-
-        sorted_cmds = sorted(self._cmd_stats.items(), key=lambda x: x[1], reverse=True)
-
-        for cmd_id, count in sorted_cmds:
-            row = self._stats_detail_table.rowCount()
-            self._stats_detail_table.insertRow(row)
-
-            cmd_item = QTableWidgetItem(f"cmd{cmd_id}")
-            cmd_item.setTextAlignment(Qt.AlignCenter)
-            self._stats_detail_table.setItem(row, 0, cmd_item)
-
-            cmd_name = self._get_cmd_name(cmd_id)
-            name_item = QTableWidgetItem(cmd_name)
-            self._stats_detail_table.setItem(row, 1, name_item)
-
-            count_item = QTableWidgetItem(str(count))
-            count_item.setTextAlignment(Qt.AlignCenter)
-            self._stats_detail_table.setItem(row, 2, count_item)
-
-            if cmd_id in cmd_success:
-                stats = cmd_success[cmd_id]
-                rate = (stats["success"] / stats["total"] * 100) if stats["total"] > 0 else 0
-                rate_text = f"{rate:.1f}%"
-                rate_item = QTableWidgetItem(rate_text)
-                rate_item.setTextAlignment(Qt.AlignCenter)
-                if rate >= 90:
-                    rate_item.setForeground(QColor("#4CAF50"))
-                elif rate >= 50:
-                    rate_item.setForeground(QColor("#FF9800"))
-                else:
-                    rate_item.setForeground(QColor("#F44336"))
-                self._stats_detail_table.setItem(row, 3, rate_item)
-
-    def _get_cmd_name(self, cmd_id: int) -> str:
-        """获取命令名称"""
-        if self._current_protocol:
-            try:
-                config = self._current_protocol.config
-                for cmd in config.commands:
-                    if cmd.cmd_id == cmd_id:
-                        return cmd.name or f"cmd{cmd_id}"
-            except Exception:
-                pass
-        return f"cmd{cmd_id}"
-
-    def _should_show_entry(self, cmd_id: int, success: bool) -> bool:
-        """判断是否应该显示该条目"""
-        if self._success_only_check.isChecked() and not success:
-            return False
-
-        if self._current_filter_cmd is not None and cmd_id != self._current_filter_cmd:
-            return False
-
-        return True
-
-    def _update_filter_combo(self, cmd_id: int):
-        """更新过滤下拉框"""
-        cmd_text = f"cmd{cmd_id}"
-
-        for i in range(self._filter_combo.count()):
-            if self._filter_combo.itemText(i) == cmd_text:
-                return
-
-        self._filter_combo.addItem(cmd_text)
-
-        items = [self._filter_combo.itemText(i) for i in range(self._filter_combo.count())]
-        model = QStringListModel(items)
-        self._filter_completer.setModel(model)
-
-    def _on_filter_changed(self, text: str):
-        """过滤选择改变"""
-        if text == "全部命令" or not text:
-            self._current_filter_cmd = None
-        elif text.startswith("cmd"):
-            try:
-                self._current_filter_cmd = int(text[3:])
-            except ValueError:
-                self._current_filter_cmd = None
-        else:
-            try:
-                self._current_filter_cmd = int(text)
-            except ValueError:
-                self._current_filter_cmd = None
-
-        self._refresh_table()
-
-    def _refresh_table(self):
-        """刷新表格显示"""
-        self._result_table.setRowCount(0)
-
-        for entry_data in self._all_entries:
-            entry = entry_data["entry"]
-            parsed = entry_data["parsed"]
-            success = entry_data["success"]
-
-            if self._should_show_entry(entry.cmd_id, success):
-                self._add_result_row(entry, parsed, success)
-
-    def _on_save_option_changed(self):
-        """保存选项改变"""
-        if self._save_log_check.isChecked() or self._save_result_check.isChecked():
-            self.SAVE_DIR.mkdir(parents=True, exist_ok=True)
-
-    def _save_log_entry(self, entry: LogEntry):
-        """保存日志条目"""
-        try:
-            self.SAVE_DIR.mkdir(parents=True, exist_ok=True)
-            log_file = self.SAVE_DIR / f"tcp_log_{self._session_id}.log"
-
-            with open(log_file, "a", encoding="utf-8") as f:
-                f.write(entry.raw_text)
-                if not entry.raw_text.endswith("\n"):
-                    f.write("\n")
-        except Exception as e:
-            self.status_changed.emit(f"保存日志失败: {e}")
-
-    def _save_parsed_result(self, entry: LogEntry, parsed: Optional[dict], success: bool):
-        """保存解析结果"""
-        try:
-            self.SAVE_DIR.mkdir(parents=True, exist_ok=True)
-            result_file = self.SAVE_DIR / f"tcp_parsed_{self._session_id}.json"
-
-            record = {
-                "timestamp": entry.timestamp,
-                "direction": entry.direction,
-                "cmd_id": entry.cmd_id,
-                "byte_count": entry.byte_count,
-                "terminal_id": entry.terminal_id,
-                "success": success,
-                "parsed": parsed if parsed else {},
-                "hex_data": entry.hex_data
-            }
-
-            with open(result_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps(record, ensure_ascii=False) + "\n")
-        except Exception as e:
-            self.status_changed.emit(f"保存解析结果失败: {e}")
-
-    def _clear_results(self):
-        """清空结果"""
-        self._result_table.setRowCount(0)
-        self._detail_text.clear()
-        self._all_entries.clear()
-
-        self._filter_combo.clear()
-        self._filter_combo.addItem("全部命令")
-        self._current_filter_cmd = None
 
     def _copy_detail(self):
         """复制详情内容"""
@@ -768,28 +359,210 @@ class TcpServerPage(QWidget):
             clipboard.setText(text)
             self.status_changed.emit("已复制到剪贴板")
 
-    def _update_cache_label(self):
-        """更新缓存条数显示"""
-        current = len(self._all_entries)
-        self._cache_label.setText(f"缓存: {current}/{self._max_cache_entries}")
-        if current > self._max_cache_entries * 0.8:
+    # ============== ITcpServerPageView 接口实现 ==============
+
+    def update_server_state(self, state_text: str) -> None:
+        """更新服务器状态显示"""
+        state_colors = {
+            "已停止": ("#888888", False),
+            "启动中": ("#FFA500", False),
+            "监听中": ("#4CAF50", True),
+            "已连接": ("#00CED1", True),
+            "错误": ("#F44336", False),
+        }
+        color, running = state_colors.get(state_text, ("gray", False))
+        self._status_label.setText(f"状态: ● {state_text}")
+        self._status_label.setStyleSheet(f"color: {color};")
+        self._start_btn.setEnabled(not running)
+        self._stop_btn.setEnabled(running)
+        self._protocol_combo.setEnabled(not running)
+
+    def get_server_config(self) -> Dict[str, Any]:
+        """获取服务器配置"""
+        return {
+            "host": self._host_input.text().strip(),
+            "port": self._port_input.value(),
+        }
+
+    def set_protocol_list(self, names: List[str]) -> None:
+        """设置协议下拉列表"""
+        # 暂时阻断信号，避免 addItems 时多次触发 on_protocol_changed
+        self._protocol_combo.blockSignals(True)
+        self._protocol_combo.clear()
+        self._protocol_combo.addItems(names)
+        model = QStringListModel(names)
+        self._protocol_completer.setModel(model)
+        self._protocol_combo.blockSignals(False)
+        if names:
+            # 恢复信号后再设置选中项，只触发一次
+            self._protocol_combo.setCurrentIndex(0)
+
+    def add_result_row(self, entry_data: EntryData, summary: str) -> None:
+        """添加一行解析结果"""
+        entry = entry_data.entry
+        row = self._result_table.rowCount()
+        self._result_table.insertRow(row)
+
+        time_text = entry.timestamp.split()[-1] if ' ' in entry.timestamp else entry.timestamp
+        time_item = QTableWidgetItem(time_text)
+        self._result_table.setItem(row, 0, time_item)
+
+        dir_item = QTableWidgetItem(entry.direction)
+        dir_item.setTextAlignment(Qt.AlignCenter)
+        self._result_table.setItem(row, 1, dir_item)
+
+        cmd_item = QTableWidgetItem(str(entry.cmd_id))
+        cmd_item.setTextAlignment(Qt.AlignCenter)
+        self._result_table.setItem(row, 2, cmd_item)
+
+        terminal_text = str(entry.terminal_id) if entry.terminal_id is not None else ""
+        terminal_item = QTableWidgetItem(terminal_text)
+        terminal_item.setTextAlignment(Qt.AlignCenter)
+        self._result_table.setItem(row, 3, terminal_item)
+
+        summary_item = QTableWidgetItem(summary)
+        if not entry_data.success:
+            summary_item.setForeground(QColor("red"))
+        self._result_table.setItem(row, 4, summary_item)
+
+        # 存储条目在 all_entries 中的索引，用于 Presenter 查询详情
+        if self._presenter:
+            entries = self._presenter._model.all_entries
+            time_item.setData(Qt.UserRole, len(entries) - 1)
+
+        if self._auto_scroll_check.isChecked():
+            self._result_table.scrollToBottom()
+
+        while self._result_table.rowCount() > 1000:
+            self._result_table.removeRow(0)
+
+    def remove_oldest_rows(self, count: int) -> None:
+        """移除最旧的 N 行"""
+        for _ in range(count):
+            if self._result_table.rowCount() > 0:
+                self._result_table.removeRow(0)
+
+    def clear_result_table(self) -> None:
+        """清空结果表格"""
+        self._result_table.setRowCount(0)
+        self._detail_text.clear()
+
+    def refresh_result_table(
+        self, entries: List[EntryData], summaries: List[str]
+    ) -> None:
+        """刷新整个结果表格"""
+        self._result_table.setRowCount(0)
+        for entry_data, summary in zip(entries, summaries):
+            self.add_result_row(entry_data, summary)
+
+    def show_entry_detail(self, detail_text: str) -> None:
+        """显示条目详情"""
+        self._detail_text.setText(detail_text)
+
+    def update_stats_summary(self, stats: StatsData) -> None:
+        """更新统计摘要"""
+        self._stats_label.setText(
+            f"📊 总计: {stats.entry_count} 条  |  "
+            f"✅ 成功: {stats.success_count} ({stats.success_rate:.1f}%)  |  "
+            f"❌ 失败: {stats.fail_count}  |  "
+            f"📋 命令种类: {stats.cmd_count}"
+        )
+        if self._stats_detail_table.isVisible() and self._presenter:
+            items = self._presenter._model.get_cmd_stats_detail()
+            self.update_stats_detail(items)
+
+    def update_stats_detail(self, items: List[CmdStatsItem]) -> None:
+        """更新统计详情表格"""
+        self._stats_detail_table.setRowCount(0)
+        for item in items:
+            row = self._stats_detail_table.rowCount()
+            self._stats_detail_table.insertRow(row)
+
+            cmd_item = QTableWidgetItem(f"cmd{item.cmd_id}")
+            cmd_item.setTextAlignment(Qt.AlignCenter)
+            self._stats_detail_table.setItem(row, 0, cmd_item)
+
+            name_item = QTableWidgetItem(item.cmd_name)
+            self._stats_detail_table.setItem(row, 1, name_item)
+
+            count_item = QTableWidgetItem(str(item.total_count))
+            count_item.setTextAlignment(Qt.AlignCenter)
+            self._stats_detail_table.setItem(row, 2, count_item)
+
+            rate = item.success_rate
+            rate_item = QTableWidgetItem(f"{rate:.1f}%")
+            rate_item.setTextAlignment(Qt.AlignCenter)
+            if rate >= 90:
+                rate_item.setForeground(QColor("#4CAF50"))
+            elif rate >= 50:
+                rate_item.setForeground(QColor("#FF9800"))
+            else:
+                rate_item.setForeground(QColor("#F44336"))
+            self._stats_detail_table.setItem(row, 3, rate_item)
+
+    def update_cache_label(self, current: int, max_count: int) -> None:
+        """更新缓存条数标签"""
+        self._cache_label.setText(f"缓存: {current}/{max_count}")
+        if current > max_count * 0.8:
             self._cache_label.setStyleSheet("color: #FFA500;")
         else:
             self._cache_label.setStyleSheet("color: #888;")
 
-    def _reset_stats(self):
-        """重置统计"""
-        self._entry_count = 0
-        self._success_count = 0
-        self._fail_count = 0
-        self._cmd_stats.clear()
-        self._server.reset_stats()
-        self._update_stats()
+    def add_filter_option(self, cmd_text: str) -> None:
+        """添加过滤选项（去重）"""
+        for i in range(self._filter_combo.count()):
+            if self._filter_combo.itemText(i) == cmd_text:
+                return
+        self._filter_combo.addItem(cmd_text)
+        items = [self._filter_combo.itemText(i) for i in range(self._filter_combo.count())]
+        model = QStringListModel(items)
+        self._filter_completer.setModel(model)
 
-    def _show_log(self, message: str):
-        """显示日志"""
+    def get_filter_cmd(self) -> Optional[int]:
+        """获取当前过滤的命令 ID"""
+        text = self._filter_combo.currentText()
+        if text == "全部命令" or not text:
+            return None
+        if text.startswith("cmd"):
+            try:
+                return int(text[3:])
+            except ValueError:
+                return None
+        try:
+            return int(text)
+        except ValueError:
+            return None
+
+    def is_success_only(self) -> bool:
+        """是否仅显示成功"""
+        return self._success_only_check.isChecked()
+
+    def is_auto_scroll(self) -> bool:
+        """是否自动滚动"""
+        return self._auto_scroll_check.isChecked()
+
+    def reset_filter(self) -> None:
+        """重置过滤器"""
+        self._filter_combo.clear()
+        self._filter_combo.addItem("全部命令")
+
+    def is_save_log_enabled(self) -> bool:
+        """是否启用日志保存"""
+        return self._save_log_check.isChecked()
+
+    def is_save_result_enabled(self) -> bool:
+        """是否启用结果保存"""
+        return self._save_result_check.isChecked()
+
+    def show_warning(self, title: str, message: str) -> None:
+        """显示警告对话框"""
+        QMessageBox.warning(self, title, message)
+
+    def emit_status_changed(self, message: str) -> None:
+        """发送状态变化信号"""
         self.status_changed.emit(message)
 
-    def _show_error(self, message: str):
-        """显示错误"""
-        self.status_changed.emit(f"错误: {message}")
+    def cleanup(self) -> None:
+        """清理资源（停止服务器线程）"""
+        if self._server and self._server.is_running:
+            self._server.stop()

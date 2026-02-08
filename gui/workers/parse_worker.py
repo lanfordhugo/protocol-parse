@@ -110,10 +110,9 @@ class ParseWorker(QObject):
             if time_range:
                 protocol.set_time_range(time_range[0], time_range[1])
 
-            self.progress.emit(10, 100)
             self.log_info.emit("正在提取数据...")
 
-            # 执行解析
+            # 执行解析（进度通过 protocol 的回调自动发射：5→10→10-80→85→100）
             output_path = protocol.run()
 
             # 检查是否被停止
@@ -122,15 +121,11 @@ class ParseWorker(QObject):
                 self.finished.emit(False, "解析已停止", "")
                 return
 
-            self.progress.emit(90, 100)
-
             if output_path:
                 self.log_success.emit(f"解析完成，结果已保存到: {output_path}")
-                self.progress.emit(100, 100)
                 self.finished.emit(True, "解析完成", output_path)
             else:
                 self.log_warning.emit("解析完成，但没有生成输出文件（可能没有匹配的数据）")
-                self.progress.emit(100, 100)
                 self.finished.emit(True, "解析完成（无数据）", "")
 
         except Exception as e:

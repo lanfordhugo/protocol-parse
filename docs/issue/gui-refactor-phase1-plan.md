@@ -1,26 +1,48 @@
 # GUI 重构阶段1：基础架构层重构计划
 
-**文档版本**: v1.0
+**文档版本**: v2.0（已修订为 MVP 模式）
 **创建日期**: 2025-02-02
-**预计工期**: 6.5天
-**风险等级**: 中等
+**完成日期**: 2025-02-08
+**状态**: ✅ 已完成
+
+## 修订说明
+
+v1.0 设计了 MVVM（ViewModel + Service）架构，v2.0 修正为 **MVP（Model-View-Presenter）** 模式：
+- Service 层 → Model 层（纯 Python，不依赖 Qt）
+- ViewModel 层 → Presenter 层（持有 View 接口引用，协调 Model 和 View）
+- View 接口使用 `typing.Protocol`（结构化子类型），避免与 QWidget 的 Shiboken 元类冲突
 
 ## 一、阶段目标
 
-建立分层架构，解决最严重的耦合问题，实现 UI 与业务逻辑分离。
+建立 MVP 分层架构，解决最严重的耦合问题，实现 UI 与业务逻辑分离。
 
 ### 核心目标
-1. ✅ 创建服务层（Service Layer）封装业务逻辑
-2. ✅ 引入 ViewModel 模式分离 UI 逻辑
-3. ✅ 统一配置管理，消除硬编码
+1. ✅ 创建 Model 层（ProtocolModel, ParseModel）封装业务逻辑
+2. ✅ 引入 Presenter 模式分离 UI 逻辑
+3. ✅ 统一配置管理（gui/config.py）
 4. ✅ 保持向后兼容，确保现有功能正常
 
 ### 验证标准
-- [ ] 所有现有功能正常工作（协议选择、日志解析、结果显示）
-- [ ] 服务层单元测试覆盖率 >80%
-- [ ] UI 代码不再直接导入 `YamlConfigLoader` 等核心模块
-- [ ] PyInstaller 打包成功且应用正常运行
-- [ ] 所有硬编码常量迁移到 `gui/config.py`
+- [x] 所有现有功能正常工作（协议选择、日志解析、结果显示）
+- [ ] Model/Presenter 层单元测试（Phase 3 补充）
+- [x] UI 代码不再直接导入 `YamlConfigLoader` 等核心模块
+- [ ] PyInstaller 打包成功（待验证）
+- [x] 统一配置常量迁移到 `gui/config.py`
+
+### 实际产出文件
+
+```
+gui/config.py                              # 统一配置常量
+gui/models/__init__.py                      # Model 层包
+gui/models/protocol_model.py                # 协议业务模型（纯 Python）
+gui/models/parse_model.py                   # 解析业务模型（纯 Python）
+gui/views/__init__.py                       # View 接口包
+gui/views/i_normal_parse_view.py            # View 接口（typing.Protocol）
+gui/presenters/__init__.py                  # Presenter 包
+gui/presenters/normal_parse_presenter.py    # NormalParsePage Presenter
+gui/normal_parse_page.py                    # 重构：实现 View 接口
+gui/unified_main_window.py                  # 修改：MVP 组装点
+```
 
 ---
 

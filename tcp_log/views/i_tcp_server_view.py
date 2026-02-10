@@ -127,3 +127,25 @@ class ITcpServerPageView(Protocol):
     def emit_status_changed(self, message: str) -> None:
         """发送状态变化信号"""
         ...
+
+    # ============== 波形数据转发 ==============
+
+    def emit_entry_parsed(
+        self,
+        timestamp_str: str,
+        parsed_content: Optional[dict],
+        cmd_id: Optional[int],
+        direction: Optional[str],
+        success: bool,
+    ) -> None:
+        """
+        转发已解析的数据条目（供波形窗口使用）
+
+        Args:
+            timestamp_str: 时间戳字符串
+            parsed_content: 解析后的内容字典
+            cmd_id: 命令ID
+            direction: 数据方向
+            success: 是否解析成功
+        """
+        ...

@@ -1,11 +1,11 @@
 """
 文件名称: server_panel.py
 内容摘要: TCP 服务端页面组件（MVP 模式中的 View 实现）
-当前版本: v2.0.0
+当前版本: v2.1.0
 作者: lanford
 创建日期: 2025-01-10
-修改日期: 2025-02-08
-修改说明: 重构为 MVP 模式，业务逻辑移至 TcpServerModel/TcpServerPresenter
+修改日期: 2026-02-09
+修改说明: 添加波形监控窗口集成
 """
 
 import sys
@@ -51,6 +51,8 @@ class TcpServerPage(QWidget):
 
     # 信号：状态变化（通知主窗口更新状态栏）
     status_changed = Signal(str)
+    # 信号：已解析数据转发（供波形窗口使用）
+    entry_parsed = Signal(str, object, object, object, bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -111,6 +113,20 @@ class TcpServerPage(QWidget):
         self._stop_btn.setFixedWidth(80)
         self._stop_btn.setEnabled(False)
         server_layout.addWidget(self._stop_btn)
+
+        # 波形监控按钮
+        self._wave_btn = QPushButton("波形")
+        self._wave_btn.setFixedWidth(60)
+        self._wave_btn.setToolTip("打开实时波形监控窗口")
+        self._wave_btn.clicked.connect(self._open_wave_window)
+        server_layout.addWidget(self._wave_btn)
+
+        # 历史波形按钮
+        self._history_wave_btn = QPushButton("历史")
+        self._history_wave_btn.setFixedWidth(60)
+        self._history_wave_btn.setToolTip("打开历史波形分析窗口")
+        self._history_wave_btn.clicked.connect(self._open_history_wave_window)
+        server_layout.addWidget(self._history_wave_btn)
 
         server_layout.addStretch()
 
@@ -562,7 +578,97 @@ class TcpServerPage(QWidget):
         """发送状态变化信号"""
         self.status_changed.emit(message)
 
+    def emit_entry_parsed(
+        self,
+        timestamp_str: str,
+        parsed_content: Optional[dict],
+        cmd_id: Optional[int],
+        direction: Optional[str],
+        success: bool,
+    ) -> None:
+        """转发已解析的数据条目（供波形窗口使用）"""
+        self.entry_parsed.emit(timestamp_str, parsed_content, cmd_id, direction, success)
+
+    # ============== 波形窗口管理 ==============
+
+    def _open_wave_window(self) -> None:
+        """打开实时波形监控窗口"""
+        if hasattr(self, '_wave_dialog') and self._wave_dialog and self._wave_dialog.isVisible():
+            self._wave_dialog.raise_()
+            self._wave_dialog.activateWindow()
+            return
+
+        from gui.wave.dialogs.real_time_wave_dialog import RealTimeWaveDialog
+        from gui.wave.presenters.real_time_presenter import RealTimeWavePresenter
+        from gui.wave.models.wave_data_manager import WaveDataManager
+
+        data_manager = WaveDataManager()
+        self._wave_dialog = RealTimeWaveDialog(self)
+        wave_presenter = RealTimeWavePresenter(
+            view=self._wave_dialog,
+            data_manager=data_manager,
+        )
+        self._wave_dialog.set_presenter(wave_presenter)
+
+        # 连接已解析数据信号到波形 Presenter
+        self._wave_connection = lambda ts, content, cmd, direction, success: (
+            wave_presenter.on_entry_parsed(ts, content, cmd, direction)
+            if success and content else None
+        )
+        self.entry_parsed.connect(self._wave_connection)
+        self._wave_dialog.closed.connect(self._on_wave_dialog_closed)
+        self._wave_dialog.show()
+
+    def _on_wave_dialog_closed(self) -> None:
+        """波形窗口关闭回调"""
+        # 断开信号连接，避免内存泄漏
+        if hasattr(self, '_wave_connection') and self._wave_connection:
+            try:
+                self.entry_parsed.disconnect(self._wave_connection)
+            except RuntimeError:
+                pass
+            self._wave_connection = None
+        self._wave_dialog = None
+
+    def _open_history_wave_window(self) -> None:
+        """打开历史波形分析窗口（纯文件加载模式，支持.log和JSON回放）"""
+        if hasattr(self, '_history_wave_dialog') and self._history_wave_dialog and self._history_wave_dialog.isVisible():
+            self._history_wave_dialog.raise_()
+            self._history_wave_dialog.activateWindow()
+            return
+
+        from gui.wave.dialogs.history_wave_dialog import HistoryWaveDialog
+        from gui.wave.presenters.history_presenter import HistoryWavePresenter
+        from gui.wave.models.wave_data_manager import WaveDataManager
+
+        # 获取当前协议配置（用于解析.log文件）
+        protocol_config = None
+        if self._presenter and hasattr(self._presenter, '_model'):
+            protocol_config = self._presenter._model.current_protocol
+
+        data_manager = WaveDataManager()
+        self._history_wave_dialog = HistoryWaveDialog(self)
+        history_presenter = HistoryWavePresenter(
+            view=self._history_wave_dialog,
+            data_manager=data_manager,
+            protocol_config=protocol_config,
+        )
+        self._history_wave_dialog.set_presenter(history_presenter)
+
+        self._history_wave_dialog.closed.connect(self._on_history_wave_dialog_closed)
+        self._history_wave_dialog.show()
+
+    def _on_history_wave_dialog_closed(self) -> None:
+        """历史波形窗口关闭回调"""
+        self._history_wave_dialog = None
+
     def cleanup(self) -> None:
         """清理资源（停止服务器线程）"""
+        # 关闭波形窗口
+        if hasattr(self, '_wave_dialog') and self._wave_dialog:
+            self._wave_dialog.close()
+        if hasattr(self, '_history_wave_dialog') and self._history_wave_dialog:
+            self._history_wave_dialog.close()
+
         if self._server and self._server.is_running:
             self._server.stop()

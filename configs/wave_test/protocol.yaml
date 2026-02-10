@@ -1,0 +1,71 @@
+# 波形集成测试专用协议配置
+# 覆盖场景：数值型(含缩放)、枚举型、混合型字段
+
+meta:
+  protocol: wave_test
+  version: 1
+  default_endian: LE
+  notes: 波形分析集成测试专用协议
+
+compatibility:
+  head_len: 11
+  tail_len: 2
+  frame_head: "AA F5"
+  head_fields:
+    - {name: "cmd", offset: 4, length: 2, endian: "little", type: "uint"}
+    - {name: "index", offset: 6, length: 2, endian: "little", type: "uint"}
+
+types:
+  uint8:   { base: uint, bytes: 1, signed: false }
+  uint16:  { base: uint, bytes: 2, signed: false }
+  uint32:  { base: uint, bytes: 4, signed: false }
+  int16:   { base: int,  bytes: 2, signed: true }
+
+enums:
+  work_status:
+    0: 空闲
+    1: 运行中
+    2: 故障
+    3: 维护
+  charge_mode:
+    1: 恒压充电
+    2: 恒流充电
+  switch_state:
+    0: 关闭
+    1: 开启
+
+cmds:
+  # CMD 1 - 纯数值型（电气参数监控）
+  # 场景：电压、电流、温度，含缩放因子
+  1:
+    - {len: 2, name: 输出电压, type: uint16, scale: 0.1}
+    - {len: 2, name: 输出电流, type: uint16, scale: 0.1}
+    - {len: 1, name: 环境温度, type: uint8}
+    - {len: 1, name: 枪头温度, type: uint8}
+    - {len: 4, name: 累计电量, type: uint32, scale: 0.001}
+    - {len: 2, name: 功率, type: uint16, scale: 0.1}
+
+  # CMD 2 - 纯枚举型（状态监控）
+  # 场景：工作状态、充电模式
+  2:
+    - {len: 1, name: 工作状态, type: uint8, enum: work_status}
+    - {len: 1, name: 充电模式, type: uint8, enum: charge_mode}
+    - {len: 1, name: 开关状态, type: uint8, enum: switch_state}
+
+  # CMD 3 - 混合型（数值 + 枚举 + 原始整数）
+  # 场景：充电过程实时监控
+  3:
+    - {len: 2, name: BMS电压, type: uint16, scale: 0.1}
+    - {len: 2, name: BMS电流, type: int16, scale: 0.1}
+    - {len: 1, name: SOC, type: uint8}
+    - {len: 1, name: 工作状态, type: uint8, enum: work_status}
+    - {len: 2, name: 需求电压, type: uint16, scale: 0.1}
+    - {len: 2, name: 需求电流, type: int16, scale: 0.1}
+
+  # CMD 4 - 多通道数值（高频采样场景）
+  # 场景：模拟多个传感器通道
+  4:
+    - {len: 2, name: 通道1, type: uint16, scale: 0.01}
+    - {len: 2, name: 通道2, type: uint16, scale: 0.01}
+    - {len: 2, name: 通道3, type: uint16, scale: 0.01}
+    - {len: 2, name: 通道4, type: uint16, scale: 0.01}

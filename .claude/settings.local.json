@@ -63,7 +63,8 @@
       "Skill(user-code-review)",
       "Skill(user-code-review:*)",
       "Bash(git check-ignore:*)",
-      "mcp__zai-mcp-server__extract_text_from_screenshot"
+      "mcp__zai-mcp-server__extract_text_from_screenshot",
+      "Bash(chmod:*)"
     ]
   }
 }

@@ -160,7 +160,16 @@ class TcpServerPresenter:
             if error:
                 self._view.emit_status_changed(error)
 
-        # 5. 过滤判断并显示
+        # 5. 转发已解析数据（供波形窗口使用）
+        self._view.emit_entry_parsed(
+            timestamp_str=entry.timestamp,
+            parsed_content=entry_data.parsed if entry_data.success else None,
+            cmd_id=entry.cmd_id,
+            direction=entry.direction,
+            success=entry_data.success,
+        )
+
+        # 6. 过滤判断并显示
         filter_cmd = self._view.get_filter_cmd()
         success_only = self._view.is_success_only()
         should_show = TcpServerModel.should_show_entry(

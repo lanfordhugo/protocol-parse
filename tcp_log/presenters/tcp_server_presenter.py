@@ -139,10 +139,9 @@ class TcpServerPresenter:
         # 1. Model 解析条目并更新统计
         entry_data = self._model.parse_entry(entry)
 
-        # 2. 缓存管理
-        removed = self._model.trim_cache_if_needed()
-        if removed > 0:
-            self._view.remove_oldest_rows(removed)
+        # 2. 缓存管理（deque 逐条淘汰，满时自动丢弃最旧1条）
+        if getattr(entry_data, '_evicted', 0) > 0:
+            self._view.remove_oldest_rows(1)
 
         # 3. 更新缓存标签
         self._view.update_cache_label(self._model.cache_count, self._model.max_cache)
@@ -197,6 +196,22 @@ class TcpServerPresenter:
     def on_error_message(self, message: str) -> None:
         """服务器错误消息"""
         self._view.emit_status_changed(f"错误: {message}")
+
+    def on_cache_size_changed(self, size: int) -> None:
+        """
+        用户调整缓存大小
+
+        Args:
+            size: 新的最大缓存条目数
+        """
+        old_count = self._model.cache_count
+        self._model.set_max_cache(size)
+        new_count = self._model.cache_count
+        # 如果缩小导致淘汰，通知 View 移除多余行
+        evicted = old_count - new_count
+        if evicted > 0:
+            self._view.remove_oldest_rows(evicted)
+        self._view.update_cache_label(self._model.cache_count, self._model.max_cache)
 
     # ============== 内部方法 ==============
 

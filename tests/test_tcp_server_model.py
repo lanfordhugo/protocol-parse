@@ -105,22 +105,36 @@ class TestTcpServerModel:
         assert stats.entry_count == 0
         assert stats.success_count == 0
 
-    def test_trim_cache_not_needed(self, tmp_path: Path):
-        """测试缓存未满时不清理"""
+    def test_deque_no_eviction_when_not_full(self, tmp_path: Path):
+        """测试缓存未满时不淘汰"""
         model = TcpServerModel(tmp_path, tmp_path, max_cache=100)
-        model.parse_entry(MockLogEntry())
-        removed = model.trim_cache_if_needed()
-        assert removed == 0
+        entry_data = model.parse_entry(MockLogEntry())
+        assert getattr(entry_data, '_evicted', 0) == 0
+        assert model.cache_count == 1
 
-    def test_trim_cache_when_full(self, tmp_path: Path):
-        """测试缓存满时清理"""
+    def test_deque_eviction_when_full(self, tmp_path: Path):
+        """测试缓存满时逐条淘汰"""
         model = TcpServerModel(tmp_path, tmp_path, max_cache=5)
-        for i in range(6):
-            model.parse_entry(MockLogEntry(cmd_id=i))
+        for i in range(5):
+            entry_data = model.parse_entry(MockLogEntry(cmd_id=i))
+            assert getattr(entry_data, '_evicted', 0) == 0
 
-        removed = model.trim_cache_if_needed()
-        assert removed > 0
-        assert model.cache_count <= model.max_cache
+        # 第6条应触发淘汰
+        entry_data = model.parse_entry(MockLogEntry(cmd_id=99))
+        assert getattr(entry_data, '_evicted', 0) == 1
+        assert model.cache_count == 5  # 仍然是5，不会超过maxlen
+
+    def test_set_max_cache(self, tmp_path: Path):
+        """测试运行时调整缓存大小"""
+        model = TcpServerModel(tmp_path, tmp_path, max_cache=200)
+        for i in range(200):
+            model.parse_entry(MockLogEntry(cmd_id=i))
+        assert model.cache_count == 200
+
+        # 缩小到100（最小值），最旧100条被淘汰
+        model.set_max_cache(100)
+        assert model.cache_count == 100
+        assert model.max_cache == 100
 
     def test_clear_entries(self, tmp_path: Path):
         """测试清空条目"""

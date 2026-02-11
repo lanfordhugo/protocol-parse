@@ -11,32 +11,25 @@ from typing import Dict, List, Optional, Tuple
 
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
-    QComboBox,
+    QCheckBox,
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
+    QSpinBox,
     QSplitter,
     QStatusBar,
     QVBoxLayout,
     QWidget,
 )
 
-from gui.wave.models.wave_data_manager import FieldConfig
+from gui.wave.models.wave_data_manager import FieldConfig, WaveDataManager
 from gui.wave.widgets.field_tree_widget import FieldTreeWidget
 from gui.wave.widgets.wave_chart_widget import WaveChartWidget
 
 logger = logging.getLogger(__name__)
-
-# 时间窗口选项
-_TIME_WINDOW_OPTIONS = [
-    ("30秒", 30.0),
-    ("1分钟", 60.0),
-    ("2分钟", 120.0),
-    ("5分钟", 300.0),
-    ("10分钟", 600.0),
-    ("全部", 0.0),  # 0 表示显示全部数据
-]
 
 
 class RealTimeWaveDialog(QDialog):
@@ -46,18 +39,18 @@ class RealTimeWaveDialog(QDialog):
     实现 IRealTimeWaveView 接口。
 
     UI布局：
-    ┌─────────────────────────────────────┐
-    │ 暂停 | 时间窗口: 1分钟 | 数据: N条  │
-    ├──────────────┬──────────────────────┤
-    │ 字段树       │ 波形图               │
-    │ ├ CMD 4      │ [多字段波形叠加]     │
-    │ │ ├ 电压     │                      │
-    │ │ └ 电流     │                      │
-    │ └ CMD 5      │                      │
-    │   └ 功率     │                      │
-    ├──────────────┴──────────────────────┤
-    │ 状态栏                              │
-    └─────────────────────────────────────┘
+    ┌──────────────────────────────────────────────────────────┐
+    │ 暂停 | 跟踪 | 缓存 | [保存] [☑输出 filename] | N条 │
+    ├──────────────┬───────────────────────────────────────────┤
+    │ 字段树       │ 波形图（轴感知缩放 + 左键平移）   │
+    │ ├ CMD 4      │ 悬浮吸附 Tooltip                   │
+    │ │ ├ 电压     │                                  │
+    │ │ └ 电流     │                                  │
+    │ └ CMD 5      │                                  │
+    │   └ 功率     │                                  │
+    ├──────────────┴───────────────────────────────────────────┤
+    │ 状态栏（显示自动输出文件名等）                      │
+    └──────────────────────────────────────────────────────────┘
     """
 
     # 信号：窗口关闭
@@ -93,34 +86,59 @@ class RealTimeWaveDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(4)
 
-        # === 工具栏 ===
-        toolbar = QHBoxLayout()
+        # === 工具栏第1行：控制区 ===
+        toolbar1 = QHBoxLayout()
 
         # 暂停/继续按钮
         self._pause_btn = QPushButton("⏸ 暂停")
         self._pause_btn.setFixedWidth(80)
         self._pause_btn.setCheckable(True)
-        toolbar.addWidget(self._pause_btn)
+        toolbar1.addWidget(self._pause_btn)
 
-        toolbar.addWidget(QLabel("时间窗口:"))
+        # 跟踪最新按钮
+        self._follow_btn = QPushButton("🔴 跟踪")
+        self._follow_btn.setFixedWidth(80)
+        self._follow_btn.setCheckable(True)
+        self._follow_btn.setChecked(True)
+        self._follow_btn.setToolTip("自动滚动跟踪最新数据（缩放/平移时自动关闭）")
+        toolbar1.addWidget(self._follow_btn)
 
-        # 时间窗口选择
-        self._time_window_combo = QComboBox()
-        self._time_window_combo.setFixedWidth(100)
-        for label, _ in _TIME_WINDOW_OPTIONS:
-            self._time_window_combo.addItem(label)
-        # 默认选择 "1分钟"
-        self._time_window_combo.setCurrentIndex(1)
-        toolbar.addWidget(self._time_window_combo)
+        toolbar1.addWidget(QLabel("缓存:"))
+        self._wave_cache_spin = QSpinBox()
+        self._wave_cache_spin.setRange(5000, 200000)
+        self._wave_cache_spin.setSingleStep(5000)
+        self._wave_cache_spin.setValue(WaveDataManager.DEFAULT_MAX_DATA_POINTS)
+        self._wave_cache_spin.setSuffix(" 点")
+        self._wave_cache_spin.setFixedWidth(120)
+        self._wave_cache_spin.setToolTip("波形数据点缓存上限")
+        toolbar1.addWidget(self._wave_cache_spin)
 
-        toolbar.addStretch()
+        toolbar1.addStretch()
+
+        # 手动保存按钮
+        self._save_btn = QPushButton("💾 保存")
+        self._save_btn.setFixedWidth(80)
+        self._save_btn.setToolTip("将缓存数据保存为 JSON 文件（弹出文件选择器）")
+        toolbar1.addWidget(self._save_btn)
+
+        # 自动输出勾选
+        self._auto_output_check = QCheckBox("输出")
+        self._auto_output_check.setToolTip("勾选后自动每秒将数据输出到文件")
+        toolbar1.addWidget(self._auto_output_check)
+
+        # 自动输出文件名
+        self._output_filename = QLineEdit("wave_data")
+        self._output_filename.setFixedWidth(140)
+        self._output_filename.setPlaceholderText("输出文件名")
+        self._output_filename.setToolTip("自动输出文件名（启动时追加日期后缀）")
+        toolbar1.addWidget(self._output_filename)
 
         # 数据计数
         self._data_count_label = QLabel("数据: 0 条")
         self._data_count_label.setStyleSheet("color: #888;")
-        toolbar.addWidget(self._data_count_label)
+        toolbar1.addWidget(self._data_count_label)
 
-        layout.addLayout(toolbar)
+        layout.addLayout(toolbar1)
 
         # === 主内容区（左右分栏）===
         splitter = QSplitter(Qt.Horizontal)
@@ -149,9 +167,12 @@ class RealTimeWaveDialog(QDialog):
     def _connect_signals(self) -> None:
         """连接 UI 信号到 Presenter"""
         self._pause_btn.toggled.connect(self._on_pause_toggled)
-        self._time_window_combo.currentIndexChanged.connect(
-            self._on_time_window_changed
-        )
+        self._save_btn.clicked.connect(self._on_save_clicked)
+        self._follow_btn.toggled.connect(self._on_follow_toggled)
+        self._auto_output_check.toggled.connect(self._on_auto_output_toggled)
+
+        # 图表用户交互（缩放/平移）→ 关闭自动跟踪
+        self._chart.user_interacted.connect(self._on_chart_user_interacted)
 
         # 字段树信号
         self._field_tree.field_enabled_changed.connect(
@@ -167,6 +188,11 @@ class RealTimeWaveDialog(QDialog):
             self._presenter.on_field_renamed
         )
 
+        # 波形缓存大小调整
+        self._wave_cache_spin.valueChanged.connect(
+            self._presenter.on_wave_cache_size_changed
+        )
+
     # ============== UI事件 ==============
 
     def _on_pause_toggled(self, checked: bool) -> None:
@@ -174,14 +200,35 @@ class RealTimeWaveDialog(QDialog):
         if self._presenter:
             self._presenter.on_pause_toggled(checked)
 
-    def _on_time_window_changed(self, index: int) -> None:
-        """时间窗口变更"""
-        if self._presenter and 0 <= index < len(_TIME_WINDOW_OPTIONS):
-            _, seconds = _TIME_WINDOW_OPTIONS[index]
-            if seconds <= 0:
-                # "全部" 选项：设置一个很大的时间窗口
-                seconds = 86400.0  # 24小时
-            self._presenter.on_time_window_changed(seconds)
+    def _on_follow_toggled(self, checked: bool) -> None:
+        """跟踪最新切换"""
+        if self._presenter:
+            self._presenter.on_auto_follow_changed(checked)
+
+    def _on_save_clicked(self) -> None:
+        """手动保存：弹出文件选择器"""
+        if not self._presenter:
+            return
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "保存波形数据", "wave_data.json",
+            "JSON 文件 (*.json);;CSV 文件 (*.csv);;All Files (*)",
+        )
+        if file_path:
+            self._presenter.on_save_data(file_path)
+
+    def _on_auto_output_toggled(self, checked: bool) -> None:
+        """自动输出开关"""
+        if not self._presenter:
+            return
+        filename = self._output_filename.text().strip() or "wave_data"
+        self._presenter.on_auto_output_toggled(checked, filename)
+        # 勾选时禁止修改文件名
+        self._output_filename.setEnabled(not checked)
+
+    def _on_chart_user_interacted(self) -> None:
+        """图表用户手动缩放/平移 → 关闭自动跟踪"""
+        if self._presenter:
+            self._presenter.on_user_interacted()
 
     # ============== IRealTimeWaveView 接口实现 ==============
 
@@ -246,10 +293,19 @@ class RealTimeWaveDialog(QDialog):
         self._pause_btn.setText("▶ 继续" if paused else "⏸ 暂停")
         self._pause_btn.blockSignals(False)
 
-    def set_time_window(self, seconds: float) -> None:
-        """设置显示时间窗口"""
-        # 不需要额外操作，UI已通过combo更新
-        pass
+    def set_auto_follow(self, follow: bool) -> None:
+        """设置跟踪按钮状态"""
+        self._follow_btn.blockSignals(True)
+        self._follow_btn.setChecked(follow)
+        self._follow_btn.setText("🔴 跟踪" if follow else "⚪ 跟踪")
+        self._follow_btn.blockSignals(False)
+
+    def show_save_result(self, success: bool, file_path: str, count: int) -> None:
+        """显示保存结果"""
+        if success:
+            self._status_bar.showMessage(f"已保存 {count} 个数据点到 {file_path}")
+        else:
+            self._status_bar.showMessage(f"保存失败: {file_path}")
 
     def scroll_to_latest(self) -> None:
         """滚动到最新数据"""

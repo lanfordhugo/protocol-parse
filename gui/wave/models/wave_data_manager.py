@@ -10,10 +10,11 @@ import csv
 import json
 import logging
 import threading
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 from gui.wave.utils.field_type_detector import FieldType, FieldTypeDetector
 from gui.wave.utils.chart_type_mapper import ChartType, ChartTypeMapper
@@ -84,17 +85,26 @@ class WaveDataManager:
     注意：本类为纯 Python 实现，不依赖 PySide6
     """
 
-    def __init__(self, protocol_config: Optional[Any] = None):
+    # 默认波形缓存大小
+    DEFAULT_MAX_DATA_POINTS = 50000
+
+    def __init__(
+        self,
+        protocol_config: Optional[Any] = None,
+        max_data_points: int = DEFAULT_MAX_DATA_POINTS,
+    ):
         """
         初始化数据管理器
 
         Args:
             protocol_config: 可选的协议配置对象，用于字段类型检测
+            max_data_points: 最大数据点缓存数（默认50000）
         """
         self._lock = threading.Lock()
+        self._max_data_points = max(1000, max_data_points)
 
-        # 数据存储
-        self._data_points: List[DataPoint] = []
+        # 数据存储（deque 逐条淘汰，满时自动丢弃最旧数据点）
+        self._data_points: Deque[DataPoint] = deque(maxlen=self._max_data_points)
 
         # 字段配置 {field_path: FieldConfig}
         self._field_configs: Dict[str, FieldConfig] = {}
@@ -255,6 +265,26 @@ class WaveDataManager:
         """数据点总数"""
         with self._lock:
             return len(self._data_points)
+
+    @property
+    def max_data_points(self) -> int:
+        """最大数据点缓存数"""
+        return self._max_data_points
+
+    def set_max_data_points(self, size: int) -> None:
+        """
+        运行时调整波形缓存大小
+
+        如果新大小比当前数据量小，最旧的数据会被自动丢弃。
+
+        Args:
+            size: 新的最大数据点数（最小1000）
+        """
+        size = max(1000, size)
+        with self._lock:
+            self._max_data_points = size
+            # 重建 deque，超出部分自动从左侧（最旧）丢弃
+            self._data_points = deque(self._data_points, maxlen=size)
 
     @property
     def time_range(self) -> Optional[Tuple[datetime, datetime]]:
@@ -545,9 +575,10 @@ class WaveDataManager:
                     logger.warning("导入数据点失败: %s", e)
                     continue
 
-        # 按时间排序
+        # 按时间排序（deque不支持sort，需转换）
         with self._lock:
-            self._data_points.sort(key=lambda p: p.timestamp)
+            sorted_points = sorted(self._data_points, key=lambda p: p.timestamp)
+            self._data_points = deque(sorted_points, maxlen=self._max_data_points)
 
         logger.info("已从 %s 导入 %d 个数据点", file_path, count)
         return count

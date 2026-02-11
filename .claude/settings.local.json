@@ -64,7 +64,11 @@
       "Skill(user-code-review:*)",
       "Bash(git check-ignore:*)",
       "mcp__zai-mcp-server__extract_text_from_screenshot",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(lsof:*)",
+      "Bash(tasklist:*)",
+      "Bash(powershell.exe -Command \"Get-Process | Where-Object {$_ProcessName -like ''*python*''} | Select-Object Id,ProcessName,Path\")",
+      "Bash(cmd:*)"
     ]
   }
 }

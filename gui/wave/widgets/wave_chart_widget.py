@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEvent, QPointF, Qt, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QVBoxLayout,
@@ -126,25 +126,44 @@ class TimeAxisItem(pg.AxisItem):
         return strings
 
 
+class WaveViewBox(pg.ViewBox):
+    """
+    自定义 ViewBox
+
+    - 禁用默认滚轮缩放（由 WaveChartWidget 统一处理轴感知缩放）
+    - 使用 PanMode（左键拖动平移）
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setMouseMode(pg.ViewBox.PanMode)
+
+    def wheelEvent(self, ev, axis=None):
+        """禁用默认滚轮缩放，交给父组件处理"""
+        ev.ignore()
+
+
 class WaveChartWidget(QWidget):
     """
     波形图绘制组件
 
     功能：
     - 使用 pyqtgraph 绘制多字段波形
-    - 支持缩放、拖动、十字光标
-    - 自动适配字段类型（折线/阶梯/散点）
+    - 轴感知缩放：鼠标在X轴附近滚轮缩放X轴，Y轴附近缩放Y轴
+    - 左键拖动平移，禁用框选放大
+    - 悬浮吸附 Tooltip：自动找最近数据点，显示字段名、时间、值
     - 图例显示字段名
-    - 右键菜单（删除字段、修改颜色）
 
     信号：
     - field_remove_requested(str): 请求移除字段
     - field_color_change_requested(str): 请求修改字段颜色
+    - user_interacted(): 用户手动缩放/平移（通知 Presenter 关闭自动跟踪）
     """
 
     # 信号
     field_remove_requested = Signal(str)
     field_color_change_requested = Signal(str)
+    user_interacted = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -153,6 +172,8 @@ class WaveChartWidget(QWidget):
         self._plot_items: Dict[str, pg.PlotDataItem] = {}
         # 字段 → 配置映射
         self._field_configs: Dict[str, FieldConfig] = {}
+        # 防止程序设置 X 范围时触发 user_interacted
+        self._programmatic_update = False
 
         self._setup_ui()
 
@@ -161,8 +182,12 @@ class WaveChartWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
+        # 创建自定义 ViewBox（PanMode + 禁用默认滚轮）
+        vb = WaveViewBox()
+
         # 创建 pyqtgraph 绘图控件
         self._plot_widget = pg.PlotWidget(
+            viewBox=vb,
             axisItems={"bottom": TimeAxisItem(orientation="bottom")},
         )
         self._plot_widget.setBackground("transparent")
@@ -170,24 +195,49 @@ class WaveChartWidget(QWidget):
         self._plot_widget.setLabel("bottom", "时间")
         self._plot_widget.setLabel("left", "值")
 
-        # 启用鼠标交互
-        self._plot_widget.setMouseEnabled(x=True, y=True)
+        # Y 轴自动适配（X 轴由 Presenter 的时间窗口控制）
         self._plot_widget.enableAutoRange(axis="y", enable=True)
+        self._plot_widget.enableAutoRange(axis="x", enable=False)
 
-        # 添加十字光标
+        # 检测用户手动平移
+        vb.sigRangeChangedManually.connect(self._on_range_changed_manually)
+
+        # 十字光标（吸附到最近数据点）
         self._crosshair_v = pg.InfiniteLine(
-            angle=90, movable=False, pen=pg.mkPen("#888888", width=1, style=Qt.DashLine)
+            angle=90, movable=False,
+            pen=pg.mkPen("#888888", width=1, style=Qt.DashLine),
         )
         self._crosshair_h = pg.InfiniteLine(
-            angle=0, movable=False, pen=pg.mkPen("#888888", width=1, style=Qt.DashLine)
+            angle=0, movable=False,
+            pen=pg.mkPen("#888888", width=1, style=Qt.DashLine),
         )
         self._plot_widget.addItem(self._crosshair_v, ignoreBounds=True)
         self._plot_widget.addItem(self._crosshair_h, ignoreBounds=True)
         self._crosshair_v.setVisible(False)
         self._crosshair_h.setVisible(False)
 
-        # 鼠标移动事件
+        # 吸附点标记
+        self._snap_marker = pg.ScatterPlotItem(
+            size=10, pen=pg.mkPen("w", width=2), brush=pg.mkBrush(255, 255, 0, 180),
+        )
+        self._snap_marker.setZValue(100)
+        self._plot_widget.addItem(self._snap_marker)
+
+        # 悬浮 Tooltip
+        self._tooltip = pg.TextItem(
+            text="", anchor=(0, 1), fill=pg.mkBrush(0, 0, 0, 180),
+            color="w", border=pg.mkPen("#555555"),
+        )
+        self._tooltip.setZValue(200)
+        self._tooltip.setVisible(False)
+        self._plot_widget.addItem(self._tooltip, ignoreBounds=True)
+
+        # 鼠标移动事件（更新吸附 Tooltip）
         self._plot_widget.scene().sigMouseMoved.connect(self._on_mouse_moved)
+
+        # 拦截滚轮事件（轴感知缩放）—— 必须安装到 viewport 上，
+        # 因为 QGraphicsView 的滚轮事件实际发送到 viewport 子控件
+        self._plot_widget.viewport().installEventFilter(self)
 
         # 添加图例
         self._legend = self._plot_widget.addLegend(
@@ -344,12 +394,18 @@ class WaveChartWidget(QWidget):
         self._plot_widget.enableAutoRange()
 
     def set_x_range(self, x_min: float, x_max: float) -> None:
-        """设置X轴范围（实时滚动时不留padding）"""
+        """设置X轴范围（程序控制，不触发 user_interacted）"""
+        self._programmatic_update = True
         self._plot_widget.setXRange(x_min, x_max, padding=0)
+        self._programmatic_update = False
+
+    def get_x_range_width(self) -> float:
+        """获取当前X轴显示宽度（秒）"""
+        view_range = self._plot_widget.viewRange()
+        return max(1.0, view_range[0][1] - view_range[0][0])
 
     def scroll_to_latest(self) -> None:
         """滚动到最新数据"""
-        # 获取所有数据中的最大时间戳
         max_ts = None
         for plot_item in self._plot_items.values():
             x_data = plot_item.xData
@@ -357,41 +413,166 @@ class WaveChartWidget(QWidget):
                 ts = x_data[-1]
                 if max_ts is None or ts > max_ts:
                     max_ts = ts
-
         if max_ts is not None:
-            # 获取当前 X 轴范围的宽度
-            view_range = self._plot_widget.viewRange()
-            x_range = view_range[0]
-            width = x_range[1] - x_range[0]
-            if width <= 0:
-                width = 60  # 默认60秒
-            self._plot_widget.setXRange(max_ts - width, max_ts, padding=0)
+            width = self.get_x_range_width()
+            self.set_x_range(max_ts - width, max_ts)
 
-    # ============== 鼠标事件 ==============
+    # ============== 鼠标交互 ==============
 
-    def _on_mouse_moved(self, pos) -> None:
-        """鼠标移动事件 - 更新十字光标"""
-        plot_area = self._plot_widget.plotItem.vb
-        if plot_area.sceneBoundingRect().contains(pos):
-            mouse_point = plot_area.mapSceneToView(pos)
-            self._crosshair_v.setPos(mouse_point.x())
-            self._crosshair_h.setPos(mouse_point.y())
-            self._crosshair_v.setVisible(True)
-            self._crosshair_h.setVisible(True)
-        else:
+    def _on_range_changed_manually(self) -> None:
+        """用户手动拖动平移了图表"""
+        if not self._programmatic_update:
+            self.user_interacted.emit()
+
+    def eventFilter(self, obj, event) -> bool:
+        """拦截 PlotWidget 滚轮事件，实现轴感知缩放"""
+        if obj is self._plot_widget.viewport() and event.type() == QEvent.Type.Wheel:
+            self._handle_wheel(event)
+            return True
+        return super().eventFilter(obj, event)
+
+    def _handle_wheel(self, event) -> None:
+        """
+        轴感知滚轮缩放
+
+        - 鼠标在 X 轴标签区域：仅缩放 X 轴
+        - 鼠标在 Y 轴标签区域：仅缩放 Y 轴
+        - 鼠标在绑图区域内：仅缩放 X 轴（时间序列图以时间缩放为主）
+        """
+        delta = event.angleDelta().y()
+        if delta == 0:
+            return
+
+        factor = 0.8 if delta > 0 else 1.25
+        widget_pos = event.position()
+
+        vb = self._plot_widget.plotItem.vb
+        plot_item = self._plot_widget.plotItem
+
+        # 获取各区域在 widget 坐标系下的矩形
+        vb_scene_rect = vb.sceneBoundingRect()
+        x_axis_scene_rect = plot_item.getAxis("bottom").sceneBoundingRect()
+        y_axis_scene_rect = plot_item.getAxis("left").sceneBoundingRect()
+
+        # 转换鼠标位置到 scene 坐标
+        scene_pos = self._plot_widget.mapToScene(widget_pos.toPoint())
+
+        # 鼠标数据坐标（用于以鼠标为中心缩放）
+        mouse_data = vb.mapSceneToView(scene_pos)
+
+        if y_axis_scene_rect.contains(scene_pos):
+            # Y 轴区域：仅缩放 Y 轴
+            vb.scaleBy((1, factor), center=mouse_data)
+        elif x_axis_scene_rect.contains(scene_pos) or vb_scene_rect.contains(scene_pos):
+            # X 轴区域或绘图区域：仅缩放 X 轴
+            vb.scaleBy((factor, 1), center=mouse_data)
+            self.user_interacted.emit()
+
+    def _on_mouse_moved(self, scene_pos) -> None:
+        """鼠标移动事件 - 吸附到最近数据点，更新十字光标和 Tooltip"""
+        vb = self._plot_widget.plotItem.vb
+        if not vb.sceneBoundingRect().contains(scene_pos):
             self._crosshair_v.setVisible(False)
             self._crosshair_h.setVisible(False)
+            self._tooltip.setVisible(False)
+            self._snap_marker.setData([], [])
+            return
+
+        mouse_data = vb.mapSceneToView(scene_pos)
+        snap = self._find_nearest_point(mouse_data.x(), mouse_data.y())
+
+        if snap is None:
+            self._crosshair_v.setVisible(False)
+            self._crosshair_h.setVisible(False)
+            self._tooltip.setVisible(False)
+            self._snap_marker.setData([], [])
+            return
+
+        # 十字光标吸附到数据点
+        self._crosshair_v.setPos(snap["x"])
+        self._crosshair_h.setPos(snap["y"])
+        self._crosshair_v.setVisible(True)
+        self._crosshair_h.setVisible(True)
+
+        # 吸附标记
+        self._snap_marker.setData(
+            [snap["x"]], [snap["y"]],
+            brush=pg.mkBrush(QColor(snap["color"])),
+        )
+
+        # Tooltip 内容
+        try:
+            ts_str = datetime.fromtimestamp(snap["x"]).strftime("%H:%M:%S.%f")[:-3]
+        except (OSError, ValueError, OverflowError):
+            ts_str = f"{snap['x']:.3f}"
+        tooltip_text = (
+            f"{snap['field_name']}\n"
+            f"时间: {ts_str}\n"
+            f"值: {snap['y']:.4g}"
+        )
+        self._tooltip.setText(tooltip_text)
+        self._tooltip.setPos(snap["x"], snap["y"])
+        self._tooltip.setVisible(True)
+
+    def _find_nearest_point(
+        self, mouse_x: float, mouse_y: float,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        在所有可见曲线中找到离鼠标最近的数据点
+
+        使用 X 轴二分查找 + 屏幕距离比较。
+
+        Returns:
+            最近点信息字典，或 None
+        """
+        vb = self._plot_widget.plotItem.vb
+        best_dist_sq = float("inf")
+        best = None
+
+        for field_path, plot_item in self._plot_items.items():
+            x_data = plot_item.xData
+            y_data = plot_item.yData
+            if x_data is None or len(x_data) == 0:
+                continue
+
+            # 二分查找最近 X 索引
+            idx = int(np.searchsorted(x_data, mouse_x))
+            candidates = []
+            if idx > 0:
+                candidates.append(idx - 1)
+            if idx < len(x_data):
+                candidates.append(idx)
+
+            for i in candidates:
+                # 用屏幕坐标计算距离（避免 X/Y 尺度差异）
+                pt_scene = vb.mapViewToScene(QPointF(float(x_data[i]), float(y_data[i])))
+                mouse_scene = vb.mapViewToScene(QPointF(mouse_x, mouse_y))
+                dx = pt_scene.x() - mouse_scene.x()
+                dy = pt_scene.y() - mouse_scene.y()
+                dist_sq = dx * dx + dy * dy
+                if dist_sq < best_dist_sq:
+                    best_dist_sq = dist_sq
+                    config = self._field_configs.get(field_path)
+                    best = {
+                        "field_path": field_path,
+                        "field_name": config.display_name if config else field_path,
+                        "x": float(x_data[i]),
+                        "y": float(y_data[i]),
+                        "color": config.color if config else "#ffffff",
+                    }
+
+        return best
 
     def enterEvent(self, event) -> None:
         """鼠标进入"""
-        self._crosshair_v.setVisible(True)
-        self._crosshair_h.setVisible(True)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        """鼠标离开"""
+        """鼠标离开 - 隐藏十字光标和 Tooltip"""
         self._crosshair_v.setVisible(False)
         self._crosshair_h.setVisible(False)
+        self._tooltip.setVisible(False)
+        self._snap_marker.setData([], [])
         super().leaveEvent(event)
 
     # ============== 主题适配 ==============

@@ -92,15 +92,12 @@ class FieldTreeWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self._tree = QTreeWidget()
-        self._tree.setHeaderLabels(["字段", "类型"])
-        self._tree.setColumnCount(2)
-        self._tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
-        self._tree.header().setSectionResizeMode(1, QHeaderView.Fixed)
-        self._tree.setColumnWidth(1, 50)
+        self._tree.setHeaderHidden(True)
+        self._tree.setColumnCount(1)
         self._tree.setSelectionMode(QAbstractItemView.SingleSelection)
         self._tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self._tree.setAnimated(True)
-        self._tree.setIndentation(16)
+        self._tree.setIndentation(12)
 
         # 信号连接
         self._tree.customContextMenuRequested.connect(self._on_context_menu)
@@ -126,14 +123,16 @@ class FieldTreeWidget(QWidget):
 
         # 创建字段节点
         item = QTreeWidgetItem(group)
+        type_text = _CHART_TYPE_TEXT.get(config.chart_type, "")
         item.setText(0, config.display_name)
-        item.setText(1, _CHART_TYPE_TEXT.get(config.chart_type, ""))
         item.setIcon(0, _create_color_icon(config.color))
         item.setCheckState(0, Qt.Checked if config.enabled else Qt.Unchecked)
         item.setData(0, Qt.UserRole, config.field_path)
 
-        # 工具提示
-        item.setToolTip(0, f"路径: {config.field_path}\n类型: {config.field_type.name}")
+        # 类型信息合并到 Tooltip
+        item.setToolTip(
+            0, f"路径: {config.field_path}\n类型: {config.field_type.name}\n图表: {type_text}"
+        )
 
         self._field_items[config.field_path] = item
 
@@ -174,12 +173,14 @@ class FieldTreeWidget(QWidget):
             return
 
         # 阻断信号避免触发 itemChanged
+        type_text = _CHART_TYPE_TEXT.get(config.chart_type, "")
         self._tree.blockSignals(True)
         item.setText(0, config.display_name)
-        item.setText(1, _CHART_TYPE_TEXT.get(config.chart_type, ""))
         item.setIcon(0, _create_color_icon(config.color))
         item.setCheckState(0, Qt.Checked if config.enabled else Qt.Unchecked)
-        item.setToolTip(0, f"路径: {config.field_path}\n类型: {config.field_type.name}")
+        item.setToolTip(
+            0, f"路径: {config.field_path}\n类型: {config.field_type.name}\n图表: {type_text}"
+        )
         self._tree.blockSignals(False)
 
     def refresh(self, configs: List[FieldConfig]) -> None:
@@ -227,8 +228,9 @@ class FieldTreeWidget(QWidget):
             group.setText(0, "未分组")
         group.setData(0, Qt.UserRole, cmd_id)
 
-        # 分组节点不可勾选
-        group.setFlags(group.flags() & ~Qt.ItemIsUserCheckable)
+        # 分组节点支持三态勾选（全选/部分/全不选）
+        group.setFlags(group.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate)
+        group.setCheckState(0, Qt.Unchecked)
 
         # 加粗分组文字
         font = group.font(0)
@@ -242,9 +244,9 @@ class FieldTreeWidget(QWidget):
         """
         树节点变化回调（复选框切换）
 
-        Args:
-            item: 变化的节点
-            column: 变化的列
+        支持两种场景：
+        1. 字段节点勾选变化 → 发射 field_enabled_changed
+        2. CMD分组节点勾选变化 → 批量切换所有子字段
         """
         if column != 0:
             return
@@ -253,12 +255,30 @@ class FieldTreeWidget(QWidget):
         if field_path is None:
             return
 
-        # 只处理字段节点（非分组节点）
-        if field_path not in self._field_items:
+        # 字段节点
+        if field_path in self._field_items:
+            enabled = item.checkState(0) == Qt.Checked
+            self.field_enabled_changed.emit(field_path, enabled)
             return
 
-        enabled = item.checkState(0) == Qt.Checked
-        self.field_enabled_changed.emit(field_path, enabled)
+        # CMD 分组节点：批量切换子字段
+        if field_path in self._cmd_groups or isinstance(field_path, int) or field_path is None:
+            check_state = item.checkState(0)
+            # PartiallyChecked 由 Qt 自动设置，不需要我们处理
+            if check_state == Qt.PartiallyChecked:
+                return
+            enabled = check_state == Qt.Checked
+            self._tree.blockSignals(True)
+            for i in range(item.childCount()):
+                child = item.child(i)
+                child.setCheckState(0, Qt.Checked if enabled else Qt.Unchecked)
+            self._tree.blockSignals(False)
+            # 批量发射信号
+            for i in range(item.childCount()):
+                child = item.child(i)
+                child_path = child.data(0, Qt.UserRole)
+                if child_path and child_path in self._field_items:
+                    self.field_enabled_changed.emit(child_path, enabled)
 
     def _on_context_menu(self, pos) -> None:
         """右键菜单"""

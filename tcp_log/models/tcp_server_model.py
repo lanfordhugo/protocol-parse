@@ -8,10 +8,11 @@
 
 import json
 import logging
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -73,14 +74,17 @@ class TcpServerModel:
     注意：本类为纯 Python 实现，不依赖 PySide6
     """
 
-    def __init__(self, configs_dir: Path, save_dir: Path, max_cache: int = 1000):
+    # 默认缓存大小
+    DEFAULT_MAX_CACHE = 10000
+
+    def __init__(self, configs_dir: Path, save_dir: Path, max_cache: int = DEFAULT_MAX_CACHE):
         """
         初始化 TCP 服务端模型
 
         Args:
             configs_dir: 协议配置目录
             save_dir: 保存输出目录
-            max_cache: 最大缓存条目数
+            max_cache: 最大缓存条目数（默认10000）
         """
         self._configs_dir = configs_dir
         self._save_dir = save_dir
@@ -96,8 +100,8 @@ class TcpServerModel:
         self._fail_count = 0
         self._cmd_stats: Dict[int, int] = {}
 
-        # 条目缓存
-        self._all_entries: List[EntryData] = []
+        # 条目缓存（deque 逐条淘汰，满时自动丢弃最旧条目）
+        self._all_entries: Deque[EntryData] = deque(maxlen=max_cache)
 
         # 会话 ID（用于文件命名）
         self._session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -197,25 +201,15 @@ class TcpServerModel:
         self._cmd_stats[entry.cmd_id] = self._cmd_stats.get(entry.cmd_id, 0) + 1
 
         entry_data = EntryData(entry=entry, parsed=parsed_result, success=parse_success)
+
+        # deque 满时 append 自动淘汰最旧1条，记录是否发生淘汰
+        was_full = len(self._all_entries) >= self._max_cache
         self._all_entries.append(entry_data)
+        entry_data._evicted = 1 if was_full else 0
 
         return entry_data
 
     # ============== 缓存管理 ==============
-
-    def trim_cache_if_needed(self) -> int:
-        """
-        如果缓存超限则清理最旧的条目
-
-        Returns:
-            清理的条目数，0 表示未清理
-        """
-        if len(self._all_entries) <= self._max_cache:
-            return 0
-
-        remove_count = max(1, self._max_cache // 10)
-        del self._all_entries[:remove_count]
-        return remove_count
 
     @property
     def cache_count(self) -> int:
@@ -227,8 +221,22 @@ class TcpServerModel:
         """最大缓存条目数"""
         return self._max_cache
 
+    def set_max_cache(self, size: int) -> None:
+        """
+        运行时调整缓存大小
+
+        如果新大小比当前数据量小，最旧的数据会被自动丢弃。
+
+        Args:
+            size: 新的最大缓存条目数（最小100）
+        """
+        size = max(100, size)
+        self._max_cache = size
+        # 重建 deque，超出部分自动从左侧（最旧）丢弃
+        self._all_entries = deque(self._all_entries, maxlen=size)
+
     @property
-    def all_entries(self) -> List[EntryData]:
+    def all_entries(self) -> Deque[EntryData]:
         """所有缓存条目"""
         return self._all_entries
 

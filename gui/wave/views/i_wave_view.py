@@ -91,8 +91,8 @@ class IRealTimeWaveView(IWaveViewBase, Protocol):
         """设置暂停/继续状态"""
         ...
 
-    def set_time_window(self, seconds: float) -> None:
-        """设置显示时间窗口"""
+    def set_auto_follow(self, follow: bool) -> None:
+        """设置自动跟踪按钮状态"""
         ...
 
     def scroll_to_latest(self) -> None:
@@ -101,6 +101,10 @@ class IRealTimeWaveView(IWaveViewBase, Protocol):
 
     def set_x_range(self, x_min: float, x_max: float) -> None:
         """设置X轴显示范围（时间窗口控制）"""
+        ...
+
+    def show_save_result(self, success: bool, file_path: str, count: int) -> None:
+        """显示保存结果提示"""
         ...
 
 

@@ -62,9 +62,6 @@ class TcpServerPage(QWidget):
         self._server = TcpLogServer()
         self._signal_bridge = SignalBridge()
 
-        # UI 初始显示用的缓存上限（实际值由 Model 管理）
-        self._max_cache_display = 1000
-
         self._setup_ui()
 
     def _setup_ui(self):
@@ -228,9 +225,19 @@ class TcpServerPage(QWidget):
         self._stats_label = QLabel("总计: 0 条  |  成功: 0  |  失败: 0")
         stats_summary_layout.addWidget(self._stats_label)
 
-        self._cache_label = QLabel(f"缓存: 0/{self._max_cache_display}")
+        self._cache_label = QLabel("缓存: 0/10000")
         self._cache_label.setStyleSheet("color: #888;")
         stats_summary_layout.addWidget(self._cache_label)
+
+        stats_summary_layout.addWidget(QLabel("缓存上限:"))
+        self._cache_size_spin = QSpinBox()
+        self._cache_size_spin.setRange(1000, 100000)
+        self._cache_size_spin.setSingleStep(1000)
+        self._cache_size_spin.setValue(TcpServerModel.DEFAULT_MAX_CACHE)
+        self._cache_size_spin.setSuffix(" 条")
+        self._cache_size_spin.setFixedWidth(120)
+        self._cache_size_spin.setToolTip("TCP报文缓存上限（调整后立即生效）")
+        stats_summary_layout.addWidget(self._cache_size_spin)
 
         stats_summary_layout.addStretch()
 
@@ -301,6 +308,9 @@ class TcpServerPage(QWidget):
         self._stop_btn.clicked.connect(self._presenter.on_stop_clicked)
         self._clear_table_btn.clicked.connect(self._presenter.on_clear_results)
         self._reset_stats_btn.clicked.connect(self._presenter.on_reset_stats)
+        self._cache_size_spin.valueChanged.connect(
+            self._presenter.on_cache_size_changed
+        )
 
         self._result_table.itemSelectionChanged.connect(self._on_selection_changed)
         self._protocol_combo.currentTextChanged.connect(
@@ -448,9 +458,6 @@ class TcpServerPage(QWidget):
 
         if self._auto_scroll_check.isChecked():
             self._result_table.scrollToBottom()
-
-        while self._result_table.rowCount() > 1000:
-            self._result_table.removeRow(0)
 
     def remove_oldest_rows(self, count: int) -> None:
         """移除最旧的 N 行"""

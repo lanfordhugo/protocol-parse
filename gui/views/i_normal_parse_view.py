@@ -135,7 +135,7 @@ class INormalParsePageView(Protocol):
         """
         ...
 
-    def show_parse_complete_dialog(self, output_path: str) -> bool:
+    def show_parse_complete_dialog(self, output_path: str) -> str:
         """
         显示解析完成确认对话框
 
@@ -143,7 +143,7 @@ class INormalParsePageView(Protocol):
             output_path: 输出文件路径
 
         Returns:
-            用户是否选择打开文件
+            用户选择的动作: 'open_file' / 'open_wave' / 'close'
         """
         ...
 

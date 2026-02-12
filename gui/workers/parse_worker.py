@@ -46,6 +46,8 @@ class ParseWorker(QObject):
         self.filter_settings = filter_settings
         self._should_stop = False
         self._protocol: Optional[Any] = None  # 保存协议引用以便停止
+        # 解析完成后存储波形兼容的条目数据，供波形回放页面使用
+        self._wave_entries: list = []
 
     def stop(self) -> None:
         """请求停止"""
@@ -112,16 +114,31 @@ class ParseWorker(QObject):
 
             self.log_info.emit("正在提取数据...")
 
-            # 执行解析（进度通过 protocol 的回调自动发射：5→10→10-80→85→100）
-            output_path = protocol.run()
+            # 分步执行解析（与 protocol.run() 等价，但保留 parsed_data 引用）
+            protocol._emit_progress(5, 100)
+            data_groups = protocol.extract_data_from_file(protocol.log_file_name)
+            if not data_groups or self._should_stop:
+                if self._should_stop:
+                    self.log_warning.emit("解析已被用户停止")
+                    self.finished.emit(False, "解析已停止", "")
+                else:
+                    self.finished.emit(True, "解析完成（无数据）", "")
+                return
 
-            # 检查是否被停止
+            protocol._emit_progress(10, 100)
+            parsed_data = protocol.parse_data_content(data_groups)
+
             if self._should_stop:
                 self.log_warning.emit("解析已被用户停止")
                 self.finished.emit(False, "解析已停止", "")
                 return
 
+            output_path = protocol.screen_parse_data(parsed_data)
+            protocol._emit_progress(100, 100)
+
             if output_path:
+                # 提取波形兼容的条目数据（供波形回放页面使用）
+                self._wave_entries = self._extract_wave_entries(parsed_data)
                 self.log_success.emit(f"解析完成，结果已保存到: {output_path}")
                 self.finished.emit(True, "解析完成", output_path)
             else:
@@ -142,6 +159,25 @@ class ParseWorker(QObject):
             # 确保停止协议（如果存在）
             if protocol and self._should_stop:
                 protocol.set_should_stop(True)
+
+    @staticmethod
+    def _extract_wave_entries(parsed_data: list) -> list:
+        """
+        从解析结果中提取波形兼容的条目数据
+
+        转换为 (timestamp_str, parsed_content, cmd_id, direction) 元组列表，
+        与 WaveDataManager.add_entry() 的参数格式一致。
+        """
+        entries = []
+        for item in parsed_data:
+            ts = item.get("timestamp", "")
+            content = item.get("content")
+            cmd = item.get("cmd")
+            direction = item.get("direction")
+            if ts and content:
+                cmd_id = int(cmd) if cmd is not None else None
+                entries.append((ts, content, cmd_id, direction))
+        return entries
 
     def _friendly_error_message(self, error: str) -> str:
         """

@@ -16,13 +16,14 @@ class Sidebar(QWidget):
     """侧边栏导航组件"""
 
     # 信号：页面切换请求
-    page_requested = Signal(str)  # 'normal' 或 'tcp_server'
+    page_requested = Signal(str)  # 'normal' / 'tcp_server' / 'wave_replay'
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._current_page = 'normal'
         self._normal_btn = None
         self._tcp_btn = None
+        self._wave_replay_btn = None
         self._setup_ui()
 
     def _setup_ui(self):
@@ -61,6 +62,14 @@ class Sidebar(QWidget):
             description="实时接收并解析报文"
         )
         nav_layout.addWidget(self._tcp_btn)
+
+        # 数据回放按钮
+        self._wave_replay_btn = self._create_nav_button(
+            icon="📈",
+            text="数据回放",
+            description="多源数据波形回放分析"
+        )
+        nav_layout.addWidget(self._wave_replay_btn)
 
         layout.addWidget(nav_group)
 
@@ -160,6 +169,8 @@ class Sidebar(QWidget):
                 self.page_requested.emit('normal')
             elif text == "TCP 服务端":
                 self.page_requested.emit('tcp_server')
+            elif text == "数据回放":
+                self.page_requested.emit('wave_replay')
 
     def set_current_page(self, page: str):
         """设置当前页面（外部调用，不发射信号）"""
@@ -169,3 +180,5 @@ class Sidebar(QWidget):
             self._on_nav_clicked(self._normal_btn, "普通解析", emit_signal=False)
         elif page == 'tcp_server':
             self._on_nav_clicked(self._tcp_btn, "TCP 服务端", emit_signal=False)
+        elif page == 'wave_replay':
+            self._on_nav_clicked(self._wave_replay_btn, "数据回放", emit_signal=False)

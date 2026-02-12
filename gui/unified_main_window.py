@@ -19,6 +19,7 @@ from PySide6.QtGui import QAction, QShortcut, QKeySequence
 
 from .sidebar import Sidebar
 from .normal_parse_page import NormalParsePage
+from .wave_replay_page import WaveReplayPage
 from shared import get_unified_theme
 from tcp_log.server_panel import TcpServerPage
 from gui.shared import ThemeManagerMixin, WindowStateMixin, DialogHelperMixin
@@ -26,6 +27,8 @@ from gui.config import CONFIGS_DIR, TCP_OUTPUT_DIR
 from gui.models.protocol_model import ProtocolModel
 from gui.models.parse_model import ParseModel
 from gui.presenters.normal_parse_presenter import NormalParsePresenter
+from gui.wave.models.wave_data_manager import WaveDataManager
+from gui.wave.presenters.replay_presenter import ReplayPresenter
 from tcp_log.models.tcp_server_model import TcpServerModel
 from tcp_log.presenters.tcp_server_presenter import TcpServerPresenter
 
@@ -53,6 +56,7 @@ class UnifiedMainWindow(
         # 创建页面
         self._normal_page = None
         self._tcp_server_page = None
+        self._wave_replay_page = None
 
         self._setup_ui()
         self._setup_menu()
@@ -100,6 +104,11 @@ class UnifiedMainWindow(
         self._tcp_server_page.status_changed.connect(self._update_status)
         self._stacked_widget.addWidget(self._tcp_server_page)
 
+        # 页面 3：数据回放
+        self._wave_replay_page = WaveReplayPage()
+        self._wave_replay_page.status_changed.connect(self._update_status)
+        self._stacked_widget.addWidget(self._wave_replay_page)
+
         content_layout.addWidget(self._stacked_widget)
 
         main_layout.addWidget(content_widget, 1)  # 拉伸因子 1
@@ -137,6 +146,14 @@ class UnifiedMainWindow(
         )
         self._tcp_server_page.set_presenter(self._tcp_presenter)
 
+        # WaveReplayPage MVP
+        replay_data_manager = WaveDataManager()
+        self._replay_presenter = ReplayPresenter(
+            view=self._wave_replay_page,
+            data_manager=replay_data_manager,
+        )
+        self._wave_replay_page.set_presenter(self._replay_presenter)
+
     def _setup_menu(self):
         """设置菜单栏"""
         menubar = self.menuBar()
@@ -162,6 +179,11 @@ class UnifiedMainWindow(
         tcp_action.setShortcut("Ctrl+2")
         tcp_action.triggered.connect(lambda: self._on_page_requested('tcp_server'))
         view_menu.addAction(tcp_action)
+
+        replay_action = QAction("数据回放(&3)", self)
+        replay_action.setShortcut("Ctrl+3")
+        replay_action.triggered.connect(lambda: self._on_page_requested('wave_replay'))
+        view_menu.addAction(replay_action)
 
         view_menu.addSeparator()
 
@@ -204,17 +226,42 @@ class UnifiedMainWindow(
             self._sidebar.set_current_page('tcp_server')
             self._current_page = 'tcp_server'
             self._update_status("TCP 服务端")
+        elif page == 'wave_replay':
+            self._stacked_widget.setCurrentWidget(self._wave_replay_page)
+            self._sidebar.set_current_page('wave_replay')
+            self._current_page = 'wave_replay'
+            self._update_status("数据回放")
 
     def _on_next_page(self):
         """切换到下一个页面(Ctrl+Tab)"""
-        if self._current_page == 'normal':
-            self._on_page_requested('tcp_server')
-        else:
-            self._on_page_requested('normal')
+        pages = ['normal', 'tcp_server', 'wave_replay']
+        idx = pages.index(self._current_page) if self._current_page in pages else 0
+        next_page = pages[(idx + 1) % len(pages)]
+        self._on_page_requested(next_page)
 
     def _update_status(self, message: str) -> None:
         """更新状态栏"""
         self.status_bar.showMessage(message)
+
+    # ============== 数据回放页面快捷接口 ==============
+
+    def switch_to_wave_replay_with_entries(
+        self,
+        entries,
+        source_name: str = "外部数据",
+    ) -> int:
+        """
+        切换到数据回放页面并加载数据
+
+        Args:
+            entries: 解析条目列表 [(timestamp_str, content, cmd_id, direction), ...]
+            source_name: 数据源名称
+
+        Returns:
+            加载的数据点数量
+        """
+        self._on_page_requested('wave_replay')
+        return self._wave_replay_page.load_entries(entries, source_name)
 
     def closeEvent(self, event) -> None:
         """窗口关闭事件"""
@@ -224,6 +271,9 @@ class UnifiedMainWindow(
 
         if self._tcp_server_page and hasattr(self._tcp_server_page, 'cleanup'):
             self._tcp_server_page.cleanup()
+
+        if self._wave_replay_page and hasattr(self._wave_replay_page, 'cleanup'):
+            self._wave_replay_page.cleanup()
 
         # 调用Mixin的closeEvent保存窗口状态
         super().closeEvent(event)

@@ -212,16 +212,27 @@ class NormalParsePage(QWidget):
         """显示警告对话框"""
         QMessageBox.warning(self, title, message)
 
-    def show_parse_complete_dialog(self, output_path: str) -> bool:
-        """显示解析完成确认对话框"""
-        reply = QMessageBox.question(
-            self,
-            "解析完成",
-            f"解析结果已保存到:\n{output_path}\n\n是否立即打开查看？",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes,
-        )
-        return reply == QMessageBox.Yes
+    def show_parse_complete_dialog(self, output_path: str) -> str:
+        """显示解析完成确认对话框，返回用户选择的动作"""
+        msg = QMessageBox(self)
+        msg.setWindowTitle("解析完成")
+        msg.setText(f"解析结果已保存到:\n{output_path}")
+        msg.setInformativeText("请选择后续操作：")
+
+        # 三个按钮
+        open_file_btn = msg.addButton("打开文件", QMessageBox.AcceptRole)
+        open_wave_btn = msg.addButton("打开波形展示", QMessageBox.ActionRole)
+        close_btn = msg.addButton("关闭", QMessageBox.RejectRole)
+        msg.setDefaultButton(open_file_btn)
+
+        msg.exec()
+        clicked = msg.clickedButton()
+
+        if clicked is open_file_btn:
+            return "open_file"
+        elif clicked is open_wave_btn:
+            return "open_wave"
+        return "close"
 
     def show_file_dialog(
         self,

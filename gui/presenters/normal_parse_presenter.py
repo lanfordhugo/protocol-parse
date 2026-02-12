@@ -284,6 +284,11 @@ class NormalParsePresenter(QObject):
         """
         self._view.set_parsing_state(False)
 
+        # 在销毁 worker 之前，保存波形条目数据
+        self._last_wave_entries = []
+        if self._parse_worker and hasattr(self._parse_worker, '_wave_entries'):
+            self._last_wave_entries = self._parse_worker._wave_entries
+
         # 清理线程（QueuedConnection 确保此处在主线程执行，wait() 安全）
         if self._parse_thread:
             self._parse_thread.quit()
@@ -299,11 +304,38 @@ class NormalParsePresenter(QObject):
                 f"{datetime.now().strftime('%Y-%m-%d %H:%M')}"
             )
             if output_path:
-                should_open = self._view.show_parse_complete_dialog(output_path)
-                if should_open:
+                action = self._view.show_parse_complete_dialog(output_path)
+                if action == "open_file":
                     open_file(output_path)
+                elif action == "open_wave":
+                    self._open_wave_replay_with_parsed_data(protocol_name)
         else:
             self._view.emit_status_changed(f"❌ 解析失败 | {protocol_name}")
+
+    def _open_wave_replay_with_parsed_data(self, protocol_name: str) -> None:
+        """
+        将解析结果传递给数据回放页面
+
+        通过主窗口的 switch_to_wave_replay_with_entries() 方法注入数据。
+        """
+        # 从已完成的 worker 中获取波形条目
+        if not hasattr(self, '_last_wave_entries') or not self._last_wave_entries:
+            self._view.log_warning("无可用的解析数据用于波形展示")
+            return
+
+        # 查找主窗口并调用数据注入接口
+        from gui.unified_main_window import UnifiedMainWindow
+        widget = self._view
+        if hasattr(widget, 'window'):
+            main_window = widget.window()
+            if isinstance(main_window, UnifiedMainWindow):
+                count = main_window.switch_to_wave_replay_with_entries(
+                    self._last_wave_entries,
+                    source_name=f"普通解析 - {protocol_name}",
+                )
+                self._view.log_info(f"已将 {count} 个数据点加载到波形回放页面")
+            else:
+                self._view.log_warning("无法找到主窗口，请手动切换到数据回放页面")
 
     # ============== 资源管理 ==============
 

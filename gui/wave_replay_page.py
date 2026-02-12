@@ -1,0 +1,340 @@
+"""
+文件名称: wave_replay_page.py
+内容摘要: 数据回放页面 - 独立一级页面，支持多数据源的波形回放（MVP View）
+当前版本: v1.0.0
+作者: lanford
+创建日期: 2026-02-11
+"""
+
+import logging
+from typing import Any, Dict, List, Optional, Tuple
+
+from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QSplitter,
+    QStatusBar,
+    QVBoxLayout,
+    QWidget,
+)
+
+from gui.wave.models.wave_data_manager import FieldConfig
+from gui.wave.widgets.field_tree_widget import FieldTreeWidget
+from gui.wave.widgets.wave_chart_widget import WaveChartWidget
+
+logger = logging.getLogger(__name__)
+
+
+class WaveReplayPage(QWidget):
+    """
+    数据回放页面 - 独立一级页面
+
+    支持的数据源（均不依赖YAML协议配置）：
+    1. 波形JSON文件导入
+    2. TCP服务器解析结果
+    3. 普通解析结果
+
+    实现 IHistoryWaveView 接口。
+
+    UI布局：
+    ┌────────────────────────────────────────────────┐
+    │ 数据源: [下拉] | 导入JSON | 导出▼ | 自动缩放  │
+    │                              数据: N条         │
+    ├──────────────┬─────────────────────────────────┤
+    │ 字段树       │ 波形图                          │
+    │ ├ CMD 4      │ [多字段波形叠加]                │
+    │ │ ├ 电压     │                                 │
+    │ │ └ 电流     │                                 │
+    │ └ CMD 5      │                                 │
+    │   └ 功率     │                                 │
+    ├──────────────┴─────────────────────────────────┤
+    │ 状态栏                                         │
+    └────────────────────────────────────────────────┘
+    """
+
+    # 信号：状态变化（通知主窗口更新状态栏）
+    status_changed = Signal(str)
+
+    def __init__(self, parent: Optional[QWidget] = None):
+        super().__init__(parent)
+        self._presenter = None
+
+        self._setup_ui()
+
+    def set_presenter(self, presenter) -> None:
+        """
+        注入 Presenter（MVP 组装时调用）
+
+        Args:
+            presenter: ReplayPresenter 实例
+        """
+        self._presenter = presenter
+        self._connect_signals()
+
+    def _setup_ui(self) -> None:
+        """初始化UI"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        # === 工具栏 ===
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(4, 4, 4, 0)
+
+        # 数据源标签
+        toolbar.addWidget(QLabel("数据源:"))
+        self._source_combo = QComboBox()
+        self._source_combo.addItems(["波形JSON", "TCP解析结果", "普通解析结果"])
+        self._source_combo.setFixedWidth(120)
+        self._source_combo.setToolTip("选择数据源类型（导入JSON时自动切换）")
+        toolbar.addWidget(self._source_combo)
+
+        toolbar.addSpacing(8)
+
+        # 导入JSON按钮
+        self._import_btn = QPushButton("导入JSON")
+        self._import_btn.setFixedWidth(90)
+        self._import_btn.clicked.connect(self._on_import_json)
+        toolbar.addWidget(self._import_btn)
+
+        # 导出按钮（带下拉菜单）
+        self._export_btn = QPushButton("导出数据")
+        self._export_btn.setFixedWidth(90)
+        export_menu = QMenu(self)
+        export_menu.addAction("导出为 JSON", self._on_export_json)
+        export_menu.addAction("导出为 CSV", self._on_export_csv)
+        self._export_btn.setMenu(export_menu)
+        self._export_btn.setEnabled(False)
+        toolbar.addWidget(self._export_btn)
+
+        # 自动缩放按钮
+        self._auto_range_btn = QPushButton("自动缩放")
+        self._auto_range_btn.setFixedWidth(80)
+        self._auto_range_btn.clicked.connect(self._on_auto_range)
+        toolbar.addWidget(self._auto_range_btn)
+
+        # 清空数据按钮
+        self._clear_btn = QPushButton("清空")
+        self._clear_btn.setFixedWidth(60)
+        self._clear_btn.clicked.connect(self._on_clear_data)
+        toolbar.addWidget(self._clear_btn)
+
+        toolbar.addStretch()
+
+        # 数据计数
+        self._data_count_label = QLabel("数据: 0 条")
+        self._data_count_label.setStyleSheet("color: #888;")
+        toolbar.addWidget(self._data_count_label)
+
+        layout.addLayout(toolbar)
+
+        # === 主内容区（左右分栏）===
+        splitter = QSplitter(Qt.Horizontal)
+
+        # 左侧：字段树
+        self._field_tree = FieldTreeWidget()
+        self._field_tree.setMinimumWidth(180)
+        self._field_tree.setMaximumWidth(280)
+        splitter.addWidget(self._field_tree)
+
+        # 右侧：波形图
+        self._chart = WaveChartWidget()
+        splitter.addWidget(self._chart)
+
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([200, 700])
+
+        layout.addWidget(splitter, 1)
+
+        # === 状态栏 ===
+        self._status_bar = QStatusBar()
+        self._status_bar.showMessage('就绪 - 点击"导入JSON"或从其他页面加载数据')
+        layout.addWidget(self._status_bar)
+
+    def _connect_signals(self) -> None:
+        """连接 UI 信号到 Presenter"""
+        # 字段树信号
+        self._field_tree.field_enabled_changed.connect(
+            self._presenter.on_field_enabled_changed
+        )
+        self._field_tree.field_color_changed.connect(
+            self._presenter.on_field_color_changed
+        )
+        self._field_tree.field_removed.connect(
+            self._presenter.on_remove_field
+        )
+        self._field_tree.field_renamed.connect(
+            self._presenter.on_field_renamed
+        )
+
+    # ============== UI事件 ==============
+
+    def _on_import_json(self) -> None:
+        """导入JSON数据"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "导入波形数据",
+            "",
+            "JSON 文件 (*.json)",
+        )
+        if file_path and self._presenter:
+            self._source_combo.setCurrentText("波形JSON")
+            self._presenter.import_from_json(file_path)
+
+    def _on_export_json(self) -> None:
+        """导出为JSON"""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "导出为 JSON",
+            "wave_data.json",
+            "JSON 文件 (*.json)",
+        )
+        if file_path and self._presenter:
+            self._presenter.on_export_json(file_path)
+
+    def _on_export_csv(self) -> None:
+        """导出为CSV"""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "导出为 CSV",
+            "wave_data.csv",
+            "CSV 文件 (*.csv)",
+        )
+        if file_path and self._presenter:
+            self._presenter.on_export_csv(file_path)
+
+    def _on_auto_range(self) -> None:
+        """自动缩放"""
+        self._chart.auto_range()
+
+    def _on_clear_data(self) -> None:
+        """清空数据"""
+        if self._presenter:
+            self._presenter.data_manager.clear()
+            self._chart.clear()
+            self._field_tree.clear()
+            self._data_count_label.setText("数据: 0 条")
+            self._export_btn.setEnabled(False)
+            self._status_bar.showMessage("数据已清空")
+
+    # ============== 外部数据注入接口 ==============
+
+    def load_entries(
+        self,
+        entries: List[Tuple[str, Optional[Dict[str, Any]], Optional[int], Optional[str]]],
+        source_name: str = "外部数据",
+    ) -> int:
+        """
+        从外部注入解析条目（供主窗口调用）
+
+        Args:
+            entries: 列表，每项为 (timestamp_str, parsed_content, cmd_id, direction)
+            source_name: 数据源名称
+
+        Returns:
+            成功加载的数据点数量
+        """
+        if not self._presenter:
+            return 0
+
+        # 更新数据源下拉框
+        if "TCP" in source_name:
+            self._source_combo.setCurrentText("TCP解析结果")
+        elif "解析" in source_name:
+            self._source_combo.setCurrentText("普通解析结果")
+
+        return self._presenter.load_from_entries(entries, source_name)
+
+    # ============== IHistoryWaveView 接口实现 ==============
+
+    def add_chart_field(self, config: FieldConfig) -> None:
+        """添加字段到图表"""
+        self._chart.add_field(config)
+
+    def remove_chart_field(self, field_path: str) -> None:
+        """从图表移除字段"""
+        self._chart.remove_field(field_path)
+
+    def update_chart_data(
+        self,
+        field_path: str,
+        timestamps: List[float],
+        values: List[Optional[float]],
+    ) -> None:
+        """更新指定字段的图表数据"""
+        self._chart.update_data(field_path, timestamps, values)
+
+    def update_all_chart_data(
+        self,
+        plot_data: Dict[str, Tuple[List[float], List[Optional[float]]]],
+    ) -> None:
+        """批量更新所有字段的图表数据"""
+        self._chart.update_all_data(plot_data)
+
+    def clear_chart(self) -> None:
+        """清空图表"""
+        self._chart.clear()
+
+    def add_field_to_tree(self, config: FieldConfig) -> None:
+        """添加字段到字段树"""
+        self._field_tree.add_field(config)
+
+    def remove_field_from_tree(self, field_path: str) -> None:
+        """从字段树移除字段"""
+        self._field_tree.remove_field(field_path)
+
+    def update_field_in_tree(self, config: FieldConfig) -> None:
+        """更新字段树中的字段配置"""
+        self._field_tree.update_field(config)
+
+    def refresh_field_tree(self, configs: List[FieldConfig]) -> None:
+        """刷新整个字段树"""
+        self._field_tree.refresh(configs)
+
+    @Slot(str)
+    def update_status(self, message: str) -> None:
+        """更新状态栏"""
+        self._status_bar.showMessage(message)
+
+    @Slot(int)
+    def update_data_count(self, count: int) -> None:
+        """更新数据点计数"""
+        self._data_count_label.setText(f"数据: {count} 条")
+
+    def set_time_range_limits(self, start: float, end: float) -> None:
+        """设置时间范围选择器的范围限制"""
+        self._chart.set_x_range(start, end)
+
+    def set_export_enabled(self, enabled: bool) -> None:
+        """设置导出按钮启用状态"""
+        self._export_btn.setEnabled(enabled)
+
+    def show_export_result(self, success: bool, file_path: str) -> None:
+        """显示导出结果"""
+        if success:
+            QMessageBox.information(
+                self,
+                "导出成功",
+                f"数据已导出到:\n{file_path}",
+            )
+        else:
+            QMessageBox.warning(
+                self,
+                "导出失败",
+                f"导出失败: {file_path}",
+            )
+
+    def emit_status_changed(self, message: str) -> None:
+        """发送状态变化信号"""
+        self.status_changed.emit(message)
+
+    def cleanup(self) -> None:
+        """清理资源"""
+        pass

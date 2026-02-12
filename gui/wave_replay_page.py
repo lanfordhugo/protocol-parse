@@ -215,14 +215,9 @@ class WaveReplayPage(QWidget):
         self._chart.auto_range()
 
     def _on_clear_data(self) -> None:
-        """清空数据"""
+        """清空数据（委托给 Presenter 执行完整清理）"""
         if self._presenter:
-            self._presenter.data_manager.clear()
-            self._chart.clear()
-            self._field_tree.clear()
-            self._data_count_label.setText("数据: 0 条")
-            self._export_btn.setEnabled(False)
-            self._status_bar.showMessage("数据已清空")
+            self._presenter.on_clear_data()
 
     # ============== 外部数据注入接口 ==============
 

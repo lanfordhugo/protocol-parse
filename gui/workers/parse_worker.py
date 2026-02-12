@@ -6,6 +6,7 @@
 创建日期: 2026-01-24
 """
 
+from time import perf_counter
 from typing import Dict, Any, Optional
 
 from PySide6.QtCore import QObject, Signal, Slot
@@ -115,8 +116,15 @@ class ParseWorker(QObject):
             self.log_info.emit("正在提取数据...")
 
             # 分步执行解析（与 protocol.run() 等价，但保留 parsed_data 引用）
-            protocol._emit_progress(5, 100)
+            protocol._reset_perf_stats()
+            total_start = perf_counter()
+
+            # 阶段1：提取数据
+            extract_start = perf_counter()
+            self.progress.emit(5, 100)
             data_groups = protocol.extract_data_from_file(protocol.log_file_name)
+            protocol._record_phase("extract", perf_counter() - extract_start)
+
             if not data_groups or self._should_stop:
                 if self._should_stop:
                     self.log_warning.emit("解析已被用户停止")
@@ -125,16 +133,27 @@ class ParseWorker(QObject):
                     self.finished.emit(True, "解析完成（无数据）", "")
                 return
 
-            protocol._emit_progress(10, 100)
+            # 阶段2：解析数据内容
+            self.progress.emit(10, 100)
+            parse_start = perf_counter()
             parsed_data = protocol.parse_data_content(data_groups)
+            protocol._record_phase("parse", perf_counter() - parse_start)
+
+            # 同步解析器的性能统计（命令计数、错误计数）
+            protocol.perf_stats["cmd_counts"] = protocol.parser.perf_stats["cmd_counts"]
+            protocol.perf_stats["errors"] = protocol.parser.perf_stats["errors"]
 
             if self._should_stop:
                 self.log_warning.emit("解析已被用户停止")
                 self.finished.emit(False, "解析已停止", "")
                 return
 
+            # 阶段3：格式化并保存结果
+            screen_start = perf_counter()
             output_path = protocol.screen_parse_data(parsed_data)
-            protocol._emit_progress(100, 100)
+            protocol._record_phase("screen", perf_counter() - screen_start)
+            protocol._record_phase("total", perf_counter() - total_start)
+            self.progress.emit(100, 100)
 
             if output_path:
                 # 提取波形兼容的条目数据（供波形回放页面使用）

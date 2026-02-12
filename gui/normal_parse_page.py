@@ -37,6 +37,8 @@ class NormalParsePage(QWidget):
 
     # 信号：状态变化（通知主窗口更新状态栏）
     status_changed = Signal(str)
+    # 信号：请求跳转到波形回放页面 (entries, source_name)
+    wave_replay_requested = Signal(list, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -245,6 +247,10 @@ class NormalParsePage(QWidget):
             self, title, directory, file_filter
         )
         return file_path if file_path else None
+
+    def request_wave_replay(self, entries: list, source_name: str) -> None:
+        """请求跳转到波形回放页面并加载数据"""
+        self.wave_replay_requested.emit(entries, source_name)
 
     def emit_status_changed(self, message: str) -> None:
         """发送状态变化信号"""

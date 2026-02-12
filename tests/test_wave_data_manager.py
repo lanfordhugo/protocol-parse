@@ -350,6 +350,65 @@ class TestWaveDataManager:
         self.manager.clear()
         assert self.manager.data_count == 0
 
+    def test_reset_clears_everything(self):
+        """reset() 清空数据点、字段配置、录制状态和颜色计数器"""
+        self.manager.add_entry("2024-08-29 09:00:00:000", {"v": 1.0}, cmd_id=4)
+        assert self.manager.data_count == 1
+        assert len(self.manager.get_all_field_configs()) == 1
+        assert len(self.manager.recording_fields) > 0
+
+        self.manager.reset()
+
+        assert self.manager.data_count == 0
+        assert len(self.manager.get_all_field_configs()) == 0
+        assert len(self.manager.recording_fields) == 0
+
+    def test_reset_then_reload_no_stale_fields(self):
+        """reset() 后重新加载不同字段的数据，不应残留旧字段配置"""
+        # 第一次加载：字段 v, i
+        self.manager.add_entry("2024-08-29 09:00:00:000", {"v": 1.0, "i": 2.0}, cmd_id=4)
+        assert len(self.manager.get_all_field_configs()) == 2
+
+        # reset 后加载不同字段：p, t
+        self.manager.reset()
+        self.manager.set_record_all(True)
+        self.manager.add_entry("2024-08-29 10:00:00:000", {"p": 3.0, "t": 4.0}, cmd_id=5)
+
+        configs = self.manager.get_all_field_configs()
+        field_paths = {c.field_path for c in configs}
+        assert field_paths == {"p", "t"}
+        assert "v" not in field_paths
+        assert "i" not in field_paths
+
+    def test_reset_resets_color_index(self):
+        """reset() 后颜色分配从头开始"""
+        # 添加数据触发颜色分配
+        self.manager.add_entry("2024-08-29 09:00:00:000", {"a": 1.0, "b": 2.0}, cmd_id=4)
+        configs_before = self.manager.get_all_field_configs()
+        colors_before = [c.color for c in configs_before]
+
+        # reset 后重新添加
+        self.manager.reset()
+        self.manager.set_record_all(True)
+        self.manager.add_entry("2024-08-29 10:00:00:000", {"x": 3.0, "y": 4.0}, cmd_id=5)
+        configs_after = self.manager.get_all_field_configs()
+        colors_after = [c.color for c in configs_after]
+
+        # 颜色应该重新从索引0开始分配
+        assert colors_before == colors_after
+
+    def test_clear_preserves_field_configs(self):
+        """clear() 仅清空数据点，保留字段配置（对比 reset）"""
+        self.manager.add_entry("2024-08-29 09:00:00:000", {"v": 1.0}, cmd_id=4)
+        assert self.manager.data_count == 1
+        assert len(self.manager.get_all_field_configs()) == 1
+
+        self.manager.clear()
+
+        assert self.manager.data_count == 0
+        # clear 保留字段配置
+        assert len(self.manager.get_all_field_configs()) == 1
+
     def test_add_entries_batch(self):
         """批量添加"""
         entries = [
@@ -409,6 +468,101 @@ class TestWaveDataManager:
                 lines = f.readlines()
             assert len(lines) == 3  # 表头 + 2行数据
             assert "v" in lines[0]  # 表头包含字段名
+        finally:
+            os.unlink(tmp_path)
+
+    def test_export_json_enabled_only(self):
+        """JSON导出仅包含 enabled 字段"""
+        self.manager.add_entry("2024-08-29 09:00:00:000", {"v": 1.0, "i": 2.0, "t": 30}, cmd_id=4)
+        self.manager.add_entry("2024-08-29 09:00:01:000", {"v": 2.0, "i": 3.0, "t": 31}, cmd_id=4)
+
+        # 禁用 "i" 和 "t" 字段
+        self.manager.update_field_enabled("i", False)
+        self.manager.update_field_enabled("t", False)
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            tmp_path = f.name
+
+        try:
+            count = self.manager.export_to_json(tmp_path)
+            assert count == 2
+
+            with open(tmp_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            # 字段配置仅含 "v"
+            exported_fields = {c["field_path"] for c in data["field_configs"]}
+            assert exported_fields == {"v"}
+
+            # 数据值仅含 "v"
+            for pt in data["data_points"]:
+                assert "v" in pt["values"]
+                assert "i" not in pt["values"]
+                assert "t" not in pt["values"]
+        finally:
+            os.unlink(tmp_path)
+
+    def test_export_json_all_fields(self):
+        """JSON导出 enabled_only=False 包含全部字段"""
+        self.manager.add_entry("2024-08-29 09:00:00:000", {"v": 1.0, "i": 2.0}, cmd_id=4)
+        self.manager.update_field_enabled("i", False)
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            tmp_path = f.name
+
+        try:
+            count = self.manager.export_to_json(tmp_path, enabled_only=False)
+            assert count == 1
+
+            with open(tmp_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            exported_fields = {c["field_path"] for c in data["field_configs"]}
+            assert exported_fields == {"v", "i"}
+        finally:
+            os.unlink(tmp_path)
+
+    def test_export_csv_enabled_only(self):
+        """CSV导出仅包含 enabled 字段"""
+        self.manager.add_entry("2024-08-29 09:00:00:000", {"v": 1.0, "i": 2.0}, cmd_id=4)
+        self.manager.update_field_enabled("i", False)
+
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
+            tmp_path = f.name
+
+        try:
+            count = self.manager.export_to_csv(tmp_path)
+            assert count == 1
+
+            with open(tmp_path, "r", encoding="utf-8-sig") as f:
+                lines = f.readlines()
+
+            # 解析表头列名，精确判断字段
+            header_cols = lines[0].strip().split(",")
+            assert "v" in header_cols
+            assert "i" not in header_cols
+        finally:
+            os.unlink(tmp_path)
+
+    def test_export_csv_skips_irrelevant_rows(self):
+        """CSV导出跳过不包含选中字段数据的行"""
+        # cmd_id=4 有字段 v，cmd_id=5 有字段 p
+        self.manager.add_entry("2024-08-29 09:00:00:000", {"v": 1.0}, cmd_id=4)
+        self.manager.add_entry("2024-08-29 09:00:01:000", {"p": 2.0}, cmd_id=5)
+
+        # 禁用 "p"，仅保留 "v"
+        self.manager.update_field_enabled("p", False)
+
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
+            tmp_path = f.name
+
+        try:
+            count = self.manager.export_to_csv(tmp_path)
+            assert count == 1  # 只有cmd_id=4的行包含 "v"
+
+            with open(tmp_path, "r", encoding="utf-8-sig") as f:
+                lines = f.readlines()
+            assert len(lines) == 2  # 表头 + 1行数据
         finally:
             os.unlink(tmp_path)
 

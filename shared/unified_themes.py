@@ -39,28 +39,24 @@ SIDEBAR_STYLE = """
 }
 
 /* === 导航按钮样式 === */
-QWidget#nav_普通解析,
-QWidget#nav_TCP服务端 {
+QWidget[objectName^="nav_"] {
     background-color: transparent;
     border-radius: 6px;
     border: 2px solid transparent;
     margin: 4px;
 }
 
-QWidget#nav_普通解析:hover,
-QWidget#nav_TCP服务端:hover {
+QWidget[objectName^="nav_"]:hover {
     background-color: #252a48;
     border-color: #3a3a5e;
 }
 
-QWidget#nav_普通解析[selected="true"],
-QWidget#nav_TCP服务端[selected="true"] {
+QWidget[objectName^="nav_"][selected="true"] {
     background-color: #3a4070;
     border-color: #6c8cd5;
 }
 
-QWidget#nav_普通解析[selected="true"] QLabel,
-QWidget#nav_TCP服务端[selected="true"] QLabel {
+QWidget[objectName^="nav_"][selected="true"] QLabel {
     color: #ffffff;
 }
 

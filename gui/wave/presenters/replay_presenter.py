@@ -81,8 +81,8 @@ class ReplayPresenter(WavePresenterBase):
         Returns:
             成功加载的数据点数量
         """
-        # 清除旧数据
-        self._data_manager.clear()
+        # 完整重置旧数据（含字段配置和录制状态）
+        self._data_manager.reset()
         self._view.clear_chart()
 
         # 历史加载模式：记录所有字段
@@ -109,8 +109,8 @@ class ReplayPresenter(WavePresenterBase):
             导入的数据点数量
         """
         try:
-            # 清除旧数据
-            self._data_manager.clear()
+            # 完整重置旧数据（含字段配置和录制状态）
+            self._data_manager.reset()
             self._view.clear_chart()
 
             # 历史加载模式：记录所有字段
@@ -158,6 +158,16 @@ class ReplayPresenter(WavePresenterBase):
 
         # 启用导出
         self._view.set_export_enabled(self._data_manager.data_count > 0)
+
+    def on_clear_data(self) -> None:
+        """清空所有数据（供 View 委托调用）"""
+        self._data_manager.reset()
+        self._view.clear_chart()
+        self._view.refresh_field_tree([])
+        self._view.update_data_count(0)
+        self._view.set_export_enabled(False)
+        self._view.update_status("数据已清空")
+        self._data_source = ""
 
     # ============== 时间范围操作 ==============
 

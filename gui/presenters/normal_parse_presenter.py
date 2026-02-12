@@ -316,26 +316,19 @@ class NormalParsePresenter(QObject):
         """
         将解析结果传递给数据回放页面
 
-        通过主窗口的 switch_to_wave_replay_with_entries() 方法注入数据。
+        通过 View 接口的 request_wave_replay() 发起跳转请求，
+        由主窗口在组装层连接信号完成实际跳转。
         """
         # 从已完成的 worker 中获取波形条目
         if not hasattr(self, '_last_wave_entries') or not self._last_wave_entries:
             self._view.log_warning("无可用的解析数据用于波形展示")
             return
 
-        # 查找主窗口并调用数据注入接口
-        from gui.unified_main_window import UnifiedMainWindow
-        widget = self._view
-        if hasattr(widget, 'window'):
-            main_window = widget.window()
-            if isinstance(main_window, UnifiedMainWindow):
-                count = main_window.switch_to_wave_replay_with_entries(
-                    self._last_wave_entries,
-                    source_name=f"普通解析 - {protocol_name}",
-                )
-                self._view.log_info(f"已将 {count} 个数据点加载到波形回放页面")
-            else:
-                self._view.log_warning("无法找到主窗口，请手动切换到数据回放页面")
+        source_name = f"普通解析 - {protocol_name}"
+        self._view.request_wave_replay(self._last_wave_entries, source_name)
+        self._view.log_info(
+            f"已将 {len(self._last_wave_entries)} 个数据点发送到波形回放页面"
+        )
 
     # ============== 资源管理 ==============
 

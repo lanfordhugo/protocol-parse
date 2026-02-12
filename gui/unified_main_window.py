@@ -133,6 +133,10 @@ class UnifiedMainWindow(
             settings=self._settings,
         )
         self._normal_page.set_presenter(self._normal_presenter)
+        # 连接波形回放跳转信号（由 Presenter 通过 View 接口触发）
+        self._normal_page.wave_replay_requested.connect(
+            self.switch_to_wave_replay_with_entries
+        )
 
         # TcpServerPage MVP
         tcp_model = TcpServerModel(

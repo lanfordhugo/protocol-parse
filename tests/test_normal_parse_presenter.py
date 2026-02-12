@@ -206,6 +206,57 @@ class TestNormalParsePresenterLogFile:
 
 
 @pytest.mark.unit
+class TestNormalParsePresenterWaveReplay:
+    """NormalParsePresenter 波形回放跳转测试"""
+
+    def test_open_wave_replay_calls_view_interface(self, configs_dir: Path):
+        """波形回放跳转应通过 View 接口的 request_wave_replay 方法"""
+        view = _create_mock_view()
+        model = ProtocolModel(configs_dir)
+        presenter = NormalParsePresenter(view=view, protocol_model=model, parse_model=ParseModel())
+
+        # 模拟已保存的波形条目数据
+        presenter._last_wave_entries = [
+            ("2024-08-29 09:00:00:000", {"电压": 220.0}, 4, "Recv"),
+            ("2024-08-29 09:00:01:000", {"电压": 221.0}, 4, "Recv"),
+        ]
+
+        presenter._open_wave_replay_with_parsed_data("sinexcel")
+
+        # 应该通过 View 接口调用 request_wave_replay
+        view.request_wave_replay.assert_called_once()
+        entries_arg, source_arg = view.request_wave_replay.call_args[0]
+        assert len(entries_arg) == 2
+        assert "sinexcel" in source_arg
+
+    def test_open_wave_replay_no_entries_warns(self, configs_dir: Path):
+        """无波形数据时应显示警告而不是调用跳转"""
+        view = _create_mock_view()
+        model = ProtocolModel(configs_dir)
+        presenter = NormalParsePresenter(view=view, protocol_model=model, parse_model=ParseModel())
+
+        # 空数据
+        presenter._last_wave_entries = []
+
+        presenter._open_wave_replay_with_parsed_data("sinexcel")
+
+        view.log_warning.assert_called()
+        view.request_wave_replay.assert_not_called()
+
+    def test_open_wave_replay_no_attr_warns(self, configs_dir: Path):
+        """_last_wave_entries 不存在时应显示警告"""
+        view = _create_mock_view()
+        model = ProtocolModel(configs_dir)
+        presenter = NormalParsePresenter(view=view, protocol_model=model, parse_model=ParseModel())
+
+        # 不设置 _last_wave_entries
+        presenter._open_wave_replay_with_parsed_data("sinexcel")
+
+        view.log_warning.assert_called()
+        view.request_wave_replay.assert_not_called()
+
+
+@pytest.mark.unit
 class TestNormalParsePresenterCleanup:
     """NormalParsePresenter 资源清理测试"""
 

@@ -260,6 +260,15 @@ class WaveDataManager:
         with self._lock:
             self._data_points.clear()
 
+    def reset(self) -> None:
+        """完整重置：清空数据点、字段配置、录制状态和颜色计数器"""
+        with self._lock:
+            self._data_points.clear()
+            self._field_configs.clear()
+            self._recording_fields.clear()
+            self._record_all_mode = False
+            self._color_index = 0
+
     @property
     def data_count(self) -> int:
         """数据点总数"""
@@ -443,17 +452,27 @@ class WaveDataManager:
 
     # ============== 数据导入/导出 ==============
 
-    def export_to_json(self, file_path: str) -> int:
+    def export_to_json(self, file_path: str, enabled_only: bool = True) -> int:
         """
         导出数据为 JSON 格式
 
         Args:
             file_path: 输出文件路径
+            enabled_only: 仅导出用户选中的字段（默认True）
 
         Returns:
             导出的数据点数量
         """
         with self._lock:
+            # 确定导出的字段集合
+            if enabled_only:
+                export_configs = [
+                    c for c in self._field_configs.values() if c.enabled
+                ]
+            else:
+                export_configs = list(self._field_configs.values())
+            export_field_paths = {c.field_path for c in export_configs}
+
             export_data = {
                 "field_configs": [
                     {
@@ -465,16 +484,20 @@ class WaveDataManager:
                         "enabled": c.enabled,
                         "cmd_id": c.cmd_id,
                     }
-                    for c in self._field_configs.values()
+                    for c in export_configs
                 ],
                 "data_points": [
                     {
                         "timestamp": point.timestamp.isoformat(),
-                        "values": self._serialize_values(point.values),
+                        "values": self._serialize_values(
+                            {k: v for k, v in point.values.items()
+                             if k in export_field_paths}
+                        ),
                         "cmd_id": point.cmd_id,
                         "direction": point.direction,
                     }
                     for point in self._data_points
+                    if any(k in export_field_paths for k in point.values)
                 ],
             }
 
@@ -486,19 +509,25 @@ class WaveDataManager:
         logger.info("已导出 %d 个数据点到 %s", count, file_path)
         return count
 
-    def export_to_csv(self, file_path: str) -> int:
+    def export_to_csv(self, file_path: str, enabled_only: bool = True) -> int:
         """
         导出数据为 CSV 格式
 
         Args:
             file_path: 输出文件路径
+            enabled_only: 仅导出用户选中的字段（默认True）
 
         Returns:
             导出的数据点数量
         """
         with self._lock:
-            # 收集所有字段路径
-            all_fields = list(self._field_configs.keys())
+            # 收集导出的字段路径
+            if enabled_only:
+                all_fields = [
+                    fp for fp, c in self._field_configs.items() if c.enabled
+                ]
+            else:
+                all_fields = list(self._field_configs.keys())
             if not all_fields:
                 return 0
 
@@ -509,8 +538,12 @@ class WaveDataManager:
                 header = ["timestamp", "cmd_id", "direction"] + all_fields
                 writer.writerow(header)
 
-                # 数据行
+                # 数据行（仅输出包含选中字段数据的行）
+                field_set = set(all_fields)
+                count = 0
                 for point in self._data_points:
+                    if not any(k in field_set for k in point.values):
+                        continue
                     row = [
                         point.timestamp.isoformat(),
                         point.cmd_id or "",
@@ -526,8 +559,7 @@ class WaveDataManager:
                                 value = json.dumps(value, ensure_ascii=False)
                         row.append(value)
                     writer.writerow(row)
-
-            count = len(self._data_points)
+                    count += 1
             logger.info("已导出 %d 个数据点到 %s", count, file_path)
             return count
 

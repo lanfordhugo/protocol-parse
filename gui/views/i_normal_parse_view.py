@@ -166,6 +166,20 @@ class INormalParsePageView(Protocol):
         """
         ...
 
+    # ============== 页面跳转请求 ==============
+
+    def request_wave_replay(self, entries: list, source_name: str) -> None:
+        """
+        请求跳转到波形回放页面并加载数据
+
+        由 Presenter 调用，View 通过信号通知主窗口完成实际跳转。
+
+        Args:
+            entries: 解析条目列表 [(timestamp_str, content, cmd_id, direction), ...]
+            source_name: 数据源名称
+        """
+        ...
+
     # ============== 状态通知 ==============
 
     def emit_status_changed(self, message: str) -> None:

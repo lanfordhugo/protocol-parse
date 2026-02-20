@@ -68,7 +68,8 @@
       "Bash(lsof:*)",
       "Bash(tasklist:*)",
       "Bash(powershell.exe -Command \"Get-Process | Where-Object {$_ProcessName -like ''*python*''} | Select-Object Id,ProcessName,Path\")",
-      "Bash(cmd:*)"
+      "Bash(cmd:*)",
+      "Bash(tar:*)"
     ]
   }
 }

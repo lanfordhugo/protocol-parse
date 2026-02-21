@@ -5,6 +5,43 @@
 作者: lanford
 创建日期: 2025-01-02
 """
+import os
+from pathlib import Path
+
+# 获取图标目录路径
+_ICONS_DIR = Path(__file__).parent.parent / "gui" / "icons"
+
+# 标记是否已注册图标路径
+_icons_path_registered = False
+
+
+def _register_icons_path():
+    """注册图标路径到 Qt 的搜索路径中
+
+    使用 QDir.addSearchPath() 注册自定义 URL scheme，
+    使样式表中的 url(v8icons:/xxx.svg) 可以正确解析。
+    """
+    global _icons_path_registered
+    if _icons_path_registered:
+        return
+
+    try:
+        from PySide6.QtCore import QDir
+    except ImportError:
+        try:
+            from PyQt5.QtCore import QDir
+        except ImportError:
+            try:
+                from PyQt6.QtCore import QDir
+            except ImportError:
+                from PySide2.QtCore import QDir
+
+    # 确保图标目录存在
+    icons_dir = str(_ICONS_DIR.resolve())
+    if os.path.exists(icons_dir):
+        QDir.addSearchPath("v8icons", icons_dir)
+        _icons_path_registered = True
+
 
 # 深色主题 - 现代暗色设计
 DARK_THEME = """
@@ -61,6 +98,18 @@ QSpinBox::up-button:hover, QSpinBox::down-button:hover {
     background-color: #3a3a5e;
 }
 
+QSpinBox::up-arrow {
+    image: url(v8icons:/arrow-up-dark.svg);
+    width: 16px;
+    height: 16px;
+}
+
+QSpinBox::down-arrow {
+    image: url(v8icons:/arrow-down-dark.svg);
+    width: 16px;
+    height: 16px;
+}
+
 /* === 下拉框 === */
 QComboBox {
     background-color: #16213e;
@@ -84,11 +133,10 @@ QComboBox::drop-down {
 }
 
 QComboBox::down-arrow {
-    image: none;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 6px solid #a8b4ce;
-    margin-right: 5px;
+    image: url(v8icons:/arrow-down-dark.svg);
+    width: 16px;
+    height: 16px;
+    margin-right: 6px;
 }
 
 QComboBox QAbstractItemView {
@@ -386,6 +434,18 @@ QSpinBox::up-button:hover, QSpinBox::down-button:hover {
     background-color: #d4dce8;
 }
 
+QSpinBox::up-arrow {
+    image: url(v8icons:/arrow-up-light.svg);
+    width: 16px;
+    height: 16px;
+}
+
+QSpinBox::down-arrow {
+    image: url(v8icons:/arrow-down-light.svg);
+    width: 16px;
+    height: 16px;
+}
+
 /* === 下拉框 === */
 QComboBox {
     background-color: #ffffff;
@@ -409,11 +469,10 @@ QComboBox::drop-down {
 }
 
 QComboBox::down-arrow {
-    image: none;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 6px solid #5a6c7e;
-    margin-right: 5px;
+    image: url(v8icons:/arrow-down-light.svg);
+    width: 16px;
+    height: 16px;
+    margin-right: 6px;
 }
 
 QComboBox QAbstractItemView {
@@ -658,16 +717,17 @@ QToolTip {
 
 def get_theme(theme_name: str) -> str:
     """获取主题样式表
-    
+
     Args:
         theme_name: 主题名称，'dark' 或 'light'
-    
+
     Returns:
         主题样式表字符串
     """
-    if theme_name == "dark":
-        return DARK_THEME
-    elif theme_name == "light":
+    # 注册图标路径（首次调用时执行）
+    _register_icons_path()
+
+    if theme_name == "light":
         return LIGHT_THEME
     else:
         return DARK_THEME

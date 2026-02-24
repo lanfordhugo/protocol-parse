@@ -24,10 +24,15 @@ from gui.wave.utils.chart_type_mapper import ChartType, ChartTypeMapper
 
 logger = logging.getLogger(__name__)
 
-# 降采样阈值：超过此数据点数时自动触发 LTTB 降采样
-DOWNSAMPLE_THRESHOLD = 10000
-# 降采样后保留的数据点数
-DOWNSAMPLE_TARGET = 2000
+# 多级精度（LOD）配置：(阈值, 目标点数)
+# 当数据点数超过阈值时，降采样到目标点数
+LOD_LEVELS = [
+    (5000, 500),      # Level 0: 数据点 > 5000 时降采样到 500
+    (20000, 2000),    # Level 1: 数据点 > 20000 时降采样到 2000
+    (100000, 5000),   # Level 2: 数据点 > 100000 时降采样到 5000
+]
+# 最高精度级别索引（使用原始数据）
+LOD_MAX_LEVEL = len(LOD_LEVELS)
 
 
 def lttb_downsample(
@@ -174,6 +179,10 @@ class WaveChartWidget(QWidget):
         self._field_configs: Dict[str, FieldConfig] = {}
         # 防止程序设置 X 范围时触发 user_interacted
         self._programmatic_update = False
+        # 多级精度缓存: {field_path: {lod_level: (x_data, y_data)}}
+        self._lod_cache: Dict[str, Dict[int, Tuple[np.ndarray, np.ndarray]]] = {}
+        # 原始数据缓存: {field_path: (x_data, y_data)}
+        self._raw_data_cache: Dict[str, Tuple[np.ndarray, np.ndarray]] = {}
 
         self._setup_ui()
 
@@ -341,18 +350,26 @@ class WaveChartWidget(QWidget):
 
         if not timestamps or not values:
             plot_item.setData([], [])
+            # 清空该字段的缓存
+            self._lod_cache.pop(field_path, None)
+            self._raw_data_cache.pop(field_path, None)
             return
 
         ts_array = np.array(timestamps, dtype=np.float64)
         val_array = np.array(values, dtype=np.float64)
 
-        # 超过阈值时自动降采样
-        if len(ts_array) > DOWNSAMPLE_THRESHOLD:
-            ts_array, val_array = lttb_downsample(
-                ts_array, val_array, DOWNSAMPLE_TARGET
-            )
+        # 计算并缓存多级精度数据
+        self._compute_lod_cache(field_path, ts_array, val_array)
 
-        plot_item.setData(ts_array, val_array)
+        # 根据当前视口选择合适的精度级别渲染
+        visible_points = self._get_visible_point_count()
+        level = self._select_lod_level(visible_points)
+        lod_data = self._get_lod_data(field_path, level)
+
+        if lod_data is not None:
+            plot_item.setData(lod_data[0], lod_data[1])
+        else:
+            plot_item.setData(ts_array, val_array)
 
     def update_all_data(
         self,
@@ -376,8 +393,127 @@ class WaveChartWidget(QWidget):
         """清空所有字段和数据"""
         for field_path in list(self._plot_items.keys()):
             self.remove_field(field_path)
+        # 清空 LOD 缓存
+        self._lod_cache.clear()
+        self._raw_data_cache.clear()
 
-    # ============== 视图控制 ==============
+    # ============== 多级精度（LOD）=============
+
+    def _select_lod_level(self, visible_points: int) -> int:
+        """
+        根据可见数据点数选择精度级别
+
+        Args:
+            visible_points: 当前视口内可见的数据点数
+
+        Returns:
+            精度级别索引（0-2 为降采样级别，3 为原始数据）
+        """
+        for i, (threshold, _) in enumerate(LOD_LEVELS):
+            if visible_points <= threshold:
+                return i
+        return LOD_MAX_LEVEL
+
+    def _compute_lod_cache(
+        self,
+        field_path: str,
+        x_data: np.ndarray,
+        y_data: np.ndarray,
+    ) -> None:
+        """
+        计算并缓存指定字段的多级精度降采样数据
+
+        Args:
+            field_path: 字段路径
+            x_data: 原始 X 轴数据
+            y_data: 原始 Y 轴数据
+        """
+        # 缓存原始数据
+        self._raw_data_cache[field_path] = (x_data.copy(), y_data.copy())
+
+        # 初始化该字段的 LOD 缓存
+        if field_path not in self._lod_cache:
+            self._lod_cache[field_path] = {}
+
+        n_points = len(x_data)
+
+        # 为每个 LOD 级别计算降采样数据
+        for level, (threshold, target) in enumerate(LOD_LEVELS):
+            if n_points > threshold:
+                # 数据量超过阈值，执行降采样
+                sampled_x, sampled_y = lttb_downsample(x_data, y_data, target)
+                self._lod_cache[field_path][level] = (sampled_x, sampled_y)
+            # 如果数据量不超过阈值，该级别不需要缓存（使用更高级别的数据）
+
+    def _get_lod_data(
+        self,
+        field_path: str,
+        level: int,
+    ) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+        """
+        获取指定字段和精度级别的数据
+
+        Args:
+            field_path: 字段路径
+            level: 精度级别
+
+        Returns:
+            (x_data, y_data) 或 None
+        """
+        # 原始数据级别
+        if level >= LOD_MAX_LEVEL:
+            return self._raw_data_cache.get(field_path)
+
+        # 降采样级别
+        field_cache = self._lod_cache.get(field_path)
+        if field_cache and level in field_cache:
+            return field_cache[level]
+
+        # 如果该级别没有缓存，尝试使用更低的精度级别
+        for lower_level in range(level + 1, LOD_MAX_LEVEL + 1):
+            if lower_level >= LOD_MAX_LEVEL:
+                return self._raw_data_cache.get(field_path)
+            if field_cache and lower_level in field_cache:
+                return field_cache[lower_level]
+
+        # 降级到原始数据
+        return self._raw_data_cache.get(field_path)
+
+    def _get_visible_point_count(self) -> int:
+        """
+        估算当前视口内可见的数据点数
+
+        Returns:
+            可见数据点数的最大值
+        """
+        max_count = 0
+        view_range = self._plot_widget.viewRange()
+        x_min, x_max = view_range[0]
+
+        for field_path in self._plot_items.keys():
+            raw_data = self._raw_data_cache.get(field_path)
+            if raw_data is None:
+                continue
+            x_data, _ = raw_data
+            # 计算在视口范围内的数据点数
+            mask = (x_data >= x_min) & (x_data <= x_max)
+            count = int(np.sum(mask))
+            max_count = max(max_count, count)
+
+        return max_count
+
+    def _apply_lod_rendering(self) -> None:
+        """
+        根据当前视口自动选择精度级别并重新渲染所有曲线
+        """
+        visible_points = self._get_visible_point_count()
+        level = self._select_lod_level(visible_points)
+
+        for field_path, plot_item in self._plot_items.items():
+            lod_data = self._get_lod_data(field_path, level)
+            if lod_data is not None:
+                x_data, y_data = lod_data
+                plot_item.setData(x_data, y_data)
 
     def auto_range(self) -> None:
         """自动调整坐标范围"""
@@ -437,6 +573,8 @@ class WaveChartWidget(QWidget):
     def _on_range_changed_manually(self) -> None:
         """用户手动拖动平移了图表"""
         if not self._programmatic_update:
+            # 触发视口自适应精度切换
+            self._apply_lod_rendering()
             self.user_interacted.emit()
 
     def eventFilter(self, obj, event) -> bool:

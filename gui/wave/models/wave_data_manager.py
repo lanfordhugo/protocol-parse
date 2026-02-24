@@ -60,6 +60,7 @@ class FieldConfig:
     color: str               # 颜色（#RRGGBB）
     enabled: bool = True     # 是否启用
     cmd_id: Optional[int] = None  # 关联的命令ID
+    field_order: int = 0     # 字段在 YAML 定义中的顺序（用于排序显示）
 
 
 @dataclass
@@ -160,9 +161,10 @@ class WaveDataManager:
 
         with self._lock:
             # 自动检测并注册新字段（enabled=False，仅发现）
-            for field_path, value in values.items():
+            # 使用 enumerate 记录字段在 YAML 中的定义顺序
+            for field_order, (field_path, value) in enumerate(values.items()):
                 if field_path not in self._field_configs:
-                    config = self._auto_register_field(field_path, value, cmd_id)
+                    config = self._auto_register_field(field_path, value, cmd_id, field_order)
                     if config:
                         new_configs.append(config)
 
@@ -334,9 +336,17 @@ class WaveDataManager:
             return self._field_configs.get(field_path)
 
     def get_all_field_configs(self) -> List[FieldConfig]:
-        """获取所有字段配置"""
+        """
+        获取所有字段配置
+
+        按 cmd_id 分组，每组内按 field_order 排序返回。
+        """
         with self._lock:
-            return list(self._field_configs.values())
+            configs = list(self._field_configs.values())
+            # 按 cmd_id 分组，组内按 field_order 排序
+            # None (未分组) 排在最前面
+            configs.sort(key=lambda c: (c.cmd_id if c.cmd_id is not None else -1, c.field_order))
+            return configs
 
     def get_enabled_field_configs(self) -> List[FieldConfig]:
         """获取所有启用的字段配置"""
@@ -660,6 +670,7 @@ class WaveDataManager:
         field_path: str,
         value: Any,
         cmd_id: Optional[int] = None,
+        field_order: int = 0,
     ) -> Optional[FieldConfig]:
         """
         自动注册新发现的字段（默认不启用，不记录数据）
@@ -670,6 +681,7 @@ class WaveDataManager:
             field_path: 字段路径
             value: 字段值
             cmd_id: 命令ID
+            field_order: 字段在 YAML 定义中的顺序（用于排序显示）
 
         Returns:
             创建的字段配置，不可绘图类型返回 None
@@ -694,6 +706,7 @@ class WaveDataManager:
             chart_type=chart_type,
             color=color,
             enabled=auto_enabled,
+            field_order=field_order,
             cmd_id=cmd_id,
         )
         self._field_configs[field_path] = config

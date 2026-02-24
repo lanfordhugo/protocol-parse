@@ -84,6 +84,8 @@ class FieldTreeWidget(QWidget):
         self._cmd_groups: Dict[Optional[int], QTreeWidgetItem] = {}
         # 字段节点 {field_path: QTreeWidgetItem}
         self._field_items: Dict[str, QTreeWidgetItem] = {}
+        # 防止 itemClicked 和 itemChanged 重复处理的标志
+        self._changing_state: bool = False
 
         self._setup_ui()
 
@@ -288,7 +290,7 @@ class FieldTreeWidget(QWidget):
         1. 字段节点勾选变化 → 发射 field_enabled_changed
         2. CMD分组节点勾选变化 → 批量切换所有子字段
         """
-        if column != 0:
+        if column != 0 or self._changing_state:
             return
 
         field_path = item.data(0, Qt.UserRole)
@@ -298,8 +300,12 @@ class FieldTreeWidget(QWidget):
         # 字段节点
         if field_path in self._field_items:
             enabled = item.checkState(0) == Qt.Checked
-            self.field_enabled_changed.emit(field_path, enabled)
-            self._emit_selection_changed()
+            self._changing_state = True
+            try:
+                self.field_enabled_changed.emit(field_path, enabled)
+                self._emit_selection_changed()
+            finally:
+                self._changing_state = False
             return
 
         # CMD 分组节点：批量切换子字段
@@ -335,8 +341,13 @@ class FieldTreeWidget(QWidget):
         """
         点击行时切换勾选状态
 
-        注意：点击的是字段节点时才切换，CMD分组节点由三态逻辑处理。
+        注意：
+        - 点击的是字段节点时才切换，CMD分组节点由三态逻辑处理
+        - 如果 _changing_state 为 True，说明 itemChanged 已处理，跳过避免重复切换
         """
+        if self._changing_state:
+            return
+
         field_path = item.data(0, Qt.UserRole)
         if field_path not in self._field_items:
             return

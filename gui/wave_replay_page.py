@@ -234,8 +234,8 @@ class WaveReplayPage(QWidget):
             self._presenter.on_export_csv(file_path)
 
     def _on_auto_range(self) -> None:
-        """自动缩放"""
-        self._chart.auto_range()
+        """自动缩放：X轴展示全部数据，Y轴适配值范围"""
+        self._chart.auto_fit_all()
 
     def _on_select_all_changed(self, state: int) -> None:
         """

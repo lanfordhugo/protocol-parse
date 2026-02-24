@@ -383,6 +383,31 @@ class WaveChartWidget(QWidget):
         """自动调整坐标范围"""
         self._plot_widget.enableAutoRange()
 
+    def auto_fit_all(self) -> None:
+        """
+        自动适配全部数据
+
+        X轴展示所有数据点，Y轴适配可见数据的值范围。
+        适用于数据回放场景的"自动缩放"功能。
+        """
+        # 1. 收集所有曲线的时间戳范围
+        x_min, x_max = None, None
+        for plot_item in self._plot_items.values():
+            x_data = plot_item.xData
+            if x_data is not None and len(x_data) > 0:
+                if x_min is None or x_data[0] < x_min:
+                    x_min = float(x_data[0])
+                if x_max is None or x_data[-1] > x_max:
+                    x_max = float(x_data[-1])
+
+        # 2. 设置 X 轴范围
+        if x_min is not None and x_max is not None:
+            self.set_x_range(x_min, x_max)
+
+        # 3. Y 轴自动适配
+        self._plot_widget.enableAutoRange(axis="y", enable=True)
+        self._plot_widget.getViewBox().autoRange(items=None)
+
     def set_x_range(self, x_min: float, x_max: float) -> None:
         """设置X轴范围（程序控制，不触发 user_interacted）"""
         self._programmatic_update = True
@@ -453,8 +478,8 @@ class WaveChartWidget(QWidget):
         if y_axis_scene_rect.contains(scene_pos):
             # Y 轴区域：仅缩放 Y 轴
             vb.scaleBy((1, factor), center=mouse_data)
-        elif x_axis_scene_rect.contains(scene_pos) or vb_scene_rect.contains(scene_pos):
-            # X 轴区域或绘图区域：仅缩放 X 轴
+        elif x_axis_scene_rect.contains(scene_pos):
+            # 仅 X 轴区域：缩放 X 轴（绘图区域不触发缩放）
             vb.scaleBy((factor, 1), center=mouse_data)
             self.user_interacted.emit()
 

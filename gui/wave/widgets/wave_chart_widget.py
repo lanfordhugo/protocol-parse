@@ -239,13 +239,6 @@ class WaveChartWidget(QWidget):
         # 因为 QGraphicsView 的滚轮事件实际发送到 viewport 子控件
         self._plot_widget.viewport().installEventFilter(self)
 
-        # 添加图例
-        self._legend = self._plot_widget.addLegend(
-            offset=(10, 10),
-            brush=pg.mkBrush(0, 0, 0, 100),
-            pen=pg.mkPen("#555555"),
-        )
-
         layout.addWidget(self._plot_widget)
 
     # ============== 字段管理 ==============
@@ -301,9 +294,6 @@ class WaveChartWidget(QWidget):
         plot_item = self._plot_items.pop(field_path, None)
         if plot_item:
             self._plot_widget.removeItem(plot_item)
-            # 从图例中移除
-            if self._legend is not None:
-                self._legend.removeItem(plot_item)
         self._field_configs.pop(field_path, None)
         logger.debug("已移除图表字段: %s", field_path)
 

@@ -85,7 +85,7 @@ class ReplayPresenter(WavePresenterBase):
         self._data_manager.reset()
         self._view.clear_chart()
 
-        # 历史加载模式：记录所有字段
+        # 历史加载模式：记录所有字段数据
         self._data_manager.set_record_all(True)
         count = self._data_manager.add_entries(entries)
 
@@ -113,7 +113,7 @@ class ReplayPresenter(WavePresenterBase):
             self._data_manager.reset()
             self._view.clear_chart()
 
-            # 历史加载模式：记录所有字段
+            # 历史加载模式：记录所有字段数据
             self._data_manager.set_record_all(True)
             count = self._data_manager.import_from_json(file_path)
 
@@ -140,21 +140,18 @@ class ReplayPresenter(WavePresenterBase):
                 start.timestamp(), end.timestamp()
             )
 
-        # 历史模式：所有字段默认启用显示
+        # 获取所有字段配置，并全部设为不启用（用户手动选择）
         configs = self._data_manager.get_all_field_configs()
         for config in configs:
-            config.enabled = True
-            self._data_manager.update_field_enabled(config.field_path, True)
+            config.enabled = False
+            self._data_manager.update_field_enabled(config.field_path, False)
 
-        # 刷新字段树
-        self._view.refresh_field_tree(configs)
+        # 刷新字段树（默认不展开、不勾选）
+        self._view.refresh_field_tree(configs, expand_all=False)
 
-        # 为每个可绘图字段添加到图表
+        # 为每个可绘图字段添加到图表（但不显示数据，等待用户选择）
         for config in configs:
             self._view.add_chart_field(config)
-
-        # 刷新图表
-        self.refresh_all_charts()
 
         # 启用导出
         self._view.set_export_enabled(self._data_manager.data_count > 0)

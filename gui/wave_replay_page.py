@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFileDialog,
     QHBoxLayout,
@@ -91,7 +92,6 @@ class WaveReplayPage(QWidget):
         toolbar.addWidget(QLabel("数据源:"))
         self._source_combo = QComboBox()
         self._source_combo.addItems(["波形JSON", "TCP解析结果", "普通解析结果"])
-        self._source_combo.setFixedWidth(120)
         self._source_combo.setToolTip("选择数据源类型（导入JSON时自动切换）")
         toolbar.addWidget(self._source_combo)
 
@@ -99,13 +99,11 @@ class WaveReplayPage(QWidget):
 
         # 导入JSON按钮
         self._import_btn = QPushButton("导入JSON")
-        self._import_btn.setFixedWidth(90)
         self._import_btn.clicked.connect(self._on_import_json)
         toolbar.addWidget(self._import_btn)
 
         # 导出按钮（带下拉菜单）
         self._export_btn = QPushButton("导出数据")
-        self._export_btn.setFixedWidth(90)
         export_menu = QMenu(self)
         export_menu.addAction("导出为 JSON", self._on_export_json)
         export_menu.addAction("导出为 CSV", self._on_export_csv)
@@ -113,15 +111,15 @@ class WaveReplayPage(QWidget):
         self._export_btn.setEnabled(False)
         toolbar.addWidget(self._export_btn)
 
+        toolbar.addSpacing(8)
+
         # 自动缩放按钮
         self._auto_range_btn = QPushButton("自动缩放")
-        self._auto_range_btn.setFixedWidth(80)
         self._auto_range_btn.clicked.connect(self._on_auto_range)
         toolbar.addWidget(self._auto_range_btn)
 
         # 清空数据按钮
         self._clear_btn = QPushButton("清空")
-        self._clear_btn.setFixedWidth(60)
         self._clear_btn.clicked.connect(self._on_clear_data)
         toolbar.addWidget(self._clear_btn)
 
@@ -137,11 +135,34 @@ class WaveReplayPage(QWidget):
         # === 主内容区（左右分栏）===
         splitter = QSplitter(Qt.Horizontal)
 
-        # 左侧：字段树
+        # 左侧：字段树区域（包含复选框和树）
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(2)
+
+        # 字段树工具栏
+        tree_toolbar = QHBoxLayout()
+        tree_toolbar.setContentsMargins(4, 2, 4, 2)
+
+        # 全选复选框
+        self._select_all_checkbox = QCheckBox("全选")
+        self._select_all_checkbox.setTristate(True)  # 启用三态
+        self._select_all_checkbox.setCheckState(Qt.Unchecked)
+        self._select_all_checkbox.stateChanged.connect(self._on_select_all_changed)
+        self._select_all_checkbox.setToolTip("全选/取消全选所有字段")
+        tree_toolbar.addWidget(self._select_all_checkbox)
+
+        tree_toolbar.addStretch()
+        left_layout.addLayout(tree_toolbar)
+
+        # 字段树
         self._field_tree = FieldTreeWidget()
-        self._field_tree.setMinimumWidth(180)
-        self._field_tree.setMaximumWidth(280)
-        splitter.addWidget(self._field_tree)
+        left_layout.addWidget(self._field_tree)
+
+        left_panel.setMinimumWidth(180)
+        left_panel.setMaximumWidth(280)
+        splitter.addWidget(left_panel)
 
         # 右侧：波形图
         self._chart = WaveChartWidget()
@@ -173,6 +194,8 @@ class WaveReplayPage(QWidget):
         self._field_tree.field_renamed.connect(
             self._presenter.on_field_renamed
         )
+        # 选中状态变化 → 更新全选复选框
+        self._field_tree.selection_changed.connect(self.update_select_all_state)
 
     # ============== UI事件 ==============
 
@@ -213,6 +236,45 @@ class WaveReplayPage(QWidget):
     def _on_auto_range(self) -> None:
         """自动缩放"""
         self._chart.auto_range()
+
+    def _on_select_all_changed(self, state: int) -> None:
+        """
+        全选复选框状态变化
+
+        Args:
+            state: Qt.CheckState 值（Unchecked=0, PartiallyChecked=1, Checked=2）
+        """
+        # 阻断信号避免循环
+        self._select_all_checkbox.blockSignals(True)
+
+        if state == Qt.Checked:
+            # 全选
+            self._field_tree.select_all()
+            self._select_all_checkbox.setCheckState(Qt.Checked)
+        elif state == Qt.Unchecked:
+            # 取消全选
+            self._field_tree.deselect_all()
+            self._select_all_checkbox.setCheckState(Qt.Unchecked)
+        # PartiallyChecked 时不做操作（由外部更新）
+
+        self._select_all_checkbox.blockSignals(False)
+
+    def update_select_all_state(self, total: int, selected: int) -> None:
+        """
+        更新全选复选框状态
+
+        Args:
+            total: 总字段数
+            selected: 已选中字段数
+        """
+        self._select_all_checkbox.blockSignals(True)
+        if selected == 0:
+            self._select_all_checkbox.setCheckState(Qt.Unchecked)
+        elif selected == total:
+            self._select_all_checkbox.setCheckState(Qt.Checked)
+        else:
+            self._select_all_checkbox.setCheckState(Qt.PartiallyChecked)
+        self._select_all_checkbox.blockSignals(False)
 
     def _on_clear_data(self) -> None:
         """清空数据（委托给 Presenter 执行完整清理）"""
@@ -289,9 +351,19 @@ class WaveReplayPage(QWidget):
         """更新字段树中的字段配置"""
         self._field_tree.update_field(config)
 
-    def refresh_field_tree(self, configs: List[FieldConfig]) -> None:
-        """刷新整个字段树"""
-        self._field_tree.refresh(configs)
+    def refresh_field_tree(self, configs: List[FieldConfig], expand_all: bool = True) -> None:
+        """
+        刷新整个字段树
+
+        Args:
+            configs: 字段配置列表
+            expand_all: 是否展开所有分组（默认 True）
+        """
+        self._field_tree.refresh(configs, expand_all)
+        # 更新全选复选框状态
+        total = len(configs)
+        selected = sum(1 for c in configs if c.enabled)
+        self.update_select_all_state(total, selected)
 
     @Slot(str)
     def update_status(self, message: str) -> None:

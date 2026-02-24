@@ -75,6 +75,7 @@ class FieldTreeWidget(QWidget):
     field_color_changed = Signal(str, str)
     field_removed = Signal(str)
     field_renamed = Signal(str, str)
+    selection_changed = Signal(int, int)  # (total, selected) 选中状态变化
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)
@@ -102,17 +103,19 @@ class FieldTreeWidget(QWidget):
         # 信号连接
         self._tree.customContextMenuRequested.connect(self._on_context_menu)
         self._tree.itemChanged.connect(self._on_item_changed)
+        self._tree.itemClicked.connect(self._on_item_clicked)
 
         layout.addWidget(self._tree)
 
     # ============== 字段管理 ==============
 
-    def add_field(self, config: FieldConfig) -> None:
+    def add_field(self, config: FieldConfig, expand: bool = True) -> None:
         """
         添加字段到树
 
         Args:
             config: 字段配置
+            expand: 是否展开分组（默认 True）
         """
         if config.field_path in self._field_items:
             self.update_field(config)
@@ -136,8 +139,8 @@ class FieldTreeWidget(QWidget):
 
         self._field_items[config.field_path] = item
 
-        # 展开分组
-        group.setExpanded(True)
+        # 根据参数决定是否展开分组
+        group.setExpanded(expand)
 
     def remove_field(self, field_path: str) -> None:
         """
@@ -183,12 +186,13 @@ class FieldTreeWidget(QWidget):
         )
         self._tree.blockSignals(False)
 
-    def refresh(self, configs: List[FieldConfig]) -> None:
+    def refresh(self, configs: List[FieldConfig], expand_all: bool = True) -> None:
         """
         刷新整个字段树
 
         Args:
             configs: 字段配置列表
+            expand_all: 是否展开所有分组（默认 True）
         """
         self._tree.blockSignals(True)
         self._tree.clear()
@@ -196,7 +200,7 @@ class FieldTreeWidget(QWidget):
         self._field_items.clear()
 
         for config in configs:
-            self.add_field(config)
+            self.add_field(config, expand=expand_all)
 
         self._tree.blockSignals(False)
 
@@ -205,6 +209,42 @@ class FieldTreeWidget(QWidget):
         self._tree.clear()
         self._cmd_groups.clear()
         self._field_items.clear()
+
+    # ============== 批量操作 ==============
+
+    def select_all(self) -> None:
+        """选中所有字段"""
+        if not self._field_items:
+            return
+
+        self._tree.blockSignals(True)
+        for field_path, item in self._field_items.items():
+            item.setCheckState(0, Qt.Checked)
+        for cmd_id, group in self._cmd_groups.items():
+            group.setCheckState(0, Qt.Checked)
+        self._tree.blockSignals(False)
+
+        # 批量发射信号
+        for field_path in self._field_items:
+            self.field_enabled_changed.emit(field_path, True)
+        self._emit_selection_changed()
+
+    def deselect_all(self) -> None:
+        """取消选中所有字段"""
+        if not self._field_items:
+            return
+
+        self._tree.blockSignals(True)
+        for field_path, item in self._field_items.items():
+            item.setCheckState(0, Qt.Unchecked)
+        for cmd_id, group in self._cmd_groups.items():
+            group.setCheckState(0, Qt.Unchecked)
+        self._tree.blockSignals(False)
+
+        # 批量发射信号
+        for field_path in self._field_items:
+            self.field_enabled_changed.emit(field_path, False)
+        self._emit_selection_changed()
 
     # ============== 内部方法 ==============
 
@@ -259,6 +299,7 @@ class FieldTreeWidget(QWidget):
         if field_path in self._field_items:
             enabled = item.checkState(0) == Qt.Checked
             self.field_enabled_changed.emit(field_path, enabled)
+            self._emit_selection_changed()
             return
 
         # CMD 分组节点：批量切换子字段
@@ -279,6 +320,32 @@ class FieldTreeWidget(QWidget):
                 child_path = child.data(0, Qt.UserRole)
                 if child_path and child_path in self._field_items:
                     self.field_enabled_changed.emit(child_path, enabled)
+            self._emit_selection_changed()
+
+    def _emit_selection_changed(self) -> None:
+        """发射选中状态变化信号"""
+        total = len(self._field_items)
+        selected = sum(
+            1 for item in self._field_items.values()
+            if item.checkState(0) == Qt.Checked
+        )
+        self.selection_changed.emit(total, selected)
+
+    def _on_item_clicked(self, item: QTreeWidgetItem, column: int) -> None:
+        """
+        点击行时切换勾选状态
+
+        注意：点击的是字段节点时才切换，CMD分组节点由三态逻辑处理。
+        """
+        field_path = item.data(0, Qt.UserRole)
+        if field_path not in self._field_items:
+            return
+
+        # 切换勾选状态
+        current_state = item.checkState(0)
+        new_state = Qt.Unchecked if current_state == Qt.Checked else Qt.Checked
+        item.setCheckState(0, new_state)
+        # 注意：setCheckState 会触发 itemChanged 信号，进而发射 field_enabled_changed
 
     def _on_context_menu(self, pos) -> None:
         """右键菜单"""

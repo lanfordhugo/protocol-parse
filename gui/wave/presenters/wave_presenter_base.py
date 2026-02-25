@@ -1,13 +1,13 @@
 """
 文件名称: wave_presenter_base.py
 内容摘要: 波形 Presenter 基类，封装实时和历史模式共享的业务逻辑
-当前版本: v1.0.0
+当前版本: v1.1.0
 作者: lanford
 创建日期: 2026-02-09
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from gui.wave.models.wave_data_manager import (
     FieldConfig,
@@ -15,6 +15,9 @@ from gui.wave.models.wave_data_manager import (
 )
 from gui.wave.utils.field_type_detector import FieldType, FieldTypeDetector
 from gui.wave.utils.chart_type_mapper import ChartType, ChartTypeMapper
+
+if TYPE_CHECKING:
+    from src.yaml_config import Field, TypeDef
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +63,8 @@ class WavePresenterBase:
         sample_value: Any,
         cmd_id: Optional[int] = None,
         display_name: Optional[str] = None,
+        type_def: Optional["TypeDef"] = None,
+        field: Optional["Field"] = None,
     ) -> Optional[FieldConfig]:
         """
         添加字段到监控
@@ -69,6 +74,8 @@ class WavePresenterBase:
             sample_value: 样本值（用于类型检测）
             cmd_id: 命令ID
             display_name: 自定义显示名称
+            type_def: YAML 类型定义（可选，用于精确类型判断）
+            field: YAML 字段定义（可选，用于精确类型判断）
 
         Returns:
             创建的字段配置，失败返回 None
@@ -79,8 +86,10 @@ class WavePresenterBase:
             logger.info("字段 %s 已在监控中", field_path)
             return existing
 
-        # 检测类型
-        field_type = self._type_detector.detect(sample_value)
+        # 检测类型（优先 YAML 配置，回退值类型检测）
+        field_type = self._type_detector.detect_with_fallback(
+            sample_value, type_def, field
+        )
         chart_type = ChartTypeMapper.get_chart_type(field_type)
 
         if chart_type is None:

@@ -64,7 +64,7 @@ class IWaveViewBase(Protocol):
         """更新字段树中的字段配置"""
         ...
 
-    def refresh_field_tree(self, configs: List[FieldConfig]) -> None:
+    def refresh_field_tree(self, configs: List[FieldConfig], expand_all: bool = True) -> None:
         """刷新整个字段树"""
         ...
 

@@ -64,9 +64,8 @@ class RealTimeWavePresenter(QObject, WavePresenterBase):
             refresh_interval_ms: 图表刷新间隔（毫秒）
             display_window_seconds: 显示时间窗口（秒）
         """
-        super().__init__(data_manager=data_manager)
+        super().__init__(view=view, data_manager=data_manager)
 
-        self._view = view
         self._paused = False
         self._display_window = display_window_seconds
         self._has_new_data = False
@@ -83,10 +82,6 @@ class RealTimeWavePresenter(QObject, WavePresenterBase):
         self._auto_output_timer.timeout.connect(self._on_auto_output_timer)
         self._auto_output_file: Optional[str] = None
         self._auto_output_last_count = 0
-
-    def _get_view(self):
-        """返回 View 接口实例"""
-        return self._view
 
     # ============== 生命周期 ==============
 

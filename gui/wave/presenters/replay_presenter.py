@@ -49,19 +49,10 @@ class ReplayPresenter(WavePresenterBase):
             view: 波形 View 接口
             data_manager: 波形数据管理器
         """
-        super().__init__(data_manager)
-        self._view = view
-
-        # 当前查看的时间范围
-        self._view_start: Optional[datetime] = None
-        self._view_end: Optional[datetime] = None
+        super().__init__(view=view, data_manager=data_manager)
 
         # 数据源标记
         self._data_source: str = ""
-
-    def _get_view(self):
-        """返回 View 接口实例"""
-        return self._view
 
     # ============== 数据加载 ==============
 
@@ -207,60 +198,3 @@ class ReplayPresenter(WavePresenterBase):
         self._view.update_status("数据已清空")
         self._data_source = ""
 
-    # ============== 时间范围操作 ==============
-
-    def on_time_range_changed(
-        self,
-        start_epoch: float,
-        end_epoch: float,
-    ) -> None:
-        """
-        时间范围变更
-
-        Args:
-            start_epoch: 起始时间（epoch秒数）
-            end_epoch: 结束时间（epoch秒数）
-        """
-        self._view_start = datetime.fromtimestamp(start_epoch)
-        self._view_end = datetime.fromtimestamp(end_epoch)
-
-        # 刷新图表（仅显示选定范围内的数据）
-        configs = self._data_manager.get_enabled_field_configs()
-        field_paths = [c.field_path for c in configs]
-        range_points = self._data_manager.get_data_in_range(self._view_start, self._view_end)
-        plot_data = self._data_manager.get_plot_data_batch_from_points(field_paths, range_points)
-
-        self._view.update_all_chart_data(plot_data)
-        self._view.update_data_count(len(range_points))
-
-    # ============== 数据导出 ==============
-
-    def on_export_json(self, file_path: str) -> None:
-        """
-        导出为 JSON 格式
-
-        Args:
-            file_path: 输出文件路径
-        """
-        try:
-            count = self._data_manager.export_to_json(file_path)
-            self._view.show_export_result(True, file_path)
-            self._view.update_status(f"已导出 {count} 个数据点到 JSON")
-        except Exception as e:
-            logger.error("JSON 导出失败: %s", e)
-            self._view.show_export_result(False, str(e))
-
-    def on_export_csv(self, file_path: str) -> None:
-        """
-        导出为 CSV 格式
-
-        Args:
-            file_path: 输出文件路径
-        """
-        try:
-            count = self._data_manager.export_to_csv(file_path)
-            self._view.show_export_result(True, file_path)
-            self._view.update_status(f"已导出 {count} 个数据点到 CSV")
-        except Exception as e:
-            logger.error("CSV 导出失败: %s", e)
-            self._view.show_export_result(False, str(e))

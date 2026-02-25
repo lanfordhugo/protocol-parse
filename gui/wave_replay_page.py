@@ -9,7 +9,7 @@
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMenu,
-    QMessageBox,
     QPushButton,
     QSplitter,
     QStatusBar,
@@ -26,13 +25,14 @@ from PySide6.QtWidgets import (
 )
 
 from gui.wave.models.wave_data_manager import FieldConfig
+from gui.wave.views.wave_view_mixin import WaveViewMixin
 from gui.wave.widgets.field_tree_widget import FieldTreeWidget
 from gui.wave.widgets.wave_chart_widget import WaveChartWidget
 
 logger = logging.getLogger(__name__)
 
 
-class WaveReplayPage(QWidget):
+class WaveReplayPage(WaveViewMixin, QWidget):
     """
     数据回放页面 - 独立一级页面
 
@@ -310,94 +310,14 @@ class WaveReplayPage(QWidget):
 
         return self._presenter.load_from_entries(entries, source_name)
 
-    # ============== IHistoryWaveView 接口实现 ==============
-
-    def add_chart_field(self, config: FieldConfig) -> None:
-        """添加字段到图表"""
-        self._chart.add_field(config)
-
-    def remove_chart_field(self, field_path: str) -> None:
-        """从图表移除字段"""
-        self._chart.remove_field(field_path)
-
-    def update_chart_data(
-        self,
-        field_path: str,
-        timestamps: List[float],
-        values: List[Optional[float]],
-    ) -> None:
-        """更新指定字段的图表数据"""
-        self._chart.update_data(field_path, timestamps, values)
-
-    def update_all_chart_data(
-        self,
-        plot_data: Dict[str, Tuple[List[float], List[Optional[float]]]],
-    ) -> None:
-        """批量更新所有字段的图表数据"""
-        self._chart.update_all_data(plot_data)
-
-    def clear_chart(self) -> None:
-        """清空图表"""
-        self._chart.clear()
-
-    def add_field_to_tree(self, config: FieldConfig) -> None:
-        """添加字段到字段树"""
-        self._field_tree.add_field(config)
-
-    def remove_field_from_tree(self, field_path: str) -> None:
-        """从字段树移除字段"""
-        self._field_tree.remove_field(field_path)
-
-    def update_field_in_tree(self, config: FieldConfig) -> None:
-        """更新字段树中的字段配置"""
-        self._field_tree.update_field(config)
+    # ============== IHistoryWaveView 接口实现（公共部分由 WaveViewMixin 提供） ==============
 
     def refresh_field_tree(self, configs: List[FieldConfig], expand_all: bool = True) -> None:
-        """
-        刷新整个字段树
-
-        Args:
-            configs: 字段配置列表
-            expand_all: 是否展开所有分组（默认 True）
-        """
-        self._field_tree.refresh(configs, expand_all)
-        # 更新全选复选框状态
+        """刷新整个字段树（覆写：额外更新全选复选框状态）"""
+        super().refresh_field_tree(configs, expand_all)
         total = len(configs)
         selected = sum(1 for c in configs if c.enabled)
         self.update_select_all_state(total, selected)
-
-    @Slot(str)
-    def update_status(self, message: str) -> None:
-        """更新状态栏"""
-        self._status_bar.showMessage(message)
-
-    @Slot(int)
-    def update_data_count(self, count: int) -> None:
-        """更新数据点计数"""
-        self._data_count_label.setText(f"数据: {count} 条")
-
-    def set_time_range_limits(self, start: float, end: float) -> None:
-        """设置时间范围选择器的范围限制"""
-        self._chart.set_x_range(start, end)
-
-    def set_export_enabled(self, enabled: bool) -> None:
-        """设置导出按钮启用状态"""
-        self._export_btn.setEnabled(enabled)
-
-    def show_export_result(self, success: bool, file_path: str) -> None:
-        """显示导出结果"""
-        if success:
-            QMessageBox.information(
-                self,
-                "导出成功",
-                f"数据已导出到:\n{file_path}",
-            )
-        else:
-            QMessageBox.warning(
-                self,
-                "导出失败",
-                f"导出失败: {file_path}",
-            )
 
     def emit_status_changed(self, message: str) -> None:
         """发送状态变化信号"""

@@ -112,7 +112,11 @@ class WaveDataManager:
         # 字段配置 {field_path: FieldConfig}
         self._field_configs: Dict[str, FieldConfig] = {}
 
-        # 正在记录的字段集合（仅这些字段的数据会被存储）
+        # 正在录制的字段集合（控制数据层：仅这些字段的数据会被 add_data_point 存储）
+        # 注意：与 FieldConfig.enabled（控制展示层：字段是否在图表上显示）是两个独立维度：
+        #   - recording=True, enabled=True  → 录制并显示（实时监控正常状态）
+        #   - recording=True, enabled=False → 录制但不显示（后台采集，稍后分析）
+        #   - recording=False, enabled=True → 仅显示已有数据（历史回放）
         self._recording_fields: set = set()
         # 是否自动录制所有字段（历史加载模式）
         self._record_all_mode: bool = False
@@ -285,10 +289,9 @@ class WaveDataManager:
         Returns:
             最近 N 秒内的数据点列表
         """
-        if not self._data_points:
-            return []
-
         with self._lock:
+            if not self._data_points:
+                return []
             latest_time = self._data_points[-1].timestamp
             cutoff = latest_time.timestamp() - seconds
             result = []
@@ -365,6 +368,29 @@ class WaveDataManager:
         with self._lock:
             self._field_configs[config.field_path] = config
 
+    def detect_field_type(
+        self,
+        sample_value: Any,
+        type_def: Optional[Any] = None,
+        field: Optional[Any] = None,
+    ) -> "FieldType":
+        """
+        检测字段类型（优先 YAML 配置，回退值类型检测）
+
+        对外暴露类型检测能力，避免外部直接访问私有 _type_detector。
+
+        Args:
+            sample_value: 字段样本值
+            type_def: YAML 类型定义（可选）
+            field: YAML 字段定义（可选）
+
+        Returns:
+            检测到的字段类型
+        """
+        return self._type_detector.detect_with_fallback(
+            sample_value, type_def, field
+        )
+
     def set_protocol_config(self, protocol_config: Optional[Any]) -> None:
         """
         设置协议配置并重建 YAML 字段顺序映射。
@@ -372,8 +398,9 @@ class WaveDataManager:
         Args:
             protocol_config: 协议配置对象（YamlCmdFormat 或 ProtocolConfig）
         """
-        self._type_detector = FieldTypeDetector(protocol_config)
-        self._yaml_field_order_by_cmd = self._build_yaml_field_order_map(protocol_config)
+        with self._lock:
+            self._type_detector = FieldTypeDetector(protocol_config)
+            self._yaml_field_order_by_cmd = self._build_yaml_field_order_map(protocol_config)
 
     def remove_field_config(self, field_path: str) -> Optional[FieldConfig]:
         """
@@ -386,6 +413,8 @@ class WaveDataManager:
             移除的配置，不存在返回 None
         """
         with self._lock:
+            # 同步停止录制，防止移除配置后 _recording_fields 中残留悬挂条目
+            self._recording_fields.discard(field_path)
             return self._field_configs.pop(field_path, None)
 
     def get_field_config(self, field_path: str) -> Optional[FieldConfig]:
@@ -496,7 +525,8 @@ class WaveDataManager:
         Returns:
             (时间戳列表, 值列表) - 时间戳为 epoch 秒数
         """
-        config = self._field_configs.get(field_path)
+        with self._lock:
+            config = self._field_configs.get(field_path)
         if not config:
             return [], []
 
@@ -585,7 +615,7 @@ class WaveDataManager:
 
     def export_to_json(self, file_path: str, enabled_only: bool = True) -> int:
         """
-        导出数据为 JSON 格式
+        导出数据为 JSON 格式（委托给 WaveDataIO）
 
         Args:
             file_path: 输出文件路径
@@ -594,56 +624,18 @@ class WaveDataManager:
         Returns:
             导出的数据点数量
         """
+        from gui.wave.models.wave_data_io import WaveDataIO
+
         with self._lock:
-            # 确定导出的字段集合
-            if enabled_only:
-                export_configs = [
-                    c for c in self._field_configs.values() if c.enabled
-                ]
-            else:
-                export_configs = list(self._field_configs.values())
-            export_field_paths = {c.field_path for c in export_configs}
-
-            export_data = {
-                "field_configs": [
-                    {
-                        "field_path": c.field_path,
-                        "display_name": c.display_name,
-                        "field_type": c.field_type.name,
-                        "chart_type": c.chart_type.name,
-                        "color": c.color,
-                        "enabled": c.enabled,
-                        "cmd_id": c.cmd_id,
-                        "field_order": c.field_order,
-                    }
-                    for c in export_configs
-                ],
-                "data_points": [
-                    {
-                        "timestamp": point.timestamp.isoformat(),
-                        "values": self._serialize_values(
-                            {k: v for k, v in point.values.items()
-                             if k in export_field_paths}
-                        ),
-                        "cmd_id": point.cmd_id,
-                        "direction": point.direction,
-                    }
-                    for point in self._data_points
-                    if any(k in export_field_paths for k in point.values)
-                ],
-            }
-
-        Path(file_path).parent.mkdir(parents=True, exist_ok=True)
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(export_data, f, ensure_ascii=False, indent=2)
-
-        count = len(export_data["data_points"])
-        logger.info("已导出 %d 个数据点到 %s", count, file_path)
-        return count
+            configs_snapshot = dict(self._field_configs)
+            points_snapshot = list(self._data_points)
+        return WaveDataIO.export_to_json(
+            file_path, configs_snapshot, points_snapshot, enabled_only
+        )
 
     def export_to_csv(self, file_path: str, enabled_only: bool = True) -> int:
         """
-        导出数据为 CSV 格式
+        导出数据为 CSV 格式（委托给 WaveDataIO）
 
         Args:
             file_path: 输出文件路径
@@ -652,52 +644,18 @@ class WaveDataManager:
         Returns:
             导出的数据点数量
         """
+        from gui.wave.models.wave_data_io import WaveDataIO
+
         with self._lock:
-            # 收集导出的字段路径
-            if enabled_only:
-                all_fields = [
-                    fp for fp, c in self._field_configs.items() if c.enabled
-                ]
-            else:
-                all_fields = list(self._field_configs.keys())
-            if not all_fields:
-                return 0
-
-            Path(file_path).parent.mkdir(parents=True, exist_ok=True)
-            with open(file_path, "w", encoding="utf-8-sig", newline="") as f:
-                writer = csv.writer(f)
-                # 表头
-                header = ["timestamp", "cmd_id", "direction"] + all_fields
-                writer.writerow(header)
-
-                # 数据行（仅输出包含选中字段数据的行）
-                field_set = set(all_fields)
-                count = 0
-                for point in self._data_points:
-                    if not any(k in field_set for k in point.values):
-                        continue
-                    row = [
-                        point.timestamp.isoformat(),
-                        point.cmd_id or "",
-                        point.direction or "",
-                    ]
-                    for fp in all_fields:
-                        value = point.values.get(fp, "")
-                        if isinstance(value, dict):
-                            # 枚举类型输出 "value(name)" 格式
-                            if "value" in value and "name" in value:
-                                value = f"{value['value']}({value['name']})"
-                            else:
-                                value = json.dumps(value, ensure_ascii=False)
-                        row.append(value)
-                    writer.writerow(row)
-                    count += 1
-            logger.info("已导出 %d 个数据点到 %s", count, file_path)
-            return count
+            configs_snapshot = dict(self._field_configs)
+            points_snapshot = list(self._data_points)
+        return WaveDataIO.export_to_csv(
+            file_path, configs_snapshot, points_snapshot, enabled_only
+        )
 
     def import_from_json(self, file_path: str) -> int:
         """
-        从 JSON 文件导入数据
+        从 JSON 文件导入数据（委托给 WaveDataIO）
 
         Args:
             file_path: 输入文件路径
@@ -705,48 +663,25 @@ class WaveDataManager:
         Returns:
             导入的数据点数量
         """
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        from gui.wave.models.wave_data_io import WaveDataIO
+
+        result = WaveDataIO.import_from_json(
+            file_path,
+            resolve_field_order_fn=self._resolve_field_order,
+        )
 
         # 恢复字段配置
-        for import_order, cfg_data in enumerate(data.get("field_configs", [])):
-            cmd_id = cfg_data.get("cmd_id")
-            field_path = cfg_data["field_path"]
-            config = FieldConfig(
-                field_path=field_path,
-                display_name=cfg_data["display_name"],
-                field_type=FieldType[cfg_data["field_type"]],
-                chart_type=ChartType[cfg_data["chart_type"]],
-                color=cfg_data["color"],
-                enabled=cfg_data.get("enabled", True),
-                cmd_id=cmd_id,
-                field_order=cfg_data.get(
-                    "field_order",
-                    self._resolve_field_order(field_path, cmd_id, import_order),
-                ),
-            )
+        for config in result["field_configs"]:
             self.add_field_config(config)
 
         # 恢复数据点
         count = 0
         with self._lock:
-            for pt_data in data.get("data_points", []):
-                try:
-                    timestamp = datetime.fromisoformat(pt_data["timestamp"])
-                    point = DataPoint(
-                        timestamp=timestamp,
-                        values=pt_data.get("values", {}),
-                        cmd_id=pt_data.get("cmd_id"),
-                        direction=pt_data.get("direction"),
-                    )
-                    self._data_points.append(point)
-                    count += 1
-                except (ValueError, KeyError) as e:
-                    logger.warning("导入数据点失败: %s", e)
-                    continue
+            for point in result["data_points"]:
+                self._data_points.append(point)
+                count += 1
 
-        # 按时间排序（deque不支持sort，需转换）
-        with self._lock:
+            # 按时间排序（deque不支持sort，需转换）
             sorted_points = sorted(self._data_points, key=lambda p: p.timestamp)
             self._data_points = deque(sorted_points, maxlen=self._max_data_points)
             self._timestamp_dirty = True

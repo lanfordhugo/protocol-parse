@@ -7,6 +7,7 @@
 """
 
 import logging
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from PySide6.QtCore import QTimer
@@ -15,7 +16,7 @@ from gui.wave.models.wave_data_manager import (
     FieldConfig,
     WaveDataManager,
 )
-from gui.wave.utils.field_type_detector import FieldType, FieldTypeDetector
+from gui.wave.utils.field_type_detector import FieldType
 from gui.wave.utils.chart_type_mapper import ChartType, ChartTypeMapper
 
 if TYPE_CHECKING:
@@ -33,26 +34,30 @@ class WavePresenterBase:
     - 字段添加/删除/配置变更的业务逻辑
     - 图表数据刷新
 
-    子类需实现：
-    - _get_view(): 返回具体的 View 接口实例
+    基类通过 __init__ 的 view 参数接收 View 实例，子类无需覆写 _get_view()。
     """
 
-    def __init__(self, data_manager: Optional[WaveDataManager] = None, **kwargs):
+    def __init__(self, view=None, data_manager: Optional[WaveDataManager] = None, **kwargs):
         """
         初始化基类
 
         支持协作式多重继承（与 QObject 兼容）。
-        data_manager 设为可选参数以适配 Python MRO。
+        view 和 data_manager 设为可选参数以适配 Python MRO。
 
         Args:
+            view: 波形 View 接口实例
             data_manager: 波形数据管理器
             **kwargs: 传递给 super().__init__() 的额外参数
         """
         super().__init__(**kwargs)
+        self._view = view
         self._data_manager = data_manager
-        self._type_detector = FieldTypeDetector()
         self._pending_enable_fields: set[str] = set()
         self._enable_timer_active = False
+
+        # 当前查看的时间范围（子类 _setup_after_load 和 on_time_range_changed 共用）
+        self._view_start: Optional[datetime] = None
+        self._view_end: Optional[datetime] = None
 
     @property
     def data_manager(self) -> WaveDataManager:
@@ -91,7 +96,7 @@ class WavePresenterBase:
             return existing
 
         # 检测类型（优先 YAML 配置，回退值类型检测）
-        field_type = self._type_detector.detect_with_fallback(
+        field_type = self._data_manager.detect_field_type(
             sample_value, type_def, field
         )
         chart_type = ChartTypeMapper.get_chart_type(field_type)
@@ -255,15 +260,64 @@ class WavePresenterBase:
         timestamps, values = self._data_manager.get_plot_data(field_path)
         view.update_chart_data(field_path, timestamps, values)
 
-    # ============== 子类需实现 ==============
+    # ============== 时间范围操作 ==============
+
+    def on_time_range_changed(
+        self,
+        start_epoch: float,
+        end_epoch: float,
+    ) -> None:
+        """
+        时间范围变更
+
+        Args:
+            start_epoch: 起始时间（epoch秒数）
+            end_epoch: 结束时间（epoch秒数）
+        """
+        self._view_start = datetime.fromtimestamp(start_epoch)
+        self._view_end = datetime.fromtimestamp(end_epoch)
+
+        # 刷新图表（仅显示选定范围内的数据）
+        configs = self._data_manager.get_enabled_field_configs()
+        field_paths = [c.field_path for c in configs]
+        range_points = self._data_manager.get_data_in_range(self._view_start, self._view_end)
+        plot_data = self._data_manager.get_plot_data_batch_from_points(field_paths, range_points)
+
+        self._view.update_all_chart_data(plot_data)
+        self._view.update_data_count(len(range_points))
+
+    # ============== 数据导出 ==============
+
+    def on_export_json(self, file_path: str) -> None:
+        """
+        导出为 JSON 格式
+
+        Args:
+            file_path: 输出文件路径
+        """
+        try:
+            count = self._data_manager.export_to_json(file_path)
+            self._view.show_export_result(True, file_path)
+            self._view.update_status(f"已导出 {count} 个数据点到 JSON")
+        except Exception as e:
+            logger.error("JSON 导出失败: %s", e)
+            self._view.show_export_result(False, str(e))
+
+    def on_export_csv(self, file_path: str) -> None:
+        """
+        导出为 CSV 格式
+
+        Args:
+            file_path: 输出文件路径
+        """
+        try:
+            count = self._data_manager.export_to_csv(file_path)
+            self._view.show_export_result(True, file_path)
+            self._view.update_status(f"已导出 {count} 个数据点到 CSV")
+        except Exception as e:
+            logger.error("CSV 导出失败: %s", e)
+            self._view.show_export_result(False, str(e))
 
     def _get_view(self):
-        """
-        返回 View 接口实例
-
-        子类必须实现此方法。
-
-        Returns:
-            IWaveViewBase 实例
-        """
-        raise NotImplementedError("子类必须实现 _get_view()")
+        """返回 View 接口实例"""
+        return self._view

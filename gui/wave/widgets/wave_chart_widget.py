@@ -22,7 +22,8 @@ from PySide6.QtWidgets import (
 
 from gui.wave.models.wave_data_manager import FieldConfig
 from gui.wave.utils.chart_type_mapper import ChartType, ChartTypeMapper
-from gui.wave.utils.downsample import LOD_LEVELS, LOD_MAX_LEVEL, lttb_downsample
+from gui.wave.utils.downsample import LOD_MAX_LEVEL
+from gui.wave.widgets.lod_cache_manager import LodCacheManager
 
 logger = logging.getLogger(__name__)
 
@@ -107,13 +108,8 @@ class WaveChartWidget(QWidget):
         self._field_configs: Dict[str, FieldConfig] = {}
         # 防止程序设置 X 范围时触发 user_interacted
         self._programmatic_update = False
-        # 多级精度缓存: {field_path: {lod_level: (x_data, y_data)}}
-        self._lod_cache: Dict[str, Dict[int, Tuple[np.ndarray, np.ndarray]]] = {}
-        # 原始数据缓存: {field_path: (x_data, y_data)}
-        self._raw_data_cache: Dict[str, Tuple[np.ndarray, np.ndarray]] = {}
-        # LOD 缓存/控制
-        self._last_lod_level: Optional[int] = None
-        self._last_x_range_width: Optional[float] = None
+        # 多级精度（LOD）缓存管理器
+        self._lod_mgr = LodCacheManager()
         # 鼠标移动节流，避免高频重算
         self._last_mouse_move_ts: float = 0.0
         self._mouse_move_interval = 0.03  # 30ms
@@ -262,6 +258,7 @@ class WaveChartWidget(QWidget):
         if plot_item:
             self._plot_widget.removeItem(plot_item)
         self._field_configs.pop(field_path, None)
+        self._lod_mgr.remove_field(field_path)
         logger.debug("已移除图表字段: %s", field_path)
 
     def update_field_color(self, field_path: str, color: str) -> None:
@@ -308,24 +305,21 @@ class WaveChartWidget(QWidget):
 
         if not timestamps or not values:
             plot_item.setData([], [])
-            # 清空该字段的缓存
-            self._lod_cache.pop(field_path, None)
-            self._raw_data_cache.pop(field_path, None)
+            self._lod_mgr.remove_field(field_path)
             return
 
         ts_array = np.array(timestamps, dtype=np.float64)
         val_array = np.array(values, dtype=np.float64)
 
-        # 计算并缓存多级精度数据
-        self._compute_lod_cache(field_path, ts_array, val_array)
+        # 存储原始数据并清空旧 LOD 缓存
+        self._lod_mgr.store_raw_data(field_path, ts_array, val_array)
 
         # 根据当前视口选择合适的精度级别渲染
         visible_points = self._get_visible_point_count()
-        level = self._select_lod_level(visible_points)
-        self._last_lod_level = level
-        if self._last_x_range_width is None:
-            self._last_x_range_width = self.get_x_range_width()
-        lod_data = self._get_lod_data(field_path, level)
+        pixel_width = max(1, self._plot_widget.width())
+        level = self._lod_mgr.select_lod_level(visible_points, pixel_width)
+        self._lod_mgr.update_lod_level(level)
+        lod_data = self._lod_mgr.get_lod_data(field_path, level)
 
         if lod_data is not None:
             plot_item.setData(lod_data[0], lod_data[1])
@@ -350,7 +344,7 @@ class WaveChartWidget(QWidget):
         if not plot_data:
             return
 
-        # 第一遍：计算并缓存所有字段的 LOD 数据
+        # 第一遍：存储原始数据并缓存 LOD
         field_arrays: Dict[str, Tuple[np.ndarray, np.ndarray]] = {}
         for field_path, (timestamps, values) in plot_data.items():
             plot_item = self._plot_items.get(field_path)
@@ -359,13 +353,12 @@ class WaveChartWidget(QWidget):
 
             if not timestamps or not values:
                 plot_item.setData([], [])
-                self._lod_cache.pop(field_path, None)
-                self._raw_data_cache.pop(field_path, None)
+                self._lod_mgr.remove_field(field_path)
                 continue
 
             ts_array = np.array(timestamps, dtype=np.float64)
             val_array = np.array(values, dtype=np.float64)
-            self._compute_lod_cache(field_path, ts_array, val_array)
+            self._lod_mgr.store_raw_data(field_path, ts_array, val_array)
             field_arrays[field_path] = (ts_array, val_array)
 
         if not field_arrays:
@@ -373,16 +366,15 @@ class WaveChartWidget(QWidget):
 
         # 第二遍：根据当前视口一次性选择 LOD 并渲染
         visible_points = self._get_visible_point_count()
-        level = self._select_lod_level(visible_points)
-        self._last_lod_level = level
-        if self._last_x_range_width is None:
-            self._last_x_range_width = self.get_x_range_width()
+        pixel_width = max(1, self._plot_widget.width())
+        level = self._lod_mgr.select_lod_level(visible_points, pixel_width)
+        self._lod_mgr.update_lod_level(level)
 
         for field_path, (ts_array, val_array) in field_arrays.items():
             plot_item = self._plot_items.get(field_path)
             if not plot_item:
                 continue
-            lod_data = self._get_lod_data(field_path, level)
+            lod_data = self._lod_mgr.get_lod_data(field_path, level)
             if lod_data is not None:
                 plot_item.setData(lod_data[0], lod_data[1])
             else:
@@ -397,14 +389,13 @@ class WaveChartWidget(QWidget):
         """清空所有数据（保留字段配置）"""
         for plot_item in self._plot_items.values():
             plot_item.setData([], [])
-        self._last_lod_level = None
-        self._last_x_range_width = None
+        self._lod_mgr.clear()
         self._data_time_range = None
 
     def _update_data_time_range(self) -> None:
         """更新数据时间范围（用于缩放限制）"""
         x_min, x_max = None, None
-        for raw_data in self._raw_data_cache.values():
+        for raw_data in self._lod_mgr.raw_data_cache.values():
             if raw_data is None:
                 continue
             x_data, _ = raw_data
@@ -420,105 +411,9 @@ class WaveChartWidget(QWidget):
         """清空所有字段和数据"""
         for field_path in list(self._plot_items.keys()):
             self.remove_field(field_path)
-        # 清空 LOD 缓存
-        self._lod_cache.clear()
-        self._raw_data_cache.clear()
-        self._last_lod_level = None
-        self._last_x_range_width = None
+        self._lod_mgr.clear()
 
-    # ============== 多级精度（LOD）=============
-
-    def _select_lod_level(self, visible_points: int) -> int:
-        """
-        根据可见数据点数和像素宽度自适应选择精度级别
-
-        Args:
-            visible_points: 当前视口内可见的数据点数
-
-        Returns:
-            精度级别索引（0-2 为降采样级别，3 为原始数据）
-        """
-        # 像素自适应：每像素最多显示 2 个数据点
-        pixel_width = max(1, self._plot_widget.width())
-        max_points_for_pixels = pixel_width * 2
-
-        # 如果可见点数在像素容量内，使用原始数据
-        if visible_points <= max_points_for_pixels:
-            return LOD_MAX_LEVEL
-
-        # 根据数据密度选择降采样级别
-        for i, (threshold, target) in enumerate(LOD_LEVELS):
-            if visible_points <= threshold:
-                return i
-
-        return LOD_MAX_LEVEL - 1  # 超大数据量使用最粗精度
-
-    def _compute_lod_cache(
-        self,
-        field_path: str,
-        x_data: np.ndarray,
-        y_data: np.ndarray,
-    ) -> None:
-        """
-        计算并缓存指定字段的多级精度降采样数据
-
-        Args:
-            field_path: 字段路径
-            x_data: 原始 X 轴数据
-            y_data: 原始 Y 轴数据
-        """
-        # 缓存原始数据
-        # 这里的 x_data/y_data 由调用方新建（np.array），无需额外 copy，避免不必要的内存与耗时
-        self._raw_data_cache[field_path] = (x_data, y_data)
-
-        # 初始化该字段的 LOD 缓存
-        if field_path not in self._lod_cache:
-            self._lod_cache[field_path] = {}
-
-        # 数据更新后先清空旧的 LOD 缓存，按需（lazy）在 _get_lod_data 中计算。
-        # 这样能显著降低一次性加载/刷新时的阻塞时间，缩放时再逐级补齐缓存。
-        self._lod_cache[field_path].clear()
-
-    def _get_lod_data(
-        self,
-        field_path: str,
-        level: int,
-    ) -> Optional[Tuple[np.ndarray, np.ndarray]]:
-        """
-        获取指定字段和精度级别的数据
-
-        Args:
-            field_path: 字段路径
-            level: 精度级别
-
-        Returns:
-            (x_data, y_data) 或 None
-        """
-        # 原始数据级别
-        if level >= LOD_MAX_LEVEL:
-            return self._raw_data_cache.get(field_path)
-
-        raw_data = self._raw_data_cache.get(field_path)
-        if raw_data is None:
-            return None
-        raw_x, raw_y = raw_data
-
-        # 降采样级别：按需（lazy）计算并写入缓存
-        field_cache = self._lod_cache.setdefault(field_path, {})
-        if level in field_cache:
-            return field_cache[level]
-
-        target = LOD_LEVELS[level][1]
-        if len(raw_x) <= target:
-            return raw_data
-
-        try:
-            sampled_x, sampled_y = lttb_downsample(raw_x, raw_y, target)
-            field_cache[level] = (sampled_x, sampled_y)
-            return field_cache[level]
-        except Exception as e:
-            logger.debug("LOD downsample failed (field=%s level=%s): %s", field_path, level, e)
-            return raw_data
+    # ============== 多级精度（LOD）— 委托给 LodCacheManager =============
 
     def _get_visible_point_count(self) -> int:
         """
@@ -532,7 +427,7 @@ class WaveChartWidget(QWidget):
         x_min, x_max = view_range[0]
 
         for field_path in self._plot_items.keys():
-            raw_data = self._raw_data_cache.get(field_path)
+            raw_data = self._lod_mgr.raw_data_cache.get(field_path)
             if raw_data is None:
                 continue
             x_data, _ = raw_data
@@ -550,19 +445,17 @@ class WaveChartWidget(QWidget):
         """
         # 仅在缩放变化时尝试切换 LOD，平移无需重算
         width = self.get_x_range_width()
-        if self._last_x_range_width is not None:
-            if abs(width - self._last_x_range_width) < 1e-6:
-                return
-        self._last_x_range_width = width
+        if not self._lod_mgr.should_rerender(width):
+            return
 
         visible_points = self._get_visible_point_count()
-        level = self._select_lod_level(visible_points)
-        if level == self._last_lod_level:
+        pixel_width = max(1, self._plot_widget.width())
+        level = self._lod_mgr.select_lod_level(visible_points, pixel_width)
+        if not self._lod_mgr.update_lod_level(level):
             return
-        self._last_lod_level = level
 
         for field_path, plot_item in self._plot_items.items():
-            lod_data = self._get_lod_data(field_path, level)
+            lod_data = self._lod_mgr.get_lod_data(field_path, level)
             if lod_data is not None:
                 x_data, y_data = lod_data
                 plot_item.setData(x_data, y_data)

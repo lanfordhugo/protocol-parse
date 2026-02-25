@@ -22,80 +22,11 @@ from PySide6.QtWidgets import (
 
 from gui.wave.models.wave_data_manager import FieldConfig
 from gui.wave.utils.chart_type_mapper import ChartType, ChartTypeMapper
+from gui.wave.utils.downsample import LOD_LEVELS, LOD_MAX_LEVEL, lttb_downsample
 
 logger = logging.getLogger(__name__)
 
-MIN_X_WINDOW_WIDTH_S = 0.01  # 10ms：波形窗口最小时间宽度（继续放大无意义）
-
-# 多级精度（LOD）配置：(阈值, 目标点数)
-# 当数据点数超过阈值时，降采样到目标点数
-LOD_LEVELS = [
-    (5000, 500),      # Level 0: 数据点 > 5000 时降采样到 500
-    (20000, 2000),    # Level 1: 数据点 > 20000 时降采样到 2000
-    (100000, 5000),   # Level 2: 数据点 > 100000 时降采样到 5000
-]
-# 最高精度级别索引（使用原始数据）
-LOD_MAX_LEVEL = len(LOD_LEVELS)
-
-
-def lttb_downsample(
-    x: np.ndarray,
-    y: np.ndarray,
-    target_points: int,
-) -> tuple:
-    """
-    LTTB（Largest Triangle Three Buckets）降采样算法（NumPy 向量化版本）
-
-    在保留视觉特征的前提下减少数据点数量。
-    使用 NumPy 向量化操作替代 Python 循环，性能提升 10-50 倍。
-
-    Args:
-        x: X轴数据（时间戳）
-        y: Y轴数据（值）
-        target_points: 目标数据点数
-
-    Returns:
-        (降采样后的x, 降采样后的y)
-    """
-    n = len(x)
-    if n <= target_points or target_points < 3:
-        return x, y
-
-    # 始终保留首尾点
-    sampled_indices = [0]
-    bucket_size = (n - 2) / (target_points - 2)
-
-    for i in range(1, target_points - 1):
-        # 当前桶的范围
-        bucket_start = int((i - 1) * bucket_size) + 1
-        bucket_end = min(int(i * bucket_size) + 1, n)
-
-        # 下一个桶的范围
-        next_start = int(i * bucket_size) + 1
-        next_end = min(int((i + 1) * bucket_size) + 1, n)
-
-        # 向量化计算下一个桶的平均值
-        avg_x = np.mean(x[next_start:next_end])
-        avg_y = np.mean(y[next_start:next_end])
-
-        # 向量化计算当前桶内所有点的三角形面积
-        a_idx = sampled_indices[-1]
-        bucket_slice = slice(bucket_start, bucket_end)
-
-        # 三角形面积公式向量化
-        areas = np.abs(
-            (x[a_idx] - avg_x) * (y[bucket_slice] - y[a_idx])
-            - (x[a_idx] - x[bucket_slice]) * (avg_y - y[a_idx])
-        )
-
-        # 找到面积最大的点索引
-        max_local_idx = int(np.argmax(areas))
-        sampled_indices.append(bucket_start + max_local_idx)
-
-    sampled_indices.append(n - 1)
-
-    indices = np.array(sampled_indices)
-    return x[indices], y[indices]
+MIN_X_WINDOW_WIDTH_S = 0.01  # 10ms：窗口最小时间宽度（继续放大无意义）
 
 
 class TimeAxisItem(pg.AxisItem):
@@ -191,6 +122,8 @@ class WaveChartWidget(QWidget):
         self._resume_ui_timer = QTimer(self)
         self._resume_ui_timer.setSingleShot(True)
         self._resume_ui_timer.timeout.connect(self._resume_ui_after_interaction)
+        # 数据时间范围（用于缩放限制）
+        self._data_time_range: Optional[Tuple[float, float]] = None
 
         self._setup_ui()
 
@@ -252,6 +185,15 @@ class WaveChartWidget(QWidget):
         # 鼠标移动事件（更新吸附 Tooltip）
         self._plot_widget.scene().sigMouseMoved.connect(self._on_mouse_moved)
 
+        # 操作提示文字（鼠标离开时显示）
+        self._hint_text = pg.TextItem(
+            text="滚轮缩放时间轴 | 左键拖动平移",
+            anchor=(0.5, 1),  # 底部居中
+            color="#888888",
+        )
+        self._hint_text.setZValue(300)
+        self._plot_widget.addItem(self._hint_text, ignoreBounds=True)
+
         # 拦截滚轮事件（轴感知缩放）—— 必须安装到 viewport 上，
         # 因为 QGraphicsView 的滚轮事件实际发送到 viewport 子控件
         self._plot_widget.viewport().installEventFilter(self)
@@ -297,6 +239,14 @@ class WaveChartWidget(QWidget):
             )
         else:
             return
+
+        # pyqtgraph 内建裁剪+降采样（peak=min/max）能显著提升大数据量平移/缩放流畅度
+        # 与本组件的 LOD 缓存并不冲突：即使某些场景暂时回退到较多点数，也能避免无谓绘制
+        try:
+            plot_item.setClipToView(True)
+            plot_item.setDownsampling(auto=True, method="peak")
+        except Exception as e:
+            logger.debug("PlotDataItem setClipToView/setDownsampling failed: %s", e)
 
         self._plot_items[config.field_path] = plot_item
         logger.debug("已添加图表字段: %s", config.display_name)
@@ -382,6 +332,11 @@ class WaveChartWidget(QWidget):
         else:
             plot_item.setData(ts_array, val_array)
 
+        # 更新数据时间范围
+        self._update_data_time_range()
+        # 更新提示位置
+        self._update_hint_position()
+
     def update_all_data(
         self,
         plot_data: Dict[str, Tuple[List[float], List[Optional[float]]]],
@@ -433,12 +388,33 @@ class WaveChartWidget(QWidget):
             else:
                 plot_item.setData(ts_array, val_array)
 
+        # 更新数据时间范围
+        self._update_data_time_range()
+        # 更新提示位置
+        self._update_hint_position()
+
     def clear(self) -> None:
         """清空所有数据（保留字段配置）"""
         for plot_item in self._plot_items.values():
             plot_item.setData([], [])
         self._last_lod_level = None
         self._last_x_range_width = None
+        self._data_time_range = None
+
+    def _update_data_time_range(self) -> None:
+        """更新数据时间范围（用于缩放限制）"""
+        x_min, x_max = None, None
+        for raw_data in self._raw_data_cache.values():
+            if raw_data is None:
+                continue
+            x_data, _ = raw_data
+            if len(x_data) == 0:
+                continue
+            if x_min is None or x_data[0] < x_min:
+                x_min = float(x_data[0])
+            if x_max is None or x_data[-1] > x_max:
+                x_max = float(x_data[-1])
+        self._data_time_range = (x_min, x_max) if x_min is not None else None
 
     def clear_all(self) -> None:
         """清空所有字段和数据"""
@@ -492,21 +468,16 @@ class WaveChartWidget(QWidget):
             y_data: 原始 Y 轴数据
         """
         # 缓存原始数据
-        self._raw_data_cache[field_path] = (x_data.copy(), y_data.copy())
+        # 这里的 x_data/y_data 由调用方新建（np.array），无需额外 copy，避免不必要的内存与耗时
+        self._raw_data_cache[field_path] = (x_data, y_data)
 
         # 初始化该字段的 LOD 缓存
         if field_path not in self._lod_cache:
             self._lod_cache[field_path] = {}
 
-        n_points = len(x_data)
-
-        # 为每个 LOD 级别计算降采样数据
-        for level, (threshold, target) in enumerate(LOD_LEVELS):
-            if n_points > threshold:
-                # 数据量超过阈值，执行降采样
-                sampled_x, sampled_y = lttb_downsample(x_data, y_data, target)
-                self._lod_cache[field_path][level] = (sampled_x, sampled_y)
-            # 如果数据量不超过阈值，该级别不需要缓存（使用更高级别的数据）
+        # 数据更新后先清空旧的 LOD 缓存，按需（lazy）在 _get_lod_data 中计算。
+        # 这样能显著降低一次性加载/刷新时的阻塞时间，缩放时再逐级补齐缓存。
+        self._lod_cache[field_path].clear()
 
     def _get_lod_data(
         self,
@@ -527,20 +498,27 @@ class WaveChartWidget(QWidget):
         if level >= LOD_MAX_LEVEL:
             return self._raw_data_cache.get(field_path)
 
-        # 降采样级别
-        field_cache = self._lod_cache.get(field_path)
-        if field_cache and level in field_cache:
+        raw_data = self._raw_data_cache.get(field_path)
+        if raw_data is None:
+            return None
+        raw_x, raw_y = raw_data
+
+        # 降采样级别：按需（lazy）计算并写入缓存
+        field_cache = self._lod_cache.setdefault(field_path, {})
+        if level in field_cache:
             return field_cache[level]
 
-        # 如果该级别没有缓存，尝试使用更低的精度级别
-        for lower_level in range(level + 1, LOD_MAX_LEVEL + 1):
-            if lower_level >= LOD_MAX_LEVEL:
-                return self._raw_data_cache.get(field_path)
-            if field_cache and lower_level in field_cache:
-                return field_cache[lower_level]
+        target = LOD_LEVELS[level][1]
+        if len(raw_x) <= target:
+            return raw_data
 
-        # 降级到原始数据
-        return self._raw_data_cache.get(field_path)
+        try:
+            sampled_x, sampled_y = lttb_downsample(raw_x, raw_y, target)
+            field_cache[level] = (sampled_x, sampled_y)
+            return field_cache[level]
+        except Exception as e:
+            logger.debug("LOD downsample failed (field=%s level=%s): %s", field_path, level, e)
+            return raw_data
 
     def _get_visible_point_count(self) -> int:
         """
@@ -623,30 +601,13 @@ class WaveChartWidget(QWidget):
         self._programmatic_update = True
         self._plot_widget.setXRange(x_min, x_max, padding=0)
         self._programmatic_update = False
+        # 更新提示位置
+        self._update_hint_position()
 
     def get_x_range_width(self) -> float:
         """获取当前X轴显示宽度（秒）"""
         view_range = self._plot_widget.viewRange()
         return max(1e-9, view_range[0][1] - view_range[0][0])
-
-    def _get_all_data_time_range(self) -> Optional[Tuple[float, float]]:
-        """获取当前所有曲线的时间范围（用于缩放上限判定）"""
-        x_min: Optional[float] = None
-        x_max: Optional[float] = None
-        for plot_item in self._plot_items.values():
-            x_data = plot_item.xData
-            if x_data is None or len(x_data) == 0:
-                continue
-            # 时间序列通常已按时间排序，首尾可视作范围端点
-            left = float(x_data[0])
-            right = float(x_data[-1])
-            if x_min is None or left < x_min:
-                x_min = left
-            if x_max is None or right > x_max:
-                x_max = right
-        if x_min is None or x_max is None:
-            return None
-        return (x_min, x_max)
 
     def scroll_to_latest(self) -> None:
         """滚动到最新数据"""
@@ -694,6 +655,17 @@ class WaveChartWidget(QWidget):
     def _resume_ui_after_interaction(self) -> None:
         """交互结束后恢复 UI 元素"""
         self._is_interacting = False
+        # 更新提示位置
+        self._update_hint_position()
+
+    def _update_hint_position(self) -> None:
+        """更新操作提示位置（视口底部居中）"""
+        if not self._hint_text.isVisible():
+            return
+        view_range = self._plot_widget.viewRange()
+        x_center = (view_range[0][0] + view_range[0][1]) / 2
+        y_bottom = view_range[1][0]
+        self._hint_text.setPos(x_center, y_bottom)
 
     def eventFilter(self, obj, event) -> bool:
         """拦截 PlotWidget 滚轮事件，实现轴感知缩放"""
@@ -709,7 +681,7 @@ class WaveChartWidget(QWidget):
         - 鼠标在 X 轴标签区域：仅缩放 X 轴
         - 鼠标在 Y 轴标签区域：仅缩放 Y 轴
         - 鼠标在绑图区域内：仅缩放 X 轴（时间序列图以时间缩放为主）
-        - X 轴缩放限制：最小 10ms；缩小到能覆盖全部数据点后不再继续缩小
+        - X 轴缩放有范围限制：最小 10ms；缩小到能覆盖全部数据点后不再继续缩小
         """
         delta = event.angleDelta().y()
         if delta == 0:
@@ -754,15 +726,13 @@ class WaveChartWidget(QWidget):
                 return
 
         # 缩小（窗口更宽）到能覆盖全部数据点后不再继续缩小，并贴齐全量数据范围
-        if factor > 1:
-            data_range = self._get_all_data_time_range()
-            if data_range:
-                data_min, data_max = data_range
-                data_width = data_max - data_min
-                if data_width > 0 and new_width >= data_width:
-                    self._plot_widget.setXRange(data_min, data_max, padding=0)
-                    self.user_interacted.emit()
-                    return
+        if factor > 1 and self._data_time_range:
+            data_min, data_max = self._data_time_range
+            data_width = data_max - data_min
+            if data_width > 0 and new_width >= data_width:
+                self._plot_widget.setXRange(data_min, data_max, padding=0)
+                self.user_interacted.emit()
+                return
 
         vb.scaleBy((factor, 1), center=mouse_data)
         self.user_interacted.emit()
@@ -839,6 +809,9 @@ class WaveChartWidget(QWidget):
         vb = self._plot_widget.plotItem.vb
         best_dist_sq = float("inf")
         best = None
+        mouse_scene = vb.mapViewToScene(QPointF(float(mouse_x), float(mouse_y)))
+        mouse_scene_x = mouse_scene.x()
+        mouse_scene_y = mouse_scene.y()
 
         for field_path, plot_item in self._plot_items.items():
             x_data = plot_item.xData
@@ -857,9 +830,8 @@ class WaveChartWidget(QWidget):
             for i in candidates:
                 # 用屏幕坐标计算距离（避免 X/Y 尺度差异）
                 pt_scene = vb.mapViewToScene(QPointF(float(x_data[i]), float(y_data[i])))
-                mouse_scene = vb.mapViewToScene(QPointF(mouse_x, mouse_y))
-                dx = pt_scene.x() - mouse_scene.x()
-                dy = pt_scene.y() - mouse_scene.y()
+                dx = pt_scene.x() - mouse_scene_x
+                dy = pt_scene.y() - mouse_scene_y
                 dist_sq = dx * dx + dy * dy
                 if dist_sq < best_dist_sq:
                     best_dist_sq = dist_sq
@@ -875,15 +847,18 @@ class WaveChartWidget(QWidget):
         return best
 
     def enterEvent(self, event) -> None:
-        """鼠标进入"""
+        """鼠标进入 - 隐藏操作提示"""
+        self._hint_text.setVisible(False)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        """鼠标离开 - 隐藏十字光标和 Tooltip"""
+        """鼠标离开 - 隐藏十字光标和 Tooltip，显示操作提示"""
         self._crosshair_v.setVisible(False)
         self._crosshair_h.setVisible(False)
         self._tooltip.setVisible(False)
         self._snap_marker.setData([], [])
+        self._hint_text.setVisible(True)
+        self._update_hint_position()
         super().leaveEvent(event)
 
     # ============== 主题适配 ==============

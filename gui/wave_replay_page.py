@@ -247,11 +247,12 @@ class WaveReplayPage(QWidget):
         # 阻断信号避免循环
         self._select_all_checkbox.blockSignals(True)
 
-        if state == Qt.Checked:
+        # 注意：state 是 int 类型，需要与枚举值比较
+        if state == Qt.Checked.value:
             # 全选
             self._field_tree.select_all()
             self._select_all_checkbox.setCheckState(Qt.Checked)
-        elif state == Qt.Unchecked:
+        elif state == Qt.Unchecked.value:
             # 取消全选
             self._field_tree.deselect_all()
             self._select_all_checkbox.setCheckState(Qt.Unchecked)

@@ -23,7 +23,7 @@ from gui.wave.models.wave_data_manager import (
 )
 from gui.wave.utils.chart_type_mapper import ChartType, ChartTypeMapper
 from gui.wave.utils.field_type_detector import FieldType, FieldTypeDetector
-from gui.wave.widgets.wave_chart_widget import lttb_downsample
+from gui.wave.utils.downsample import lttb_downsample
 from src.yaml_cmdformat import YamlCmdFormat
 
 

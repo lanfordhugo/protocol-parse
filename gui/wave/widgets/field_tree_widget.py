@@ -107,7 +107,7 @@ class FieldTreeWidget(QWidget):
         # 信号连接
         self._tree.customContextMenuRequested.connect(self._on_context_menu)
         self._tree.itemChanged.connect(self._on_item_changed)
-        self._tree.itemClicked.connect(self._on_item_clicked)
+        # NOTE: rely on the checkbox to toggle check state (consistent for fields and CMD groups).
 
         layout.addWidget(self._tree)
 
@@ -135,6 +135,7 @@ class FieldTreeWidget(QWidget):
         item.setIcon(0, _create_color_icon(config.color))
         item.setCheckState(0, Qt.Checked if config.enabled else Qt.Unchecked)
         item.setData(0, Qt.UserRole, config.field_path)
+        item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
 
         # 类型信息合并到 Tooltip
         item.setToolTip(
@@ -338,27 +339,6 @@ class FieldTreeWidget(QWidget):
             if item.checkState(0) == Qt.Checked
         )
         self.selection_changed.emit(total, selected)
-
-    def _on_item_clicked(self, item: QTreeWidgetItem, column: int) -> None:
-        """
-        点击行时切换勾选状态
-
-        注意：
-        - 点击的是字段节点时才切换，CMD分组节点由三态逻辑处理
-        - 如果 _changing_state 为 True，说明 itemChanged 已处理，跳过避免重复切换
-        """
-        if self._changing_state:
-            return
-
-        field_path = item.data(0, Qt.UserRole)
-        if field_path not in self._field_items:
-            return
-
-        # 切换勾选状态
-        current_state = item.checkState(0)
-        new_state = Qt.Unchecked if current_state == Qt.Checked else Qt.Checked
-        item.setCheckState(0, new_state)
-        # 注意：setCheckState 会触发 itemChanged 信号，进而发射 field_enabled_changed
 
     def _on_context_menu(self, pos) -> None:
         """右键菜单"""

@@ -11,11 +11,7 @@ import time
 import numpy as np
 import pytest
 
-from gui.wave.widgets.wave_chart_widget import (
-    LOD_LEVELS,
-    LOD_MAX_LEVEL,
-    lttb_downsample,
-)
+from gui.wave.utils.downsample import LOD_LEVELS, LOD_MAX_LEVEL, lttb_downsample
 
 
 # ============== LOD 级别选择测试 ==============

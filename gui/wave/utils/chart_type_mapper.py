@@ -103,7 +103,8 @@ class ChartTypeMapper:
         if chart_type == ChartType.LINE:
             return {
                 "connect": "finite",
-                "antialias": True,
+                # 大数据量场景抗锯齿开销较高，默认关闭（需要更高画质时可按需开启）
+                "antialias": False,
             }
         elif chart_type == ChartType.STEP:
             return {

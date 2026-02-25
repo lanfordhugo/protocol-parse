@@ -235,22 +235,11 @@ class HistoryWavePresenter(WavePresenterBase):
 
         # 刷新图表（仅显示选定范围内的数据）
         configs = self._data_manager.get_enabled_field_configs()
-        plot_data = {}
-
-        for config in configs:
-            timestamps, values = self._data_manager.get_plot_data(
-                config.field_path,
-                start=self._view_start,
-                end=self._view_end,
-            )
-            plot_data[config.field_path] = (timestamps, values)
+        field_paths = [c.field_path for c in configs]
+        range_points = self._data_manager.get_data_in_range(self._view_start, self._view_end)
+        plot_data = self._data_manager.get_plot_data_batch_from_points(field_paths, range_points)
 
         self._view.update_all_chart_data(plot_data)
-
-        # 统计范围内的数据点数
-        range_points = self._data_manager.get_data_in_range(
-            self._view_start, self._view_end
-        )
         self._view.update_data_count(len(range_points))
 
     # ============== 数据导出 ==============

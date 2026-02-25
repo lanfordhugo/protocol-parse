@@ -10,6 +10,7 @@ import json
 import os
 import tempfile
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -23,6 +24,7 @@ from gui.wave.models.wave_data_manager import (
 from gui.wave.utils.chart_type_mapper import ChartType, ChartTypeMapper
 from gui.wave.utils.field_type_detector import FieldType, FieldTypeDetector
 from gui.wave.widgets.wave_chart_widget import lttb_downsample
+from src.yaml_cmdformat import YamlCmdFormat
 
 
 # ============== FieldTypeDetector 测试 ==============
@@ -468,6 +470,49 @@ class TestWaveDataManager:
                 lines = f.readlines()
             assert len(lines) == 3  # 表头 + 2行数据
             assert "v" in lines[0]  # 表头包含字段名
+        finally:
+            os.unlink(tmp_path)
+
+    def test_yaml_field_order_preferred_over_alphabetical_content_order(self):
+        """有协议配置时，字段顺序应以 YAML 为准，而不是字典键名顺序"""
+        protocol = YamlCmdFormat(Path("configs") / "v8" / "protocol.yaml")
+        manager = WaveDataManager(protocol_config=protocol)
+        manager.set_record_all(True)
+
+        fields = protocol.get_cmd_layout(201)
+        total_len = sum(getattr(f, "len", 0) for f in fields)
+        parsed = protocol.parse_cmd_data(201, bytes([0]) * total_len)
+
+        # 模拟上游字典已被按字段名排序
+        alphabetical_content = dict(sorted(parsed.items(), key=lambda kv: kv[0]))
+        manager.add_entry("2024-08-29 09:00:00:000", alphabetical_content, cmd_id=201)
+
+        names = [c.field_path for c in manager.get_all_field_configs()]
+        assert names.index("工作状态") < names.index("1路功率")
+        assert names.index("当前电表读数") < names.index("并充组网状态")
+
+    def test_json_roundtrip_preserves_field_order_without_protocol_config(self):
+        """导出/导入 JSON 后（无协议配置）仍应保持已计算的字段顺序"""
+        protocol = YamlCmdFormat(Path("configs") / "v8" / "protocol.yaml")
+        manager1 = WaveDataManager(protocol_config=protocol)
+        manager1.set_record_all(True)
+
+        fields = protocol.get_cmd_layout(201)
+        total_len = sum(getattr(f, "len", 0) for f in fields)
+        parsed = protocol.parse_cmd_data(201, bytes([0]) * total_len)
+        alphabetical_content = dict(sorted(parsed.items(), key=lambda kv: kv[0]))
+        manager1.add_entry("2024-08-29 09:00:00:000", alphabetical_content, cmd_id=201)
+
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+            tmp_path = f.name
+
+        try:
+            manager1.export_to_json(tmp_path, enabled_only=False)
+            manager2 = WaveDataManager()
+            manager2.import_from_json(tmp_path)
+            names = [c.field_path for c in manager2.get_all_field_configs()]
+            assert names.index("工作状态") < names.index("1路功率")
+            assert names.index("当前电表读数") < names.index("并充组网状态")
         finally:
             os.unlink(tmp_path)
 

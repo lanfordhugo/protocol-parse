@@ -129,6 +129,7 @@ class WaveDataManager:
         # 时间索引（加速范围查询）
         self._timestamp_array: Optional[np.ndarray] = None
         self._timestamp_dirty: bool = True
+        self._data_points_list: Optional[List[DataPoint]] = None
 
     # ============== 数据操作 ==============
 
@@ -192,6 +193,7 @@ class WaveDataManager:
                 )
                 self._data_points.append(point)
                 self._timestamp_dirty = True
+                self._data_points_list = None
 
         return point, new_configs
 
@@ -249,23 +251,27 @@ class WaveDataManager:
             start_ts = start.timestamp() if start else float(self._timestamp_array[0])
             end_ts = end.timestamp() if end else float(self._timestamp_array[-1])
 
-            start_idx = int(np.searchsorted(self._timestamp_array, start_ts, 'left'))
-            end_idx = int(np.searchsorted(self._timestamp_array, end_ts, 'right'))
+            start_idx = int(np.searchsorted(self._timestamp_array, start_ts, "left"))
+            end_idx = int(np.searchsorted(self._timestamp_array, end_ts, "right"))
 
-            # 转换 deque 为列表后切片（deque 不支持随机切片）
-            data_list = list(self._data_points)
-            return data_list[start_idx:end_idx]
+            # 直接切片缓存的 list，避免每次把 deque 转 list
+            if self._data_points_list is None:
+                self._data_points_list = list(self._data_points)
+            return self._data_points_list[start_idx:end_idx]
 
     def _rebuild_timestamp_index_unlocked(self) -> None:
         """重建时间索引（调用时已持有锁）"""
         if not self._data_points:
             self._timestamp_array = None
             self._timestamp_dirty = False
+            self._data_points_list = None
             return
 
-        self._timestamp_array = np.array(
-            [p.timestamp.timestamp() for p in self._data_points],
-            dtype=np.float64
+        self._data_points_list = list(self._data_points)
+        self._timestamp_array = np.fromiter(
+            (p.timestamp.timestamp() for p in self._data_points_list),
+            dtype=np.float64,
+            count=len(self._data_points_list),
         )
         self._timestamp_dirty = False
 
@@ -298,6 +304,7 @@ class WaveDataManager:
         with self._lock:
             self._data_points.clear()
             self._timestamp_dirty = True
+            self._data_points_list = None
 
     def reset(self) -> None:
         """完整重置：清空数据点、字段配置、录制状态和颜色计数器"""
@@ -308,6 +315,7 @@ class WaveDataManager:
             self._record_all_mode = False
             self._color_index = 0
             self._timestamp_dirty = True
+            self._data_points_list = None
 
     @property
     def data_count(self) -> int:
@@ -334,6 +342,8 @@ class WaveDataManager:
             self._max_data_points = size
             # 重建 deque，超出部分自动从左侧（最旧）丢弃
             self._data_points = deque(self._data_points, maxlen=size)
+            self._timestamp_dirty = True
+            self._data_points_list = None
 
     @property
     def time_range(self) -> Optional[Tuple[datetime, datetime]]:
@@ -524,41 +534,52 @@ class WaveDataManager:
         Returns:
             {field_path: (timestamps, values)}
         """
+        points = self.get_data_in_range(start, end)
+        return self.get_plot_data_batch_from_points(field_paths, points)
+
+    def get_plot_data_batch_from_points(
+        self,
+        field_paths: List[str],
+        points: List[DataPoint],
+    ) -> Dict[str, Tuple[List[float], List[Optional[float]]]]:
+        """
+        批量获取多个字段的绘图数据（给定已筛选的数据点列表）。
+
+        注意：按字段路径迭代，而不是遍历 point.values 的所有键，
+        这样复杂度为 O(len(points) * len(field_paths))，避免 record_all 模式下
+        每个点都遍历大量无关字段。
+        """
         if not field_paths:
             return {}
 
-        with self._lock:
-            configs = {
-                fp: self._field_configs.get(fp)
-                for fp in field_paths
-                if fp in self._field_configs
-            }
-
-        if not configs:
+        if not points:
             return {}
 
-        points = self.get_data_in_range(start, end)
-        wanted = set(configs.keys())
+        with self._lock:
+            config_by_field = {fp: self._field_configs.get(fp) for fp in field_paths}
+        config_by_field = {fp: cfg for fp, cfg in config_by_field.items() if cfg is not None}
 
-        timestamps_map: Dict[str, List[float]] = {fp: [] for fp in configs}
-        values_map: Dict[str, List[Optional[float]]] = {fp: [] for fp in configs}
+        if not config_by_field:
+            return {}
+
+        timestamps_map: Dict[str, List[float]] = {fp: [] for fp in config_by_field}
+        values_map: Dict[str, List[Optional[float]]] = {fp: [] for fp in config_by_field}
+        extract_numeric_value = self._type_detector.extract_numeric_value
+        field_configs = list(config_by_field.items())
 
         for point in points:
             ts = point.timestamp.timestamp()
-            for fp, raw_value in point.values.items():
-                if fp not in wanted:
+            point_values = point.values
+            for fp, config in field_configs:
+                if fp not in point_values:
                     continue
-                config = configs[fp]
-                if not config:
+                numeric_value = extract_numeric_value(point_values[fp], config.field_type)
+                if numeric_value is None:
                     continue
-                numeric_value = self._type_detector.extract_numeric_value(
-                    raw_value, config.field_type
-                )
-                if numeric_value is not None:
-                    timestamps_map[fp].append(ts)
-                    values_map[fp].append(numeric_value)
+                timestamps_map[fp].append(ts)
+                values_map[fp].append(numeric_value)
 
-        return {fp: (timestamps_map[fp], values_map[fp]) for fp in configs}
+        return {fp: (timestamps_map[fp], values_map[fp]) for fp in config_by_field}
 
     # ============== 数据导入/导出 ==============
 
@@ -729,6 +750,7 @@ class WaveDataManager:
             sorted_points = sorted(self._data_points, key=lambda p: p.timestamp)
             self._data_points = deque(sorted_points, maxlen=self._max_data_points)
             self._timestamp_dirty = True
+            self._data_points_list = None
 
         logger.info("已从 %s 导入 %d 个数据点", file_path, count)
         return count

@@ -187,8 +187,8 @@ class RealTimeWavePresenter(QObject, WavePresenterBase):
             config = self._data_manager.get_field_config(field_path)
             if config:
                 self._view.add_chart_field(config)
-            # 立即刷新已有数据
-            self._refresh_field_data(field_path)
+            # 批量合并刷新（select_all 场景下避免重复遍历）
+            self._queue_enable_field(field_path)
         else:
             self._data_manager.stop_recording(field_path)
             self._view.remove_chart_field(field_path)
@@ -219,20 +219,17 @@ class RealTimeWavePresenter(QObject, WavePresenterBase):
         if not configs:
             return
 
-        plot_data = {}
-        max_ts = None
-        for config in configs:
-            timestamps, values = self._data_manager.get_plot_data(
-                config.field_path
-            )
-            if timestamps:
-                plot_data[config.field_path] = (timestamps, values)
-                ts_last = timestamps[-1]
-                if max_ts is None or ts_last > max_ts:
-                    max_ts = ts_last
+        # 只取显示窗口内的数据，避免每次把全量缓存数据传给图表
+        points = self._data_manager.get_latest_data(self._display_window)
+        if not points:
+            return
 
+        field_paths = [c.field_path for c in configs]
+        plot_data = self._data_manager.get_plot_data_batch_from_points(field_paths, points)
         if not plot_data:
             return
+
+        max_ts = points[-1].timestamp.timestamp()
 
         self._view.update_all_chart_data(plot_data)
         self._view.update_data_count(self._data_manager.data_count)

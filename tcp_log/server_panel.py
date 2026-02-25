@@ -609,7 +609,11 @@ class TcpServerPage(QWidget):
         from gui.wave.presenters.real_time_presenter import RealTimeWavePresenter
         from gui.wave.models.wave_data_manager import WaveDataManager
 
-        data_manager = WaveDataManager()
+        protocol_config = None
+        if self._presenter and hasattr(self._presenter, '_model'):
+            protocol_config = self._presenter._model.current_protocol
+
+        data_manager = WaveDataManager(protocol_config=protocol_config)
         self._wave_dialog = RealTimeWaveDialog(self)
         wave_presenter = RealTimeWavePresenter(
             view=self._wave_dialog,
@@ -653,7 +657,7 @@ class TcpServerPage(QWidget):
         if self._presenter and hasattr(self._presenter, '_model'):
             protocol_config = self._presenter._model.current_protocol
 
-        data_manager = WaveDataManager()
+        data_manager = WaveDataManager(protocol_config=protocol_config)
         self._history_wave_dialog = HistoryWaveDialog(self)
         history_presenter = HistoryWavePresenter(
             view=self._history_wave_dialog,

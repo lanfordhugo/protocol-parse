@@ -8,6 +8,7 @@
 
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from gui.wave.models.wave_data_manager import WaveDataManager
@@ -81,6 +82,9 @@ class ReplayPresenter(WavePresenterBase):
         Returns:
             成功加载的数据点数量
         """
+        # 根据数据源尝试应用协议配置（用于按 YAML 顺序展示字段）
+        self._apply_protocol_config_from_source(source_name)
+
         # 完整重置旧数据（含字段配置和录制状态）
         self._data_manager.reset()
         self._view.clear_chart()
@@ -109,6 +113,9 @@ class ReplayPresenter(WavePresenterBase):
             导入的数据点数量
         """
         try:
+            # JSON 回放来源未知，清空协议顺序映射，按文件中记录的 field_order 恢复。
+            self._data_manager.set_protocol_config(None)
+
             # 完整重置旧数据（含字段配置和录制状态）
             self._data_manager.reset()
             self._view.clear_chart()
@@ -127,6 +134,40 @@ class ReplayPresenter(WavePresenterBase):
             logger.error("JSON 导入失败: %s", e)
             self._view.update_status(f"导入失败: {e}")
             return 0
+
+    def _apply_protocol_config_from_source(self, source_name: str) -> None:
+        """
+        尝试从数据源名称推断协议并加载 YAML 配置。
+
+        目前约定 source_name 格式：`普通解析- <protocol_name>`
+        """
+        self._data_manager.set_protocol_config(None)
+
+        # 支持两种格式："普通解析 - v8" 和 "普通解析-v8"
+        marker1 = "普通解析 - "
+        marker2 = "普通解析-"
+
+        if marker1 in source_name:
+            protocol_name = source_name.split(marker1, 1)[1].strip()
+        elif marker2 in source_name:
+            protocol_name = source_name.split(marker2, 1)[1].strip()
+        else:
+            return
+        if not protocol_name:
+            return
+
+        config_path = Path("configs") / protocol_name / "protocol.yaml"
+        if not config_path.exists():
+            logger.debug("未找到协议配置文件，跳过 YAML 顺序映射: %s", config_path)
+            return
+
+        try:
+            from src.yaml_cmdformat import YamlCmdFormat
+
+            protocol_config = YamlCmdFormat(config_path)
+            self._data_manager.set_protocol_config(protocol_config)
+        except Exception as e:
+            logger.warning("加载协议配置失败，回放字段顺序将使用报文顺序: %s", e)
 
     def _setup_after_load(self) -> None:
         """数据加载后的初始化"""
@@ -185,22 +226,11 @@ class ReplayPresenter(WavePresenterBase):
 
         # 刷新图表（仅显示选定范围内的数据）
         configs = self._data_manager.get_enabled_field_configs()
-        plot_data = {}
-
-        for config in configs:
-            timestamps, values = self._data_manager.get_plot_data(
-                config.field_path,
-                start=self._view_start,
-                end=self._view_end,
-            )
-            plot_data[config.field_path] = (timestamps, values)
+        field_paths = [c.field_path for c in configs]
+        range_points = self._data_manager.get_data_in_range(self._view_start, self._view_end)
+        plot_data = self._data_manager.get_plot_data_batch_from_points(field_paths, range_points)
 
         self._view.update_all_chart_data(plot_data)
-
-        # 统计范围内的数据点数
-        range_points = self._data_manager.get_data_in_range(
-            self._view_start, self._view_end
-        )
         self._view.update_data_count(len(range_points))
 
     # ============== 数据导出 ==============

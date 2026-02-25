@@ -186,6 +186,9 @@ class WaveChartWidget(QWidget):
         self._mouse_move_interval = 0.03  # 30ms
         # 交互状态标记（拖拽/缩放时禁用 Tooltip）
         self._is_interacting: bool = False
+        self._resume_ui_timer = QTimer(self)
+        self._resume_ui_timer.setSingleShot(True)
+        self._resume_ui_timer.timeout.connect(self._resume_ui_after_interaction)
 
         self._setup_ui()
 
@@ -664,7 +667,8 @@ class WaveChartWidget(QWidget):
 
     def _schedule_resume_ui(self) -> None:
         """安排延迟恢复 UI 元素"""
-        QTimer.singleShot(100, self._resume_ui_after_interaction)
+        # 连续交互时重置计时器，避免过早恢复导致抖动/额外 CPU
+        self._resume_ui_timer.start(100)
 
     def _resume_ui_after_interaction(self) -> None:
         """交互结束后恢复 UI 元素"""

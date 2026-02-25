@@ -101,6 +101,8 @@ class FieldTreeWidget(QWidget):
         self._tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self._tree.setAnimated(True)
         self._tree.setIndentation(12)
+        # 强制保持插入顺序（由上层按 YAML 顺序提供），禁止按文本自动排序。
+        self._tree.setSortingEnabled(False)
 
         # 信号连接
         self._tree.customContextMenuRequested.connect(self._on_context_menu)

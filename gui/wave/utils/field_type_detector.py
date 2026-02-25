@@ -1,24 +1,50 @@
 """
 文件名称: field_type_detector.py
 内容摘要: 字段类型检测器，根据字段值和YAML配置判断字段类型
-当前版本: v1.0.0
+当前版本: v1.1.0
 作者: lanford
 创建日期: 2026-02-09
 """
 
 import logging
 from enum import Enum, auto
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from src.yaml_config import Field, TypeDef
 
 logger = logging.getLogger(__name__)
 
 
 class FieldType(Enum):
     """字段类型枚举"""
-    NUMERIC = auto()    # 数值型（int/float）
-    BOOLEAN = auto()    # 布尔型
-    ENUM = auto()       # 枚举型（带 name/value 的字典）
+    NUMERIC = auto()    # 数值型（int/float）→ 折线图
+    BOOLEAN = auto()    # 布尔型 → 阶梯图
+    ENUM = auto()       # 枚举型（带 name/value 的字典）→ 阶梯图/散点图
     STRING = auto()     # 字符串/复杂类型（暂不支持绘图）
+
+
+# YAML type base → FieldType 映射
+TYPE_BASE_TO_FIELD_TYPE: Dict[str, FieldType] = {
+    # 数值型 → NUMERIC（折线图）
+    "uint": FieldType.NUMERIC,
+    "int": FieldType.NUMERIC,
+    # 字符串型 → STRING（不绘图）
+    "str": FieldType.STRING,
+    "hex": FieldType.STRING,
+    "bcd": FieldType.STRING,
+    "binary_str": FieldType.STRING,
+    # bitfield/bitset → ENUM（散点图，子字段）
+    "bitfield": FieldType.ENUM,
+    "bitset": FieldType.ENUM,
+    # 时间类型 → STRING（不绘图）
+    "time.cp56time2a": FieldType.STRING,
+    "time.bcd7": FieldType.STRING,
+    "time.bcd8": FieldType.STRING,
+    "time.bin7": FieldType.STRING,
+    "time.unix": FieldType.STRING,
+    "time.unix_ms": FieldType.STRING,
+}
 
 
 class FieldTypeDetector:
@@ -124,3 +150,68 @@ class FieldTypeDetector:
                     return None
 
         return None
+
+    def detect_from_yaml(
+        self,
+        type_def: Optional["TypeDef"],
+        field: Optional["Field"] = None,
+    ) -> Optional[FieldType]:
+        """
+        根据 YAML 配置检测字段类型
+
+        检测优先级：
+        1. 有 enum 定义 → ENUM（阶梯图）
+        2. 有 bit_groups 定义 → ENUM（散点图）
+        3. 根据 type base 判断 → NUMERIC/STRING
+        4. 无配置 → 返回 None，调用方应回退到 detect()
+
+        Args:
+            type_def: YAML 类型定义（TypeDef 实例）
+            field: YAML 字段定义（Field 实例），可选
+
+        Returns:
+            检测到的字段类型，无法判断时返回 None
+        """
+        # 1. 有 enum 定义 → ENUM（阶梯图）
+        if field is not None and field.enum:
+            return FieldType.ENUM
+
+        # 2. 有 bit_groups 定义 → ENUM（散点图）
+        if field is not None and field.bit_groups:
+            return FieldType.ENUM
+        if type_def is not None and type_def.groups:
+            return FieldType.ENUM
+
+        # 3. 根据 type base 判断
+        if type_def is not None:
+            field_type = TYPE_BASE_TO_FIELD_TYPE.get(type_def.base)
+            if field_type:
+                return field_type
+
+        # 4. 无配置 → 返回 None
+        return None
+
+    def detect_with_fallback(
+        self,
+        value: Any,
+        type_def: Optional["TypeDef"] = None,
+        field: Optional["Field"] = None,
+    ) -> FieldType:
+        """
+        混合检测：优先 YAML 配置，回退值类型检测
+
+        Args:
+            value: 字段值
+            type_def: YAML 类型定义
+            field: YAML 字段定义
+
+        Returns:
+            检测到的字段类型
+        """
+        # 优先尝试 YAML 配置检测
+        yaml_type = self.detect_from_yaml(type_def, field)
+        if yaml_type:
+            return yaml_type
+
+        # 回退到值类型检测
+        return self.detect(value)

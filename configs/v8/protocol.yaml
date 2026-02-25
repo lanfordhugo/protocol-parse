@@ -60,10 +60,14 @@ enums:
     2: M2
     3: C2
   gun_status:
-    0: 空闲
-    1: 准备
-    2: 充电
-    3: 故障
+    0: 空闲中
+    1: 正准备开始充电
+    2: 充电进行中
+    3: 充电结束（未拔枪保持）
+    4: 启动失败（未进入充电中，未拔枪保持）
+    5: 预约状态
+    6: 系统故障(不能给汽车充电)
+    7: 暂停服务
   pump_status:
     0: 正常
     1: 故障
@@ -104,16 +108,128 @@ enums:
     4: 双枪400A
     5: 液冷单枪
     6: 液冷双枪
+    7: 单枪一体机
+    8: 双枪一体机
+  start_mode:
+    1: 正常启动
+    2: VIN方式启动
+    3: 启动放电
+    4: 刷卡启动
+    5: 管理员界面启动
+  parallel_charge_mode:
+    0: 标准模式各枪独立工作
+    1: 单终端/机柜并充组网
+    2: 多终端/机柜并充组网
+  host_work_status:
+    0x01: 主机待机
+    0x02: 主机充电
+    0x03: 主机故障
+    0x04: 主机禁用
+    0x05: 主机升级
+    0x06: 半自动工装
+    0x07: 全自动工装
+    0xff: 主机状态未知
+  # BMS协议类型 (cmd=9)
+  bms_protocol_type:
+    0x2011: 2011旧国标
+    0x2015: 2015国标
+    0x2023: 2023国标
+    0x2016: 2015+国标
+    0x1000: 广州团标
+    0x1001: 特来电大电流
+    0x1002: 宇通协议
+  # 电池类型 (cmd=9)
+  battery_type:
+    0x01: 铅酸电池
+    0x02: 镍氢电池
+    0x03: 磷酸铁锂电池
+    0x04: 锰酸锂电池
+    0x05: 钴酸锂电池
+    0x06: 三元次料电池
+    0x07: 聚合物锂离子电池
+    0x08: 钛酸锂电池
+    0xff: 其他电池
+  # 鉴权结果 (cmd=35)
+  auth_result:
+    0: 成功
+    1: 账户认证失败
+    2: 账户余额不足
+    3: 账户被锁定
+    4: 未知用户/账户不存在
+    5: 账户挂失/销户
+    6: 密码错误
+    7: 后台响应超时
+    8: 存在未结账记录
+    9: 桩不支持刷卡
+    10: 桩不支持vin充电
+    11: 平台应答桩停用
+    12: 其它原因
+  # 升级状态 (cmd=413)
+  upgrade_status:
+    0x00: 升级包下载中
+    0x01: 升级包下载失败
+    0x02: 升级包处理中
+    0x03: 无效升级包-校验失败
+    0x04: 无效升级包-不支持的设备信息
+    0x05: 预留
+    0x06: 等待复位
+    0x07: 执行复位动作
+    0x08: 重启升级成功
+    0x09: 重启升级失败
+  # 终端工装执行阶段 (cmd=605)
+  workshop_stage_terminal:
+    0: 工装空闲状态
+    1: 干接点测试
+    2: 辅助电源测试中
+    3: 电压采样测试中
+    4: 绝缘测试中
+    5: 电表计量测试中
+    6: 33008加测中
+    7: 测试结束
+    100: 工装测试结束
+  # 主机工装执行阶段 (cmd=611)
+  workshop_stage_host:
+    0: 工装空闲状态
+    1: 工装前置条件检测中
+    2: 模块地址测试中
+    3: 开关反馈状态测试中
+    4: 主机终端之间线缆测试中
+    5: 开关驱动位置测试中
+    6: 模块输出线缆测试中
+    7: CAN通信质量测试中
+    100: 工装测试结束
+  # 硬件类型 (cmd=1, cmd=51)
+  hardware_type:
+    1: CCU
+    2: M2板
+    3: 超充驱动板CCU
+  # 登录失败原因 (cmd=2)
+  login_fail_reason:
+    1: 版本号过低
+    2: 系统故障
+    3: 其他故障
+  # 需要更新参数 (cmd=1)
+  need_update_params:
+    0: 需要
+    1: 不需要
+  # 车连接状态 (cmd=3)
+  car_connect_status:
+    0: 断开
+    1: 连接
+  # VIN核对 (cmd=5)
+  vin_verify:
+    0: 无效
+    1: 需要核对
 
 cmds:
   # cmd1 - 设备信息上报
   1:
-    - {len: 1, name: 硬件类型, type: uint8}
+    - {len: 1, name: 硬件类型, type: uint8, enum: hardware_type}
     - {len: 1, name: 拨码地址号, type: uint8}
     - {len: 1, name: 充电枪路数, type: uint8}
     - {len: 2, name: 项目号, type: uint16}
     - {len: 2, name: 软件版本号, type: uint16}
-    - {len: 1, name: 需要更新参数, type: uint8}
+    - {len: 1, name: 需要更新参数, type: uint8, enum: need_update_params}
     - {len: 32, name: 软件编译时间, type: ascii}
     - {len: 2, name: 硬件版本, type: uint16}
     - {len: 2, name: 协议版本号, type: uint16}
@@ -121,16 +237,16 @@ cmds:
   # cmd2 - 登录响应
   2:
     - {len: 1, name: 登录结果, type: uint8, enum: login_result}
-    - {len: 1, name: 登录失败原因, type: uint8}
+    - {len: 1, name: 登录失败原因, type: uint8, enum: login_fail_reason}
     - {len: 2, name: MCU软件项目号, type: uint16}
     - {len: 2, name: MCU软件版本号, type: uint16}
-    - {len: 1, name: 终端类型, type: uint8}
+    - {len: 1, name: 终端类型, type: uint8, enum: terminal_type_auto}
     - {len: 32, name: 终端桩编码, type: ascii}
 
   # cmd3 - 终端状态上报
   3:
     - {len: 1, name: 本终端枪数, type: uint8}
-    - {len: 1, name: 车连接状态, type: uint8}
+    - {len: 1, name: 车连接状态, type: uint8, enum: car_connect_status}
     - {len: 2, name: CC1电压, type: int16, scale: 0.1}
     - {len: 1, name: 枪工作状态, type: uint8, enum: gun_status}
     - {len: 4, name: 当前枪最高告警编码, type: uint32}
@@ -152,16 +268,16 @@ cmds:
   # cmd5 - 启动充电命令
   5:
     - {len: 4, name: 命令序号, type: uint32}
-    - {len: 1, name: 启动方式, type: uint8}
+    - {len: 1, name: 启动方式, type: uint8, enum: start_mode}
     - {len: 1, name: 限制SOC, type: uint8}
     - {len: 2, name: 限制充电电量, type: uint16, scale: 0.001}
     - {len: 2, name: 限功率大小, type: uint16, scale: 0.1}
     - {len: 1, name: BMS辅源电压, type: int8, scale: 0.1}
     - {len: 32, name: 订单流水号, type: ascii}
-    - {len: 1, name: VIN核对, type: uint8}
+    - {len: 1, name: VIN核对, type: uint8, enum: vin_verify}
     - {len: 17, name: 车辆VIN码, type: ascii}
     - {len: 16, name: 停止充电密码, type: ascii}
-    - {len: 1, name: 并充组网状态, type: uint8}
+    - {len: 1, name: 并充组网状态, type: uint8, enum: parallel_charge_mode}
     - {len: 1, name: 组网枪数量, type: uint8}
 
   # cmd6 - 启动充电响应
@@ -185,14 +301,14 @@ cmds:
   9:
     - {len: 4, name: 命令序号, type: uint32}
     - {len: 2, name: 启动结果, type: uint16}
-    - {len: 2, name: BMS协议类型, type: uint16}
+    - {len: 2, name: BMS协议类型, type: uint16, enum: bms_protocol_type}
     - {len: 3, name: 充电桩与 BMS 通信协议版本号, type: binary_str_3bytes}
     - {len: 3, name: BMS 与充电桩通信协议版本号, type: binary_str_3bytes}
     - {len: 2, name: 充电机最高输出电压, type: int16, scale: 0.1}
     - {len: 2, name: 充电机最低输出电压, type: int16, scale: 0.1}
     - {len: 2, name: 充电机最大输出电流, type: uint16, scale: 0.1}
     - {len: 2, name: BHM-绝缘电压, type: int16, scale: 0.1}
-    - {len: 1, name: BRM-电池类型, type: uint8}
+    - {len: 1, name: BRM-电池类型, type: uint8, enum: battery_type}
     - {len: 2, name: BRM-整车动力蓄电池系统额定容量/Ah, type: uint16}
     - {len: 2, name: BRM-整车动力蓄电池系统额定总电压/V, type: int16, scale: 0.1}
     - {len: 4, name: BRM-电池生产厂商, type: bcd4}
@@ -398,7 +514,7 @@ cmds:
   36:
     - {len: 4, name: 响应命令序号, type: uint32}
     - {len: 1, name: 启动类型, type: uint8}
-    - {len: 1, name: 鉴权结果, type: uint8}
+    - {len: 1, name: 鉴权结果, type: uint8, enum: auth_result}
     - {len: 4, name: 余额, type: uint32, scale: 0.01}
 
   # cmd37 - CCU主动上传VIN充电失败信息
@@ -478,7 +594,7 @@ cmds:
 
   # cmd111 - 主机状态上报（复杂循环结构）
   111:
-    - {len: 1, name: 主机工作状态, type: uint8}
+    - {len: 1, name: 主机工作状态, type: uint8, enum: host_work_status}
     - len: 1
       name: 热电偶1反馈
       type: bitfield8
@@ -885,8 +1001,8 @@ cmds:
 
   # cmd413 - 在线升级状态上报
   413:
-    - {len: 1, name: 设备类型, type: uint8}
-    - {len: 2, name: 升级状态, type: uint16}
+    - {len: 1, name: 设备类型, type: uint8, enum: upgrade_device_type}
+    - {len: 2, name: 升级状态, type: uint16, enum: upgrade_status}
     - {len: 1, name: 下载进度, type: uint8}
 
   # cmd415 - 在线升级复位指令下发
@@ -924,7 +1040,7 @@ cmds:
     - {len: 1, name: 终端类型, type: uint8, enum: terminal_type_auto}
     - {len: 2, name: 硬件版本, type: uint16}
     - {len: 2, name: 软件版本号, type: uint16}
-    - {len: 1, name: 执行阶段, type: uint8}
+    - {len: 1, name: 执行阶段, type: uint8, enum: workshop_stage_terminal}
     - {len: 4, name: 全自动工装结果, type: uint32}
     - {len: 2, name: 700V枪电压采数据, type: int16, scale: 0.1}
     - {len: 2, name: 700V模块电压采数据, type: int16, scale: 0.1}
@@ -990,7 +1106,7 @@ cmds:
 
   # cmd611 - 主机全自动工装模式下的实时回复数据
   611:
-    - {len: 2, name: M2全自动工装执行阶段, type: uint16}
+    - {len: 2, name: M2全自动工装执行阶段, type: uint16, enum: workshop_stage_host}
     - {len: 4, name: M2全自动工装结果, type: uint32}
     - {len: 1, name: 终端数量, type: uint8}
     - {len: 1, name: 模块数量, type: uint8}

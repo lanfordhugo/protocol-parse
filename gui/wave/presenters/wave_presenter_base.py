@@ -9,6 +9,8 @@
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from PySide6.QtCore import QTimer
+
 from gui.wave.models.wave_data_manager import (
     FieldConfig,
     WaveDataManager,
@@ -49,6 +51,8 @@ class WavePresenterBase:
         super().__init__(**kwargs)
         self._data_manager = data_manager
         self._type_detector = FieldTypeDetector()
+        self._pending_enable_fields: set[str] = set()
+        self._enable_timer_active = False
 
     @property
     def data_manager(self) -> WaveDataManager:
@@ -162,8 +166,9 @@ class WavePresenterBase:
         """
         self._data_manager.update_field_enabled(field_path, enabled)
         if enabled:
-            self._refresh_field_data(field_path)
+            self._queue_enable_field(field_path)
         else:
+            self._pending_enable_fields.discard(field_path)
             view = self._get_view()
             if view:
                 view.remove_chart_field(field_path)
@@ -185,6 +190,44 @@ class WavePresenterBase:
 
     # ============== 数据刷新 ==============
 
+    def _queue_enable_field(self, field_path: str) -> None:
+        """批量合并启用字段的刷新，减少重复遍历数据点"""
+        self._pending_enable_fields.add(field_path)
+        if self._enable_timer_active:
+            return
+        self._enable_timer_active = True
+        QTimer.singleShot(0, self._flush_pending_enables)
+
+    def _flush_pending_enables(self) -> None:
+        """处理批量启用的字段刷新"""
+        self._enable_timer_active = False
+        if not self._pending_enable_fields:
+            return
+
+        pending = list(self._pending_enable_fields)
+        self._pending_enable_fields.clear()
+
+        view = self._get_view()
+        if not view:
+            return
+
+        enabled_fields: List[str] = []
+        configs: List[FieldConfig] = []
+        for field_path in pending:
+            config = self._data_manager.get_field_config(field_path)
+            if config and config.enabled:
+                enabled_fields.append(field_path)
+                configs.append(config)
+
+        if not enabled_fields:
+            return
+
+        for config in configs:
+            view.add_chart_field(config)
+
+        plot_data = self._data_manager.get_plot_data_batch(enabled_fields)
+        view.update_all_chart_data(plot_data)
+
     def refresh_all_charts(self) -> None:
         """刷新所有启用字段的图表数据"""
         view = self._get_view()
@@ -192,11 +235,8 @@ class WavePresenterBase:
             return
 
         configs = self._data_manager.get_enabled_field_configs()
-        plot_data = {}
-
-        for config in configs:
-            timestamps, values = self._data_manager.get_plot_data(config.field_path)
-            plot_data[config.field_path] = (timestamps, values)
+        field_paths = [c.field_path for c in configs]
+        plot_data = self._data_manager.get_plot_data_batch(field_paths)
 
         view.update_all_chart_data(plot_data)
         view.update_data_count(self._data_manager.data_count)

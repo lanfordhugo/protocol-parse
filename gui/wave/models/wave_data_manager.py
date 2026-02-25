@@ -16,6 +16,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
+import numpy as np
+
 from gui.wave.utils.field_type_detector import FieldType, FieldTypeDetector
 from gui.wave.utils.chart_type_mapper import ChartType, ChartTypeMapper
 
@@ -117,9 +119,16 @@ class WaveDataManager:
 
         # 字段类型检测器
         self._type_detector = FieldTypeDetector(protocol_config)
+        # YAML 字段顺序映射 {cmd_id: {field_name: order}}
+        self._yaml_field_order_by_cmd: Dict[int, Dict[str, int]] = {}
+        self.set_protocol_config(protocol_config)
 
         # 颜色分配计数器
         self._color_index = 0
+
+        # 时间索引（加速范围查询）
+        self._timestamp_array: Optional[np.ndarray] = None
+        self._timestamp_dirty: bool = True
 
     # ============== 数据操作 ==============
 
@@ -161,9 +170,9 @@ class WaveDataManager:
 
         with self._lock:
             # 自动检测并注册新字段（enabled=False，仅发现）
-            # 使用 enumerate 记录字段在 YAML 中的定义顺序
-            for field_order, (field_path, value) in enumerate(values.items()):
+            for observed_order, (field_path, value) in enumerate(values.items()):
                 if field_path not in self._field_configs:
+                    field_order = self._resolve_field_order(field_path, cmd_id, observed_order)
                     config = self._auto_register_field(field_path, value, cmd_id, field_order)
                     if config:
                         new_configs.append(config)
@@ -182,6 +191,7 @@ class WaveDataManager:
                     direction=direction,
                 )
                 self._data_points.append(point)
+                self._timestamp_dirty = True
 
         return point, new_configs
 
@@ -211,7 +221,7 @@ class WaveDataManager:
         end: Optional[datetime] = None,
     ) -> List[DataPoint]:
         """
-        查询时间范围内的数据点
+        查询时间范围内的数据点（使用二分查找加速）
 
         Args:
             start: 起始时间（None 表示不限）
@@ -221,17 +231,43 @@ class WaveDataManager:
             时间范围内的数据点列表
         """
         with self._lock:
+            if not self._data_points:
+                return []
+
+            # 无范围限制，返回全部
             if start is None and end is None:
                 return list(self._data_points)
 
-            result = []
-            for point in self._data_points:
-                if start and point.timestamp < start:
-                    continue
-                if end and point.timestamp > end:
-                    continue
-                result.append(point)
-            return result
+            # 重建时间索引（如果需要）
+            if self._timestamp_dirty or self._timestamp_array is None:
+                self._rebuild_timestamp_index_unlocked()
+
+            if self._timestamp_array is None or len(self._timestamp_array) == 0:
+                return []
+
+            # 使用二分查找定位范围
+            start_ts = start.timestamp() if start else float(self._timestamp_array[0])
+            end_ts = end.timestamp() if end else float(self._timestamp_array[-1])
+
+            start_idx = int(np.searchsorted(self._timestamp_array, start_ts, 'left'))
+            end_idx = int(np.searchsorted(self._timestamp_array, end_ts, 'right'))
+
+            # 转换 deque 为列表后切片（deque 不支持随机切片）
+            data_list = list(self._data_points)
+            return data_list[start_idx:end_idx]
+
+    def _rebuild_timestamp_index_unlocked(self) -> None:
+        """重建时间索引（调用时已持有锁）"""
+        if not self._data_points:
+            self._timestamp_array = None
+            self._timestamp_dirty = False
+            return
+
+        self._timestamp_array = np.array(
+            [p.timestamp.timestamp() for p in self._data_points],
+            dtype=np.float64
+        )
+        self._timestamp_dirty = False
 
     def get_latest_data(self, seconds: float) -> List[DataPoint]:
         """
@@ -261,6 +297,7 @@ class WaveDataManager:
         """清空所有数据"""
         with self._lock:
             self._data_points.clear()
+            self._timestamp_dirty = True
 
     def reset(self) -> None:
         """完整重置：清空数据点、字段配置、录制状态和颜色计数器"""
@@ -270,6 +307,7 @@ class WaveDataManager:
             self._recording_fields.clear()
             self._record_all_mode = False
             self._color_index = 0
+            self._timestamp_dirty = True
 
     @property
     def data_count(self) -> int:
@@ -316,6 +354,16 @@ class WaveDataManager:
         """
         with self._lock:
             self._field_configs[config.field_path] = config
+
+    def set_protocol_config(self, protocol_config: Optional[Any]) -> None:
+        """
+        设置协议配置并重建 YAML 字段顺序映射。
+
+        Args:
+            protocol_config: 协议配置对象（YamlCmdFormat 或 ProtocolConfig）
+        """
+        self._type_detector = FieldTypeDetector(protocol_config)
+        self._yaml_field_order_by_cmd = self._build_yaml_field_order_map(protocol_config)
 
     def remove_field_config(self, field_path: str) -> Optional[FieldConfig]:
         """
@@ -460,6 +508,58 @@ class WaveDataManager:
 
         return timestamps, values
 
+    def get_plot_data_batch(
+        self,
+        field_paths: List[str],
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
+    ) -> Dict[str, Tuple[List[float], List[Optional[float]]]]:
+        """
+        批量获取多个字段的绘图数据（单次遍历数据点）
+        Args:
+            field_paths: 字段路径列表
+            start: 起始时间
+            end: 结束时间
+
+        Returns:
+            {field_path: (timestamps, values)}
+        """
+        if not field_paths:
+            return {}
+
+        with self._lock:
+            configs = {
+                fp: self._field_configs.get(fp)
+                for fp in field_paths
+                if fp in self._field_configs
+            }
+
+        if not configs:
+            return {}
+
+        points = self.get_data_in_range(start, end)
+        wanted = set(configs.keys())
+
+        timestamps_map: Dict[str, List[float]] = {fp: [] for fp in configs}
+        values_map: Dict[str, List[Optional[float]]] = {fp: [] for fp in configs}
+
+        for point in points:
+            ts = point.timestamp.timestamp()
+            for fp, raw_value in point.values.items():
+                if fp not in wanted:
+                    continue
+                config = configs[fp]
+                if not config:
+                    continue
+                numeric_value = self._type_detector.extract_numeric_value(
+                    raw_value, config.field_type
+                )
+                if numeric_value is not None:
+                    timestamps_map[fp].append(ts)
+                    values_map[fp].append(numeric_value)
+
+        return {fp: (timestamps_map[fp], values_map[fp]) for fp in configs}
+
     # ============== 数据导入/导出 ==============
 
     def export_to_json(self, file_path: str, enabled_only: bool = True) -> int:
@@ -493,6 +593,7 @@ class WaveDataManager:
                         "color": c.color,
                         "enabled": c.enabled,
                         "cmd_id": c.cmd_id,
+                        "field_order": c.field_order,
                     }
                     for c in export_configs
                 ],
@@ -587,15 +688,21 @@ class WaveDataManager:
             data = json.load(f)
 
         # 恢复字段配置
-        for cfg_data in data.get("field_configs", []):
+        for import_order, cfg_data in enumerate(data.get("field_configs", [])):
+            cmd_id = cfg_data.get("cmd_id")
+            field_path = cfg_data["field_path"]
             config = FieldConfig(
-                field_path=cfg_data["field_path"],
+                field_path=field_path,
                 display_name=cfg_data["display_name"],
                 field_type=FieldType[cfg_data["field_type"]],
                 chart_type=ChartType[cfg_data["chart_type"]],
                 color=cfg_data["color"],
                 enabled=cfg_data.get("enabled", True),
-                cmd_id=cfg_data.get("cmd_id"),
+                cmd_id=cmd_id,
+                field_order=cfg_data.get(
+                    "field_order",
+                    self._resolve_field_order(field_path, cmd_id, import_order),
+                ),
             )
             self.add_field_config(config)
 
@@ -621,6 +728,7 @@ class WaveDataManager:
         with self._lock:
             sorted_points = sorted(self._data_points, key=lambda p: p.timestamp)
             self._data_points = deque(sorted_points, maxlen=self._max_data_points)
+            self._timestamp_dirty = True
 
         logger.info("已从 %s 导入 %d 个数据点", file_path, count)
         return count
@@ -716,6 +824,90 @@ class WaveDataManager:
 
         logger.debug("发现字段: %s (类型=%s, 图表=%s, 录制=%s)", field_path, field_type.name, chart_type.name, auto_enabled)
         return config
+
+    def _resolve_field_order(
+        self,
+        field_path: str,
+        cmd_id: Optional[int],
+        observed_order: int,
+    ) -> int:
+        """
+        计算字段显示顺序。
+
+        优先使用 YAML 定义顺序；若未知字段则落在 YAML 字段之后，
+        并保持其在当前报文中的出现顺序。
+        """
+        if cmd_id is None:
+            return observed_order
+
+        try:
+            cmd_key = int(cmd_id)
+        except (TypeError, ValueError):
+            return observed_order
+
+        cmd_order_map = self._yaml_field_order_by_cmd.get(cmd_key)
+        if not cmd_order_map:
+            return observed_order
+
+        return cmd_order_map.get(field_path, len(cmd_order_map) + observed_order)
+
+    def _build_yaml_field_order_map(
+        self,
+        protocol_config: Optional[Any],
+    ) -> Dict[int, Dict[str, int]]:
+        """
+        从协议配置构建 {cmd_id: {field_name: order}} 映射。
+        """
+        if protocol_config is None:
+            return {}
+
+        cmds = None
+        if hasattr(protocol_config, "config") and hasattr(protocol_config.config, "cmds"):
+            cmds = protocol_config.config.cmds
+        elif hasattr(protocol_config, "cmds"):
+            cmds = protocol_config.cmds
+
+        if not isinstance(cmds, dict):
+            return {}
+
+        result: Dict[int, Dict[str, int]] = {}
+        for raw_cmd_id, field_items in cmds.items():
+            try:
+                cmd_id = int(raw_cmd_id)
+            except (TypeError, ValueError):
+                continue
+
+            order_map: Dict[str, int] = {}
+            for index, field_def in enumerate(self._iter_field_defs(field_items)):
+                field_name = getattr(field_def, "name", None)
+                if not field_name:
+                    continue
+                if field_name not in order_map:
+                    order_map[field_name] = index
+
+            if order_map:
+                result[cmd_id] = order_map
+
+        return result
+
+    def _iter_field_defs(self, field_items: Any):
+        """
+        递归遍历字段定义（展开 group 和 bit_groups）。
+        """
+        if not field_items:
+            return
+        for item in field_items:
+            if hasattr(item, "name"):
+                yield item
+                # 处理 bitfield 的 bit_groups 子字段
+                if hasattr(item, "bit_groups") and item.bit_groups:
+                    for bit_group in item.bit_groups:
+                        # bit_group 可能是 dict 或对象
+                        name = bit_group.get("name") if isinstance(bit_group, dict) else getattr(bit_group, "name", None)
+                        if name:
+                            yield type("_BitGroupRef", (), {"name": name})()
+            elif hasattr(item, "fields"):
+                yield from self._iter_field_defs(getattr(item, "fields", []))
 
     @staticmethod
     def _serialize_values(values: Dict[str, Any]) -> Dict[str, Any]:

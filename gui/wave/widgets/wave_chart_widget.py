@@ -25,6 +25,8 @@ from gui.wave.utils.chart_type_mapper import ChartType, ChartTypeMapper
 
 logger = logging.getLogger(__name__)
 
+MIN_X_WINDOW_WIDTH_S = 0.01  # 10ms：波形窗口最小时间宽度（继续放大无意义）
+
 # 多级精度（LOD）配置：(阈值, 目标点数)
 # 当数据点数超过阈值时，降采样到目标点数
 LOD_LEVELS = [
@@ -625,7 +627,26 @@ class WaveChartWidget(QWidget):
     def get_x_range_width(self) -> float:
         """获取当前X轴显示宽度（秒）"""
         view_range = self._plot_widget.viewRange()
-        return max(1.0, view_range[0][1] - view_range[0][0])
+        return max(1e-9, view_range[0][1] - view_range[0][0])
+
+    def _get_all_data_time_range(self) -> Optional[Tuple[float, float]]:
+        """获取当前所有曲线的时间范围（用于缩放上限判定）"""
+        x_min: Optional[float] = None
+        x_max: Optional[float] = None
+        for plot_item in self._plot_items.values():
+            x_data = plot_item.xData
+            if x_data is None or len(x_data) == 0:
+                continue
+            # 时间序列通常已按时间排序，首尾可视作范围端点
+            left = float(x_data[0])
+            right = float(x_data[-1])
+            if x_min is None or left < x_min:
+                x_min = left
+            if x_max is None or right > x_max:
+                x_max = right
+        if x_min is None or x_max is None:
+            return None
+        return (x_min, x_max)
 
     def scroll_to_latest(self) -> None:
         """滚动到最新数据"""
@@ -688,6 +709,7 @@ class WaveChartWidget(QWidget):
         - 鼠标在 X 轴标签区域：仅缩放 X 轴
         - 鼠标在 Y 轴标签区域：仅缩放 Y 轴
         - 鼠标在绑图区域内：仅缩放 X 轴（时间序列图以时间缩放为主）
+        - X 轴缩放限制：最小 10ms；缩小到能覆盖全部数据点后不再继续缩小
         """
         delta = event.angleDelta().y()
         if delta == 0:
@@ -713,10 +735,37 @@ class WaveChartWidget(QWidget):
         if y_axis_scene_rect.contains(scene_pos):
             # Y 轴区域：仅缩放 Y 轴
             vb.scaleBy((1, factor), center=mouse_data)
-        elif x_axis_scene_rect.contains(scene_pos):
-            # 仅 X 轴区域：缩放 X 轴（绘图区域不触发缩放）
-            vb.scaleBy((factor, 1), center=mouse_data)
-            self.user_interacted.emit()
+            return
+
+        # X 轴缩放：X 轴标签区域 + 绘图区域
+        if not (x_axis_scene_rect.contains(scene_pos) or vb_scene_rect.contains(scene_pos)):
+            return
+
+        current_width = self.get_x_range_width()
+        new_width = current_width * factor
+
+        # 放大（窗口更窄）到 10ms 后不再继续放大
+        if factor < 1:
+            if current_width <= MIN_X_WINDOW_WIDTH_S:
+                return
+            if new_width < MIN_X_WINDOW_WIDTH_S:
+                vb.scaleBy((MIN_X_WINDOW_WIDTH_S / current_width, 1), center=mouse_data)
+                self.user_interacted.emit()
+                return
+
+        # 缩小（窗口更宽）到能覆盖全部数据点后不再继续缩小，并贴齐全量数据范围
+        if factor > 1:
+            data_range = self._get_all_data_time_range()
+            if data_range:
+                data_min, data_max = data_range
+                data_width = data_max - data_min
+                if data_width > 0 and new_width >= data_width:
+                    self._plot_widget.setXRange(data_min, data_max, padding=0)
+                    self.user_interacted.emit()
+                    return
+
+        vb.scaleBy((factor, 1), center=mouse_data)
+        self.user_interacted.emit()
 
     def _on_mouse_moved(self, scene_pos) -> None:
         """鼠标移动事件 - 吸附到最近数据点，更新十字光标和 Tooltip"""

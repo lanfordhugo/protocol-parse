@@ -50,3 +50,6 @@ memory-bank
 
 # Git worktrees
 .worktrees/
+
+# 工具目录（包含大文件）
+.tools/

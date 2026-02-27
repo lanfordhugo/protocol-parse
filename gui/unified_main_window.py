@@ -19,6 +19,7 @@ from PySide6.QtGui import QAction, QShortcut, QKeySequence
 
 from .sidebar import Sidebar
 from .normal_parse_page import NormalParsePage
+from .can_parse_page import CanParsePage
 from .wave_replay_page import WaveReplayPage
 from shared import get_unified_theme
 from tcp_log.server_panel import TcpServerPage
@@ -27,6 +28,7 @@ from gui.config import CONFIGS_DIR, TCP_OUTPUT_DIR
 from gui.models.protocol_model import ProtocolModel
 from gui.models.parse_model import ParseModel
 from gui.presenters.normal_parse_presenter import NormalParsePresenter
+from gui.presenters.can_parse_presenter import CanParsePresenter
 from gui.wave.models.wave_data_manager import WaveDataManager
 from gui.wave.presenters.replay_presenter import ReplayPresenter
 from tcp_log.models.tcp_server_model import TcpServerModel
@@ -55,6 +57,7 @@ class UnifiedMainWindow(
 
         # 创建页面
         self._normal_page = None
+        self._can_parse_page = None
         self._tcp_server_page = None
         self._wave_replay_page = None
 
@@ -99,7 +102,12 @@ class UnifiedMainWindow(
         self._normal_page.status_changed.connect(self._update_status)
         self._stacked_widget.addWidget(self._normal_page)
 
-        # 页面 2：TCP 服务端
+        # 页面 2：CAN解析
+        self._can_parse_page = CanParsePage()
+        self._can_parse_page.status_changed.connect(self._update_status)
+        self._stacked_widget.addWidget(self._can_parse_page)
+
+        # 页面 3：TCP 服务端
         self._tcp_server_page = TcpServerPage()
         self._tcp_server_page.status_changed.connect(self._update_status)
         self._stacked_widget.addWidget(self._tcp_server_page)
@@ -150,6 +158,13 @@ class UnifiedMainWindow(
         )
         self._tcp_server_page.set_presenter(self._tcp_presenter)
 
+        # CanParsePage MVP
+        self._can_parse_presenter = CanParsePresenter(
+            view=self._can_parse_page,
+            settings=self._settings,
+        )
+        self._can_parse_page.set_presenter(self._can_parse_presenter)
+
         # WaveReplayPage MVP
         replay_data_manager = WaveDataManager()
         self._replay_presenter = ReplayPresenter(
@@ -179,13 +194,18 @@ class UnifiedMainWindow(
         normal_action.triggered.connect(lambda: self._on_page_requested('normal'))
         view_menu.addAction(normal_action)
 
-        tcp_action = QAction("TCP 服务端(&2)", self)
-        tcp_action.setShortcut("Ctrl+2")
+        can_action = QAction("CAN解析(&2)", self)
+        can_action.setShortcut("Ctrl+2")
+        can_action.triggered.connect(lambda: self._on_page_requested('can_parse'))
+        view_menu.addAction(can_action)
+
+        tcp_action = QAction("TCP 服务端(&3)", self)
+        tcp_action.setShortcut("Ctrl+3")
         tcp_action.triggered.connect(lambda: self._on_page_requested('tcp_server'))
         view_menu.addAction(tcp_action)
 
-        replay_action = QAction("数据回放(&3)", self)
-        replay_action.setShortcut("Ctrl+3")
+        replay_action = QAction("数据回放(&4)", self)
+        replay_action.setShortcut("Ctrl+4")
         replay_action.triggered.connect(lambda: self._on_page_requested('wave_replay'))
         view_menu.addAction(replay_action)
 
@@ -225,6 +245,11 @@ class UnifiedMainWindow(
             self._sidebar.set_current_page('normal')
             self._current_page = 'normal'
             self._update_status("普通解析")
+        elif page == 'can_parse':
+            self._stacked_widget.setCurrentWidget(self._can_parse_page)
+            self._sidebar.set_current_page('can_parse')
+            self._current_page = 'can_parse'
+            self._update_status("CAN解析")
         elif page == 'tcp_server':
             self._stacked_widget.setCurrentWidget(self._tcp_server_page)
             self._sidebar.set_current_page('tcp_server')
@@ -238,7 +263,7 @@ class UnifiedMainWindow(
 
     def _on_next_page(self):
         """切换到下一个页面(Ctrl+Tab)"""
-        pages = ['normal', 'tcp_server', 'wave_replay']
+        pages = ['normal', 'can_parse', 'tcp_server', 'wave_replay']
         idx = pages.index(self._current_page) if self._current_page in pages else 0
         next_page = pages[(idx + 1) % len(pages)]
         self._on_page_requested(next_page)
@@ -272,6 +297,9 @@ class UnifiedMainWindow(
         # 清理页面资源
         if self._normal_page and hasattr(self._normal_page, 'cleanup'):
             self._normal_page.cleanup()
+
+        if self._can_parse_page and hasattr(self._can_parse_page, 'cleanup'):
+            self._can_parse_page.cleanup()
 
         if self._tcp_server_page and hasattr(self._tcp_server_page, 'cleanup'):
             self._tcp_server_page.cleanup()

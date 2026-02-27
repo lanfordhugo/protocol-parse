@@ -16,12 +16,13 @@ class Sidebar(QWidget):
     """侧边栏导航组件"""
 
     # 信号：页面切换请求
-    page_requested = Signal(str)  # 'normal' / 'tcp_server' / 'wave_replay'
+    page_requested = Signal(str)  # 'normal' / 'can_parse' / 'tcp_server' / 'wave_replay'
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._current_page = 'normal'
         self._normal_btn = None
+        self._can_parse_btn = None
         self._tcp_btn = None
         self._wave_replay_btn = None
         self._setup_ui()
@@ -54,6 +55,14 @@ class Sidebar(QWidget):
             checked=True
         )
         nav_layout.addWidget(self._normal_btn)
+
+        # CAN解析按钮
+        self._can_parse_btn = self._create_nav_button(
+            icon="🔌",
+            text="CAN解析",
+            description="V6 CAN总线报文解析"
+        )
+        nav_layout.addWidget(self._can_parse_btn)
 
         # TCP 服务端按钮
         self._tcp_btn = self._create_nav_button(
@@ -167,6 +176,8 @@ class Sidebar(QWidget):
         if emit_signal:
             if text == "普通解析":
                 self.page_requested.emit('normal')
+            elif text == "CAN解析":
+                self.page_requested.emit('can_parse')
             elif text == "TCP 服务端":
                 self.page_requested.emit('tcp_server')
             elif text == "数据回放":
@@ -178,6 +189,8 @@ class Sidebar(QWidget):
         # 更新按钮状态（不发射信号，避免循环）
         if page == 'normal':
             self._on_nav_clicked(self._normal_btn, "普通解析", emit_signal=False)
+        elif page == 'can_parse':
+            self._on_nav_clicked(self._can_parse_btn, "CAN解析", emit_signal=False)
         elif page == 'tcp_server':
             self._on_nav_clicked(self._tcp_btn, "TCP 服务端", emit_signal=False)
         elif page == 'wave_replay':

@@ -237,7 +237,7 @@ def parse_command_ids(cmd_str: str) -> list:
         for part in cmd_str.split(","):
             part = part.strip()
             if part:
-                cmd_id = int(part)
+                cmd_id = int(part, 16) if part.startswith(('0x', '0X')) else int(part)
                 if cmd_id < 0:
                     print(f"警告: 命令ID不能为负数，已忽略: {cmd_id}")
                     continue

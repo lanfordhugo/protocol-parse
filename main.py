@@ -14,6 +14,7 @@ from typing import Dict, Any, Optional, Tuple
 from datetime import datetime
 
 from src.yaml_unified_protocol import YamlUnifiedProtocol
+from src.can_unified_protocol import CanUnifiedProtocol
 from src.time_parser import TimeParser, parse_command_ids
 from src.log_scanner import LogScanner
 
@@ -92,6 +93,36 @@ def _show_log_statistics(log_path: str):
         print(f"\n警告: 无法获取统计信息: {e}\n")
 
 
+def _run_can_protocol(
+    log_file: str,
+    config_path: str,
+    time_range: Optional[Tuple[datetime, datetime]] = None,
+    include_cmds: Optional[list] = None,
+    exclude_cmds: Optional[list] = None,
+) -> bool:
+    """
+    运行 CAN 协议解析（使用 CanUnifiedProtocol）
+
+    参数:
+        log_file: CAN日志文件路径
+        config_path: YAML配置文件路径
+        time_range: 时间范围过滤
+        include_cmds: 包含的PF码列表
+        exclude_cmds: 排除的PF码列表
+    """
+    protocol = CanUnifiedProtocol(log_file, config_path)
+
+    if time_range:
+        protocol.set_time_range(time_range[0], time_range[1])
+    if include_cmds:
+        protocol.set_include_cmds(include_cmds)
+    if exclude_cmds:
+        protocol.set_exclude_cmds(exclude_cmds)
+
+    output_path = protocol.run()
+    return output_path is not None
+
+
 def run_protocol(protocol_name: str,
                 log_file: Optional[str] = None,
                 time_range: Optional[Tuple[datetime, datetime]] = None,
@@ -147,37 +178,43 @@ def run_protocol(protocol_name: str,
             print(f"提示: 日志文件 {log_path} 当前为空，请拷贝协议日志内容到该文件后重试。")
             return False
 
-        # 创建协议解析器
+        # 打印过滤信息
+        filter_applied = False
+        if time_range:
+            print(f"\n时间过滤: {TimeParser.format_time_range(time_range[0], time_range[1])}")
+            filter_applied = True
+        if include_cmds:
+            print(f"包含命令: {include_cmds}")
+            filter_applied = True
+        if exclude_cmds:
+            print(f"排除命令: {exclude_cmds}")
+            filter_applied = True
+        if filter_applied:
+            print()
+
+        # CAN协议使用专用解析器
+        if protocol_name == 'v6_can':
+            return _run_can_protocol(
+                str(log_path),
+                protocol_info['yaml_config'],
+                time_range=time_range,
+                include_cmds=include_cmds,
+                exclude_cmds=exclude_cmds,
+            )
+
+        # 普通协议使用 YamlUnifiedProtocol
         protocol = YamlUnifiedProtocol(
             str(log_path),
             protocol_info['yaml_config']
         )
 
-        # 应用过滤器
-        filter_applied = False
-
-        # 时间过滤
         if time_range:
-            start_time, end_time = time_range
-            protocol.set_time_range(start_time, end_time)
-            print(f"\n时间过滤: {TimeParser.format_time_range(start_time, end_time)}")
-            filter_applied = True
-
-        # 命令过滤
+            protocol.set_time_range(time_range[0], time_range[1])
         if include_cmds:
             protocol.set_include_cmds(include_cmds)
-            print(f"包含命令: {include_cmds}")
-            filter_applied = True
-
         if exclude_cmds:
             protocol.set_exclude_cmds(exclude_cmds)
-            print(f"排除命令: {exclude_cmds}")
-            filter_applied = True
 
-        if filter_applied:
-            print()  # 过滤信息后空一行
-
-        # 运行解析
         protocol.run()
 
         return True
@@ -256,6 +293,11 @@ def main():
 
   # 组合过滤
   python main.py v8 --time-last "1h" --include-cmds "2,3"
+
+  # CAN协议解析
+  python main.py v6_can --log-file "path/to/tcu_can.log"       # 解析TCU日志
+  python main.py v6_can --log-file "path/to/can.csv"           # 解析CSV日志
+  python main.py v6_can --log-file "can.log" --include-cmds "0x10,0x14"  # PF码过滤
 
   # 日志管理
   python main.py v8 --log-file "/path/to/custom.log"  # 使用自定义日志文件

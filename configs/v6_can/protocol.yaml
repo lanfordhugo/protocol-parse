@@ -1,0 +1,540 @@
+meta:
+  protocol: v6_can
+  version: 1.5
+  protocol_type: can
+  default_endian: LE
+  notes: V6设备MCU与CCU之间CAN总线报文解析配置
+
+types:
+  uint8:   { base: uint, bytes: 1, signed: false }
+  uint16:  { base: uint, bytes: 2, signed: false }
+  uint32:  { base: uint, bytes: 4, signed: false }
+  int16:   { base: int,  bytes: 2, signed: true }
+  ascii:   { base: str,  encoding: ASCII }
+  hex:     { base: hex }
+  bitfield8:  { base: bitfield, bytes: 1, order: lsb0 }
+
+enums:
+  u_disk_status:
+    0: 空闲
+    1: 模块DC升级中
+    2: 模块AC升级中
+    3: 分体控制器升级中
+    4: 充电记录导出中
+    5: 日志导出中
+    6: BMS数据导出中
+    7: 充电曲线导出中
+    8: 自定义数据导出中
+    9: 导出完成
+    10: 模块升级完成
+
+  pf_names:
+    0x01: 充电启动帧
+    0x02: 启动应答帧
+    0x03: 启动完成应答帧
+    0x04: 启动完成帧
+    0x05: 充电停止帧
+    0x06: 停止应答帧
+    0x07: 停止完成应答帧
+    0x08: 停止完成帧
+    0x09: 下发对时帧
+    0x0A: 对时应答帧
+    0x0B: 校验版本
+    0x0C: 版本确认
+    0x0D: 电子锁控制
+    0x0E: 电子锁控制反馈
+    0x0F: 监控板广播心跳包
+    0x10: 控制板状态信息上报
+    0x12: 控制板告警信息上报1
+    0x13: 控制板告警信息上报2
+    0x14: 充电中BMS实时数据帧
+    0x16: 充电中BMS缓慢变化数据帧
+    0x18: 轮询充电各枪通道状态上报
+    0x19: 控制板配置信息设置
+    0x1A: 控制板配置信息设置应答
+    0x1B: 控制板配置信息获取
+    0x1C: 控制板配置信息获取应答
+    0x1D: 监控板错误状态帧
+    0x1E: 控制板错误状态帧
+    0x20: 控制板上传交流侧信息
+    0x22: 控制板上传系统信息
+    0x24: 控制板上传设置命令
+    0x25: 向控制板获取指定模块信息
+    0x26: 控制板回复指定模块信息
+    0x27: TCU回复VIN确认
+    0x28: 控制板上报当前车辆VIN码
+    0x29: 发送预充电处理命令
+    0x30: 预充电控制板确认
+    0x50: 并充专用帧
+    0x51: 事件记录
+    0x52: 模块版本信息
+    0x61: 进入升级模式
+    0x62: 控制板应答升级命令
+    0x63: TCU回复升级文件数据
+    0x64: 控制器拉取升级数据
+    0x65: TCU回复控制器拉取升级文件结果
+    0x66: 控制器回复升级状态
+    0x72: 控制板U盘状态帧
+    0x73: 事件记录
+    0x74: 电压电流实时数据帧
+    0x76: 控制器实时数据帧
+    0x78: 项目类型9-控制器实时数据帧
+    0x79: 开启自动化测试
+    0x7A: 自动化测试数据
+    0x7C: 手动测试帧
+
+cmds:
+  # PF 0x01 - 充电启动帧
+  1:
+    - {len: 1, name: 启动方式, type: uint8}
+    - {len: 1, name: 辅源类型, type: uint8}
+    - {len: 1, name: 停止SOC, type: uint8}
+
+  # PF 0x02 - 启动应答帧
+  2:
+    - {len: 1, name: 执行结果, type: uint8}
+
+  # PF 0x03 - 启动完成应答帧
+  3:
+    - {len: 1, name: 固定字节, type: uint8}
+
+  # PF 0x04 - 启动完成帧（长帧）
+  4:
+    - {len: 1, name: 执行结果, type: uint8}
+    - {len: 1, name: 枪通道号, type: uint8}
+    - {len: 3, name: 充电桩与BMS通信协议版本号, type: hex}
+    - {len: 3, name: BMS与充电桩通信协议版本号, type: hex}
+    - {len: 2, name: 充电机最高输出电压, type: uint16}
+    - {len: 2, name: 充电机最低输出电压, type: uint16}
+    - {len: 2, name: 充电机最大输出电流, type: uint16}
+    - {len: 17, name: BRM车辆VIN, type: ascii}
+    - {len: 2, name: 开启失败原因, type: uint16}
+    - {len: 2, name: 扩展码标识, type: uint16}
+    - {len: 2, name: 主枪绝缘设置电压, type: uint16}
+    - {len: 2, name: 主枪绝缘正电阻(无符号), type: uint16}
+    - {len: 2, name: 主枪绝缘负电阻(无符号), type: uint16}
+    - {len: 2, name: 主枪第一次绝缘正电压, type: uint16}
+    - {len: 2, name: 主枪第一次绝缘负电压, type: uint16}
+    - {len: 2, name: 主枪第二次绝缘正电压, type: uint16}
+    - {len: 2, name: 主枪第二次绝缘负电压, type: uint16}
+    - {len: 2, name: 副枪绝缘设置电压, type: uint16}
+    - {len: 2, name: 副枪绝缘正电阻(无符号), type: uint16}
+    - {len: 2, name: 副枪绝缘负电阻(无符号), type: uint16}
+    - {len: 2, name: 副枪第一次绝缘正电压, type: uint16}
+    - {len: 2, name: 副枪第一次绝缘负电压, type: uint16}
+    - {len: 2, name: 副枪第二次绝缘正电压, type: uint16}
+    - {len: 2, name: 副枪第二次绝缘负电压, type: uint16}
+    - {len: 2, name: 主枪预启动枪头电压, type: uint16}
+    - {len: 2, name: 主枪预启动模块电压, type: uint16}
+    - {len: 2, name: 副枪预启动枪头电压, type: uint16}
+    - {len: 2, name: 副枪预启动模块电压, type: uint16}
+    - {len: 1, name: BMS协议类型, type: uint8}
+    - {len: 2, name: BCP电压异常产生BCP电压异常枪头电压值, type: uint16}
+    - {len: 2, name: BCP电压异常产生BCP电压异常的前一时刻枪头电压值, type: uint16}
+    - {len: 2, name: BCP单体最高允许电压, type: uint16}
+    - {len: 2, name: BCP最高允许充电电流, type: uint16}
+    - {len: 2, name: BCP动力蓄电池标称总能量, type: uint16}
+    - {len: 2, name: BCP最高允许充电总电压, type: uint16}
+    - {len: 1, name: BCP最高允许温度, type: uint8}
+    - {len: 2, name: BCP整车动力蓄电池荷电状态, type: uint16}
+    - {len: 2, name: BCP整车动力蓄电池当前电池电压, type: uint16}
+    - {len: 1, name: BRM电池类型, type: uint8}
+    - {len: 2, name: BRM整车动力蓄电池系统额定容量, type: uint16}
+    - {len: 2, name: BRM整车动力蓄电池系统额定总电压, type: uint16}
+    - {len: 2, name: 绝缘电压异常时模块电压值, type: uint16}
+    - {len: 4, name: BRM-电池生产厂商, type: uint32}
+    - {len: 4, name: BRM-电池组序号, type: uint32}
+    - {len: 2, name: BRM-电池组生厂日期-年, type: uint16}
+    - {len: 1, name: BRM-电池组生厂日期-月, type: uint8}
+    - {len: 1, name: BRM-电池组生厂日期-日, type: uint8}
+    - {len: 4, name: BRM-电池组充电次数, type: uint32}
+    - {len: 1, name: BRM-电池组产权标识, type: uint8}
+    - {len: 8, name: BRM-BMS软件版本号, type: hex}
+
+  # PF 0x05 - 充电停止帧
+  5:
+    - {len: 2, name: 停止充电原因, type: uint16}
+
+  # PF 0x06 - 停止应答帧
+  6:
+    - {len: 1, name: 执行结果, type: uint8}
+
+  # PF 0x08 - 停止完成帧（长帧）
+  8:
+    - {len: 2, name: 停止充电原因, type: uint16}
+    - {len: 4, name: 充电电量, type: uint32}
+    - {len: 2, name: BSD-动力蓄电池单体最低电压, type: uint16}
+    - {len: 2, name: BSD-动力蓄电池单体最高电压, type: uint16}
+    - {len: 1, name: BSD-动力蓄电池最低温度, type: uint8}
+    - {len: 1, name: BSD-动力蓄电池最高温度, type: uint8}
+    - {len: 1, name: BSD-中止荷电状态SOC, type: uint8}
+    - {len: 2, name: 停止参数1, type: uint16}
+    - {len: 2, name: 停止参数2, type: uint16}
+    - {len: 2, name: 停止参数3, type: uint16}
+    - {len: 2, name: 停止参数4, type: uint16}
+    - {len: 2, name: 停止参数5, type: uint16}
+    - {len: 2, name: 停止参数6, type: uint16}
+    - {len: 2, name: 停止参数7, type: uint16}
+    - {len: 2, name: 停止参数8, type: uint16}
+    - {len: 1, name: BST-充电机中止原因, type: uint8}
+    - {len: 2, name: BST-中止充电故障原因, type: uint16}
+    - {len: 1, name: BST-中止充电错误原因, type: uint8}
+    - {len: 1, name: BEM-字节1, type: uint8}
+    - {len: 1, name: BEM-字节2, type: uint8}
+    - {len: 1, name: BEM-字节3, type: uint8}
+    - {len: 1, name: BEM-字节4, type: uint8}
+
+  # PF 0x09 - 下发对时帧（特殊解析：报文种类=0为时间，=1为桩编码）
+  9:
+    - {len: 1, name: 报文种类, type: uint8}
+    - {len: 7, name: 时间或桩编码, type: hex}
+
+  # PF 0x0F(15) - 监控板广播心跳包（bit级）
+  15:
+    - len: 1
+      name: 心跳状态字节1
+      type: bitfield8
+      bit_groups:
+        - {name: 控制板报文帧同步标志, start_bit: 0, width: 1}
+        - {name: 广告灯亮灭控制状态, start_bit: 1, width: 1}
+        - {name: 集中器与后台通讯状态, start_bit: 2, width: 1}
+        - {name: 预留1, start_bit: 3, width: 5}
+    - {len: 2, name: 每个枪的告警灯控制, type: uint16}
+    - len: 1
+      name: 心跳状态字节4
+      type: bitfield8
+      bit_groups:
+        - {name: 上传模块版本信息, start_bit: 0, width: 1}
+        - {name: 预留2, start_bit: 1, width: 3}
+        - {name: 控制器起始偏移地址, start_bit: 4, width: 4}
+
+  # PF 0x10(16) - 控制板状态信息上报（bit级）
+  16:
+    - len: 1
+      name: 状态字节1
+      type: bitfield8
+      bit_groups:
+        - {name: 控制板工作状态, start_bit: 0, width: 4}
+        - {name: 是否连接车辆, start_bit: 4, width: 1}
+        - {name: 充电枪是否归位, start_bit: 5, width: 1}
+        - {name: 充电枪电子锁状态, start_bit: 6, width: 1}
+        - {name: 绝缘检测状态, start_bit: 7, width: 1}
+    - len: 1
+      name: 状态字节2
+      type: bitfield8
+      bit_groups:
+        - {name: 充电桩舱门状态, start_bit: 0, width: 1}
+        - {name: 交流输入接触器状态, start_bit: 1, width: 1}
+        - {name: DC+直流输出接触器状态, start_bit: 2, width: 1}
+        - {name: 风扇状态, start_bit: 3, width: 1}
+        - {name: 是否拥有模块, start_bit: 4, width: 1}
+        - {name: BMS辅电开关状态, start_bit: 5, width: 1}
+        - {name: 辅源类型, start_bit: 6, width: 1}
+        - {name: 预约控制指示灯亮灭状态, start_bit: 7, width: 1}
+    - {len: 4, name: 电表电量, type: uint32}
+    - len: 1
+      name: 状态字节7
+      type: bitfield8
+      bit_groups:
+        - {name: 辅源自动恢复, start_bit: 0, width: 2}
+        - {name: DC-直流输出接触器状态, start_bit: 2, width: 1}
+        - {name: 中间接触器状态, start_bit: 3, width: 1}
+        - {name: 熔断器状态, start_bit: 4, width: 1}
+        - {name: 断路器状态, start_bit: 5, width: 1}
+        - {name: 防尘网堵塞, start_bit: 6, width: 1}
+        - {name: 门锁状态, start_bit: 7, width: 1}
+    - len: 1
+      name: 状态字节8
+      type: bitfield8
+      bit_groups:
+        - {name: 工装检测中, start_bit: 0, width: 1}
+
+  # PF 0x12(18) - 控制板告警信息上报1
+  18:
+    - {len: 8, name: 告警位信息, type: hex}
+
+  # PF 0x13(19) - 控制板告警信息上报2
+  19:
+    - {len: 8, name: 告警位信息, type: hex}
+
+  # PF 0x14(20) - 充电中BMS实时数据帧
+  20:
+    - {len: 2, name: BMS需求电压, type: uint16}
+    - {len: 2, name: BMS需求电流, type: uint16}
+    - {len: 2, name: 输出电压, type: int16}
+    - {len: 2, name: 输出电流, type: uint16}
+
+  # PF 0x16(22) - 充电中BMS缓慢变化数据帧
+  22:
+    - {len: 1, name: 当前SOC, type: uint8}
+    - {len: 1, name: BSM-电池组最低温度, type: uint8}
+    - {len: 1, name: BSM-电池组最高温度, type: uint8}
+    - {len: 1, name: BCL-BMS充电模式, type: uint8}
+    - {len: 2, name: BCS-单体电池最高电压, type: uint16}
+    - {len: 2, name: BCS-剩余充电时间, type: uint16}
+    - {len: 2, name: BCS-充电电压测量值, type: uint16}
+    - {len: 2, name: BCS-充电电流测量值, type: uint16}
+    - {len: 1, name: BCS-最高单体动力蓄电池组号, type: uint8}
+    - {len: 1, name: BRO-BMS是否充电准备好, type: uint8}
+    - {len: 1, name: BSM-允许充电, type: uint8}
+    - {len: 1, name: BSM-最高单体动力蓄电池电压所在编号, type: uint8}
+    - {len: 1, name: BSM-最高温度检测点编号, type: uint8}
+    - {len: 1, name: BSM-最低动力蓄电池温度检测点编号, type: uint8}
+    - {len: 1, name: BMS-字节6, type: uint8}
+    - {len: 1, name: BMS-字节7, type: uint8}
+
+  # PF 0x19(25) - 控制板配置信息设置（特殊解析：参数列表动态）
+  25:
+    - {len: 1, name: 设置参数的起始索引, type: uint8}
+    - {len: 1, name: 设置参数的个数, type: uint8}
+
+  # PF 0x1A(26) - 控制板配置信息设置应答
+  26:
+    - {len: 1, name: 设置参数结果, type: uint8}
+
+  # PF 0x1B(27) - 控制板配置信息获取
+  27:
+    - {len: 1, name: 获取的参数启始索引, type: uint8}
+    - {len: 1, name: 获取参数个数, type: uint8}
+
+  # PF 0x1C(28) - 控制板配置信息获取应答（特殊解析：参数列表动态）
+  28:
+    - {len: 1, name: 获取参数的起始索引, type: uint8}
+    - {len: 1, name: 获取参数的个数, type: uint8}
+
+  # PF 0x1D(29) - 监控板错误状态帧（bit级）
+  29:
+    - len: 1
+      name: 错误状态
+      type: bitfield8
+      bit_groups:
+        - {name: 版本校验超时, start_bit: 0, width: 1}
+        - {name: 参数设置超时, start_bit: 1, width: 1}
+        - {name: 启动充电命令确认超时, start_bit: 2, width: 1}
+        - {name: 等待启动充电完成状态超时, start_bit: 3, width: 1}
+        - {name: 停止充电命令确认超时, start_bit: 4, width: 1}
+        - {name: 等待停止充电完成状态超时, start_bit: 5, width: 1}
+
+  # PF 0x1E(30) - 控制板错误状态帧（bit级）
+  30:
+    - len: 1
+      name: 错误状态
+      type: bitfield8
+      bit_groups:
+        - {name: 充电启动完成状态确认超时, start_bit: 0, width: 1}
+        - {name: 充电停止完成状态确认超时, start_bit: 1, width: 1}
+
+  # PF 0x20(32) - 控制板上传交流侧信息
+  32:
+    - {len: 2, name: 交流A相电压, type: uint16}
+    - {len: 2, name: 交流B相电压, type: uint16}
+    - {len: 2, name: 交流C相电压, type: uint16}
+    - {len: 2, name: 交流A相电流, type: uint16}
+    - {len: 2, name: 交流B相电流, type: uint16}
+    - {len: 2, name: 交流C相电流, type: uint16}
+    - {len: 2, name: 频率, type: uint16}
+
+  # PF 0x22(34) - 控制板上传系统信息
+  34:
+    - {len: 2, name: 主版本号, type: uint16}
+    - {len: 1, name: 客户号, type: uint8}
+
+  # PF 0x25(37) - 向控制板获取指定模块信息
+  37:
+    - {len: 1, name: 模块号, type: uint8}
+    - {len: 1, name: 不知是啥, type: uint8}
+
+  # PF 0x26(38) - 控制板回复指定模块信息
+  38:
+    - {len: 1, name: 模块号, type: uint8}
+    - {len: 1, name: 状态, type: uint8}
+    - {len: 1, name: 组号, type: uint8}
+    - {len: 1, name: 告警编码, type: uint8}
+    - {len: 1, name: 温度, type: uint8}
+    - {len: 2, name: 电压, type: uint16}
+    - {len: 2, name: 电流, type: uint16}
+    - {len: 2, name: AC版本, type: uint16}
+    - {len: 2, name: DC版本, type: uint16}
+    - {len: 1, name: PFC-MOS温度1, type: uint8}
+    - {len: 1, name: PFC-MOS温度2, type: uint8}
+    - {len: 1, name: PFC-MOS温度3, type: uint8}
+    - {len: 1, name: 防反二极管温度, type: uint8}
+    - {len: 1, name: 整流二极管温度, type: uint8}
+    - {len: 1, name: 谐振电感温度, type: uint8}
+    - {len: 1, name: 变压器温度, type: uint8}
+    - {len: 1, name: LLC-MOS温度, type: uint8}
+    - {len: 1, name: 环境温度, type: uint8}
+    - {len: 1, name: 风扇转速, type: uint8}
+
+  # PF 0x27(39) - TCU回复VIN确认
+  39:
+    - {len: 1, name: 收到车辆VIN确认, type: uint8}
+
+  # PF 0x28(40) - 控制板上报当前车辆VIN码
+  40:
+    - {len: 17, name: 车辆VIN, type: ascii}
+
+  # PF 0x50(80) - 并充专用帧（bit级）
+  80:
+    - len: 1
+      name: 并充状态字节
+      type: bitfield8
+      bit_groups:
+        - {name: 主枪标志, start_bit: 0, width: 1}
+        - {name: 并充状态, start_bit: 1, width: 2}
+        - {name: 预留, start_bit: 3, width: 1}
+        - {name: 并充枪号, start_bit: 4, width: 4}
+    - {len: 4, name: 副枪电表电量起始值1, type: uint32}
+    - {len: 4, name: 副枪实时电量1, type: uint32}
+    - {len: 4, name: 副枪电表电量起始值2, type: uint32}
+    - {len: 4, name: 副枪实时电量2, type: uint32}
+    - {len: 4, name: 副枪电表电量起始值3, type: uint32}
+    - {len: 4, name: 副枪实时电量3, type: uint32}
+
+  # PF 0x51(81) - 事件记录
+  81:
+    - {len: 4, name: 索引, type: uint32}
+    - {len: 4, name: 结束原因, type: uint32}
+
+  # PF 0x72(114) - 控制板U盘状态帧
+  114:
+    - {len: 1, name: 控制器U盘状态, type: uint8, enum: u_disk_status}
+    - {len: 1, name: 百分比, type: uint8}
+
+  # PF 0x73(115) - 事件记录
+  115:
+    - {len: 4, name: 索引, type: uint32}
+    - {len: 4, name: 结束原因, type: uint32}
+
+  # PF 0x74(116) - 电压电流实时数据帧
+  116:
+    - {len: 2, name: 充电枪口电压, type: int16}
+    - {len: 2, name: 接触器前端模块电压, type: uint16}
+    - {len: 2, name: 输出电流, type: uint16}
+
+  # PF 0x76(118) - 控制器实时数据帧
+  118:
+    - {len: 1, name: 充电状态机, type: uint8}
+    - {len: 3, name: CAN3状态机, type: hex}
+    - {len: 1, name: 枪正端温度, type: uint8}
+    - {len: 1, name: 枪负端温度, type: uint8}
+    - {len: 1, name: 进风口温度, type: uint8}
+    - {len: 1, name: 出风口温度, type: uint8}
+
+  # PF 0x79(121) - 开启自动化测试
+  121:
+    - {len: 8, name: 未知, type: hex}
+
+  # PF 0x7A(122) - 自动化测试数据（bit级混合，长帧）
+  122:
+    - {len: 1, name: 整体测试状态, type: uint8}
+    - len: 1
+      name: 电压校准
+      type: bitfield8
+      bit_groups:
+        - {name: 电压校准状态, start_bit: 0, width: 4}
+        - {name: 电压校准结果, start_bit: 4, width: 4}
+    - {len: 2, name: 700V枪电压采数据, type: uint16}
+    - {len: 2, name: 700V模块电压采数据, type: uint16}
+    - {len: 2, name: 700VBMS工装电压数据, type: uint16}
+    - len: 1
+      name: 电表计量
+      type: bitfield8
+      bit_groups:
+        - {name: 电表计量测试, start_bit: 0, width: 4}
+        - {name: 电表计量测试结果, start_bit: 4, width: 4}
+    - {len: 4, name: 充电前-桩电表电量, type: uint32}
+    - {len: 4, name: 充电后-桩电表电量, type: uint32}
+    - {len: 4, name: 桩-充电电量, type: uint32}
+    - {len: 4, name: 充电前-工装电表电量, type: uint32}
+    - {len: 4, name: 充电后-工装电表电量, type: uint32}
+    - {len: 4, name: 工装测量充电电量, type: uint32}
+    - len: 1
+      name: 绝缘测试
+      type: bitfield8
+      bit_groups:
+        - {name: 绝缘测试状态, start_bit: 0, width: 4}
+        - {name: 绝缘测试结果, start_bit: 4, width: 4}
+    - {len: 2, name: 绝缘正阻值, type: uint16}
+    - {len: 2, name: 绝缘负阻值, type: uint16}
+    - {len: 2, name: 正桥臂电压X0, type: uint16}
+    - {len: 2, name: 正桥臂电压X1, type: uint16}
+    - {len: 2, name: 负桥臂电压Y0, type: uint16}
+    - {len: 2, name: 负桥臂电压Y1, type: uint16}
+    - len: 1
+      name: 辅源采样
+      type: bitfield8
+      bit_groups:
+        - {name: 辅源采样测试, start_bit: 0, width: 4}
+        - {name: 辅测试结果, start_bit: 4, width: 4}
+    - {len: 2, name: 12V辅源测量电压, type: uint16}
+    - {len: 2, name: 12VBMS工装辅源测量电压, type: uint16}
+    - {len: 2, name: 24V辅源测量电压, type: uint16}
+    - {len: 2, name: 24VBMS工装辅源测量电压, type: uint16}
+    - len: 1
+      name: 温度测试
+      type: bitfield8
+      bit_groups:
+        - {name: 系统温度测试结果, start_bit: 0, width: 4}
+        - {name: 预留, start_bit: 4, width: 4}
+    - {len: 1, name: 进风口温度, type: uint8}
+    - {len: 1, name: 出风口温度, type: uint8}
+    - {len: 1, name: 枪温度1, type: uint8}
+    - {len: 1, name: 枪温度2, type: uint8}
+    - len: 1
+      name: 模块地址
+      type: bitfield8
+      bit_groups:
+        - {name: 模块地址检测, start_bit: 0, width: 4}
+        - {name: 模块地址测试结果, start_bit: 4, width: 4}
+    - {len: 2, name: 模块测试1A枪电压, type: uint16}
+    - {len: 2, name: 模块测试1B枪电压, type: uint16}
+    - {len: 2, name: 模块测试2A枪电压, type: uint16}
+    - {len: 2, name: 模块测试2B枪电压, type: uint16}
+    - len: 1
+      name: 开关状态1
+      type: bitfield8
+      bit_groups:
+        - {name: 交流接触器, start_bit: 0, width: 4}
+        - {name: 枪锁, start_bit: 4, width: 4}
+    - len: 1
+      name: 开关状态2
+      type: bitfield8
+      bit_groups:
+        - {name: 直流接触器+, start_bit: 0, width: 4}
+        - {name: 直流接触器-, start_bit: 4, width: 4}
+    - len: 1
+      name: 开关状态3
+      type: bitfield8
+      bit_groups:
+        - {name: 中间接触器1, start_bit: 0, width: 4}
+        - {name: 中间接触器2, start_bit: 4, width: 4}
+    - len: 1
+      name: 开关状态4
+      type: bitfield8
+      bit_groups:
+        - {name: 中间接触器3, start_bit: 0, width: 4}
+        - {name: 预留, start_bit: 4, width: 4}
+
+  # PF 0x7C(124) - 手动测试帧（bit级）
+  124:
+    - len: 1
+      name: 手动测试字节1
+      type: bitfield8
+      bit_groups:
+        - {name: 交流接触器, start_bit: 0, width: 1}
+        - {name: 辅源12V, start_bit: 1, width: 1}
+        - {name: 辅源24V, start_bit: 2, width: 1}
+        - {name: 枪锁, start_bit: 3, width: 1}
+        - {name: 直流接触器+, start_bit: 4, width: 1}
+        - {name: 直流接触器-, start_bit: 5, width: 1}
+        - {name: 风扇, start_bit: 6, width: 1}
+        - {name: 预留1, start_bit: 7, width: 1}
+    - len: 1
+      name: 手动测试字节2
+      type: bitfield8
+      bit_groups:
+        - {name: 中间接触器1, start_bit: 0, width: 1}
+        - {name: 中间接触器2, start_bit: 1, width: 1}
+        - {name: 中间接触器3, start_bit: 2, width: 1}
+        - {name: 预留2, start_bit: 3, width: 5}
